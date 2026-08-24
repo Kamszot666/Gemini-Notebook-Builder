@@ -1,0 +1,7 @@
+https://pl.wikipedia.org/wiki/Sztuczna_inteligencja
+https://pl.wikipedia.org/wiki/Sztuczna_inteligencja
+https://pl.wikipedia.org/wiki/Sztuczna_inteligencja?utm_source=test
+https://www.python.org/about/ https://docs.python.org/3/
+to nie jest adres URL
+htp://bledny-protokol.example
+https://ten-adres-na-pewno-nie-istnieje-123456.example/artykul

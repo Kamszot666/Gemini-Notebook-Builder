@@ -1,0 +1,5 @@
+metoda;koszt_obliczeniowy;wykrywa;domyslnie_wlaczona
+Suma kontrolna;bardzo niski;teksty identyczne;tak
+Porownanie po normalizacji;niski;roznice kosmetyczne;tak
+MinHash;sredni;duze pokrycie fragmentow;tak
+Embeddingi lokalne;wysoki;podobienstwo znaczeniowe;nie

@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gnb"
+version = "0.1.0"
+description = "Gemini Notebook Builder — lokalne narzędzie do przygotowania materiałów źródłowych dla Gemini Notebook."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Kamszot666" }]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    # Przypięte na mypy 1.13.0: nowsze wersje wymagają pakietu librt z natywnym
+    # DLL, które zasady kontroli aplikacji Windows blokują na komputerze
+    # deweloperskim. Odpiąć, gdy problem zniknie albo znajdzie się inne obejście.
+    "mypy==1.13.0",
+]
+
+[project.scripts]
+gnb = "gnb.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["gnb*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+packages = ["gnb"]
+strict = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra"
+testpaths = ["tests"]
+markers = [
+    "siec: test wymaga dostępu do sieci, domyślnie pominięty",
+    "wolne: test jest długotrwały, domyślnie pominięty",
+]

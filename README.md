@@ -8,7 +8,7 @@ Aplikacja jest projektowana jako narzędzie dostępne dla osób niewidomych korz
 
 ## Stan projektu
 
-Projekt jest w fazie początkowej. Repozytorium zawiera obecnie zasady pracy i konfigurację, bez działającego kodu. Kolejność prac opisuje sekcja siedemnasta pliku `CLAUDE.md`.
+Projekt jest w fazie początkowej. Etap zerowy dostarczył szkielet repozytorium: pakiet `gnb` z modelem danych i taksonomią wyjątków, komendę diagnostyki narzędzi zewnętrznych oraz konfigurację narzędzi deweloperskich. Żaden etap przetwarzania materiałów źródłowych jeszcze nie istnieje. Kolejność prac opisuje sekcja osiemnasta pliku `CLAUDE.md`, a bieżący stan architektury — `docs/ARCHITECTURE.md`.
 
 ## Co program ma umieć
 
@@ -39,4 +39,6 @@ Aplikacja działa w całości lokalnie. Nie wysyła danych do zewnętrznych usł
 
 ## Licencja
 
-Do ustalenia.
+Apache License 2.0. Pełny tekst znajduje się w pliku `LICENSE` w katalogu głównym repozytorium.
+
+Wyjątek stanowi plik `tests/dane/LICENCJA_PyGuitarPro.txt`, dotyczący wyłącznie plików testowych formatu Guitar Pro pochodzących z biblioteki PyGuitarPro, objętych licencją LGPL w wersji trzeciej.

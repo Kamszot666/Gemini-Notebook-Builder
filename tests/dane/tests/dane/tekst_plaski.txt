@@ -1,9 +1,0 @@
-Baza wiedzy dla asystenta AI jest tym lepsza, im mniej zawiera powtórzeń i im dokładniej wiadomo, skąd pochodzi każdy fragment.
-
-Najczęstszym błędem jest wrzucanie do jednego zbioru wszystkiego, co wpadnie w ręce, bez sprawdzenia, czy te same treści nie występują w kilku miejscach.
-
-Drugim częstym błędem jest usuwanie materiałów tylko dlatego, że wyglądają podobnie do innych. Podobieństwo nie oznacza tożsamości.
-
-Trzecim błędem jest utrata informacji o pochodzeniu. Bez niej nie da się później zweryfikować żadnego twierdzenia.
-
-Przygotowanie materiałów zajmuje więcej czasu niż samo zadawanie pytań, ale to właśnie ono decyduje o jakości odpowiedzi. Warto poświęcić ten czas raz, zamiast poprawiać wyniki przy każdym kolejnym pytaniu.

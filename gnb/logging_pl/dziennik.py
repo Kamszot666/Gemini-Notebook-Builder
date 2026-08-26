@@ -1,0 +1,120 @@
+"""Konfiguracja dwóch plików logów projektu.
+
+Plik ``log_wazne.txt`` zawiera wpisy w formacie ``ZDARZENIE|Godzina:Minuta``, po
+jednym na wiersz. Na początku każdego dnia oraz przy pierwszym wpisie po
+uruchomieniu aplikacji dopisywany jest wiersz z datą w postaci
+``--- RRRR-MM-DD ---``. Format wpisów jest zatwierdzony w sekcji czternastej
+CLAUDE.md i nie wolno go zmieniać.
+
+Plik ``log_szczegolowy.txt`` zawiera czas, poziom, moduł, identyfikator źródła,
+komunikat oraz informację o wyjątku. Jest konfigurowany na standardowym module
+``logging``.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Callable
+from datetime import datetime
+from pathlib import Path
+from types import TracebackType
+
+NAZWA_LOGU_WAZNEGO = "log_wazne.txt"
+NAZWA_LOGU_SZCZEGOLOWEGO = "log_szczegolowy.txt"
+
+# Teksty zdarzeń dopisywanych do log_wazne.txt. Nie mogą zawierać znaku pionowej
+# kreski, bo ten znak rozdziela zdarzenie od godziny.
+ZDARZENIE_PROJEKT_UTWORZONY = "Projekt utworzony"
+ZDARZENIE_PROJEKT_WZNOWIONY = "Projekt wznowiony"
+ZDARZENIE_ZRODLO_PRZYJETE = "Źródło przyjęte"
+ZDARZENIE_ZRODLO_POMINIETE = "Źródło pominięte"
+ZDARZENIE_ZRODLO_BLAD = "Błąd źródła"
+ZDARZENIE_PLIK_WYNIKOWY_ZAPISANY = "Plik wynikowy zapisany"
+ZDARZENIE_MANIFEST_ZAPISANY = "Manifest zapisany"
+ZDARZENIE_CHECKPOINT_ZAPISANY = "Checkpoint zapisany"
+ZDARZENIE_PROJEKT_ZAKONCZONY = "Projekt zakończony"
+
+_FORMAT_LOGU_SZCZEGOLOWEGO = (
+    "%(asctime)s|%(levelname)s|%(name)s|%(identyfikator_zrodla)s|%(message)s"
+)
+
+
+def _teraz_systemowy() -> datetime:
+    return datetime.now().astimezone()
+
+
+class DziennikWazny:
+    """Dopisywacz wpisów do pliku ``log_wazne.txt`` w zatwierdzonym formacie.
+
+    Wiersz z datą jest dopisywany przy pierwszym wpisie w danym cyklu życia
+    obiektu oraz za każdym razem, gdy zmieni się dzień. Odpowiada to wymaganiu,
+    że data pojawia się także przy pierwszym wpisie po uruchomieniu aplikacji.
+    """
+
+    def __init__(self, sciezka: Path, zegar: Callable[[], datetime] = _teraz_systemowy) -> None:
+        self._sciezka = sciezka
+        self._zegar = zegar
+        self._data_ostatniego_wpisu: str | None = None
+        self._przed_pierwszym_wpisem = True
+
+    def zapisz(self, zdarzenie: str) -> None:
+        """Dopisuje jeden wiersz zdarzenia, poprzedzając go w razie potrzeby wierszem daty."""
+        if "|" in zdarzenie:
+            raise ValueError("Tekst zdarzenia nie może zawierać znaku pionowej kreski.")
+        teraz = self._zegar()
+        data = teraz.strftime("%Y-%m-%d")
+        godzina_minuta = teraz.strftime("%H:%M")
+
+        self._sciezka.parent.mkdir(parents=True, exist_ok=True)
+        with self._sciezka.open("a", encoding="utf-8", newline="\n") as plik:
+            if self._przed_pierwszym_wpisem or data != self._data_ostatniego_wpisu:
+                plik.write(f"--- {data} ---\n")
+            plik.write(f"{zdarzenie}|{godzina_minuta}\n")
+
+        self._przed_pierwszym_wpisem = False
+        self._data_ostatniego_wpisu = data
+
+
+class _FiltrIdentyfikatoraZrodla(logging.Filter):
+    """Uzupełnia rekordy logów o domyślny identyfikator źródła, gdy go nie podano."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not hasattr(record, "identyfikator_zrodla"):
+            record.__dict__["identyfikator_zrodla"] = "-"
+        return True
+
+
+class DziennikSzczegolowy:
+    """Kontekstowy konfigurator pliku ``log_szczegolowy.txt``.
+
+    Po wejściu w blok ``with`` dodaje uchwyt pliku do dedykowanego rejestratora,
+    a po wyjściu go usuwa i zamyka. Dzięki temu wielokrotne uruchomienia w jednym
+    procesie nie mnożą uchwytów ani nie zostawiają otwartych plików.
+    """
+
+    def __init__(self, sciezka: Path, identyfikator_projektu: str) -> None:
+        self._sciezka = sciezka
+        self._logger = logging.getLogger(f"gnb.projekt.{identyfikator_projektu}")
+        self._uchwyt: logging.FileHandler | None = None
+
+    def __enter__(self) -> logging.Logger:
+        self._sciezka.parent.mkdir(parents=True, exist_ok=True)
+        uchwyt = logging.FileHandler(self._sciezka, encoding="utf-8")
+        uchwyt.setFormatter(logging.Formatter(_FORMAT_LOGU_SZCZEGOLOWEGO))
+        uchwyt.addFilter(_FiltrIdentyfikatoraZrodla())
+        self._logger.addHandler(uchwyt)
+        self._logger.setLevel(logging.DEBUG)
+        self._logger.propagate = False
+        self._uchwyt = uchwyt
+        return self._logger
+
+    def __exit__(
+        self,
+        typ_wyjatku: type[BaseException] | None,
+        wartosc_wyjatku: BaseException | None,
+        slad: TracebackType | None,
+    ) -> None:
+        if self._uchwyt is not None:
+            self._logger.removeHandler(self._uchwyt)
+            self._uchwyt.close()
+            self._uchwyt = None

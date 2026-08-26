@@ -1,8 +1,12 @@
 """Wiersz poleceń aplikacji Gemini Notebook Builder.
 
-Obecnie udostępnia wyłącznie polecenie `diagnostyka`, sprawdzające
-dostępność narzędzi zewnętrznych wymienionych w sekcji piątej CLAUDE.md.
-Ten moduł nie zawiera logiki przetwarzania materiałów źródłowych.
+Udostępnia dwa polecenia. Polecenie ``diagnostyka`` sprawdza dostępność narzędzi
+zewnętrznych wymienionych w sekcji piątej CLAUDE.md. Polecenie ``przetworz``
+uruchamia potok przetwarzania z etapu pierwszego dla tekstu wklejonego oraz
+plików TXT i MD.
+
+Wyjście jest czytelne liniowo dla czytnika ekranu, bez pasków postępu i bez
+znaków sterujących przerysowujących wiersz.
 """
 
 from __future__ import annotations
@@ -13,6 +17,13 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+
+from gnb.core.konfiguracja import wczytaj_konfiguracje
+from gnb.core.wyjatki import BladGnb
+from gnb.ingestion.wejscie import PozycjaWejsciowa, przyjmij_plik, przyjmij_tekst
+from gnb.potok import przetworz_projekt
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,6 +151,61 @@ def uruchom_diagnostyke() -> int:
     return 0
 
 
+def uruchom_przetwarzanie(
+    nazwa_projektu: str | None,
+    pliki: list[str],
+    teksty_plaskie: list[str],
+    teksty_markdown: list[str],
+    katalog_projektu: str | None,
+) -> int:
+    """Buduje pozycje wejściowe, uruchamia potok i wypisuje raport dla użytkownika.
+
+    Zwraca kod zero, gdy potok się wykona, oraz kod dwa, gdy nie podano żadnego
+    źródła. Pojedyncze błędne źródło nie zmienia kodu wyjścia — jest opisane
+    w raporcie, w manifeście i w logu.
+    """
+    moment = datetime.now(UTC)
+    pozycje: list[PozycjaWejsciowa] = []
+    for sciezka in pliki:
+        pozycje.append(przyjmij_plik(Path(sciezka), moment))
+    for tresc in teksty_plaskie:
+        pozycje.append(przyjmij_tekst(tresc, moment, format_tekstu="txt"))
+    for tresc in teksty_markdown:
+        pozycje.append(przyjmij_tekst(tresc, moment, format_tekstu="md"))
+
+    if not pozycje:
+        print("Nie podano żadnego źródła. Użyj opcji --plik, --tekst albo --tekst-md.")
+        return 2
+
+    try:
+        konfiguracja = wczytaj_konfiguracje()
+        wynik = przetworz_projekt(
+            pozycje,
+            konfiguracja,
+            nazwa_projektu=nazwa_projektu,
+            wlasny_katalog_projektu=Path(katalog_projektu) if katalog_projektu else None,
+        )
+    except BladGnb as blad:
+        print(f"Przetwarzanie przerwane błędem: {blad.komunikat}")
+        return 1
+
+    print(f"Projekt: {wynik.nazwa_projektu}")
+    print(f"Katalog projektu: {wynik.katalog_projektu}")
+    print(f"Wznowiono istniejący projekt: {'tak' if wynik.wznowiono else 'nie'}")
+    print(f"Źródła przetworzone: {wynik.liczba_przetworzonych}")
+    print(f"Źródła pominięte: {wynik.liczba_pominietych}")
+    print(f"Źródła z błędem: {wynik.liczba_bledow}")
+    print(f"Manifest: {wynik.sciezka_manifestu}")
+    print(f"Raport końcowy: {wynik.sciezka_raportu}")
+    print("")
+    print(
+        f"Przetworzono {wynik.liczba_przetworzonych} źródeł, "
+        f"pominięto {wynik.liczba_pominietych + wynik.liczba_bledow}. "
+        f"Wyniki są w katalogu: {wynik.katalog_projektu}."
+    )
+    return 0
+
+
 def _wymus_kodowanie_utf8() -> None:
     """Ustawia standardowe wyjście i wyjście błędów na UTF-8.
 
@@ -167,10 +233,55 @@ def main(argumenty: list[str] | None = None) -> int:
     podpolecenia = parser.add_subparsers(dest="polecenie", required=True)
     podpolecenia.add_parser("diagnostyka", help="Sprawdź dostępność narzędzi zewnętrznych.")
 
+    parser_przetworz = podpolecenia.add_parser(
+        "przetworz",
+        help="Przetwórz tekst wklejony oraz pliki TXT i MD w ramach jednego projektu.",
+    )
+    parser_przetworz.add_argument(
+        "--projekt", metavar="NAZWA", default=None, help="Nazwa projektu. Domyślnie generowana."
+    )
+    parser_przetworz.add_argument(
+        "--plik",
+        action="append",
+        default=[],
+        metavar="SCIEZKA",
+        help="Ścieżka pliku TXT lub MD. Opcję można podać wielokrotnie.",
+    )
+    parser_przetworz.add_argument(
+        "--tekst",
+        action="append",
+        default=[],
+        metavar="TRESC",
+        help="Tekst wklejony traktowany jako tekst płaski. Opcję można podać wielokrotnie.",
+    )
+    parser_przetworz.add_argument(
+        "--tekst-md",
+        action="append",
+        default=[],
+        metavar="TRESC",
+        dest="tekst_md",
+        help="Tekst wklejony traktowany jako Markdown. Opcję można podać wielokrotnie.",
+    )
+    parser_przetworz.add_argument(
+        "--katalog",
+        metavar="SCIEZKA",
+        default=None,
+        help="Własny katalog projektu. Domyślnie katalog wyników z konfiguracji.",
+    )
+
     ustalone = parser.parse_args(argumenty)
 
     if ustalone.polecenie == "diagnostyka":
         return uruchom_diagnostyke()
+
+    if ustalone.polecenie == "przetworz":
+        return uruchom_przetwarzanie(
+            ustalone.projekt,
+            list(ustalone.plik),
+            list(ustalone.tekst),
+            list(ustalone.tekst_md),
+            ustalone.katalog,
+        )
 
     parser.error(f"Nieznane polecenie: {ustalone.polecenie}")
     return 2

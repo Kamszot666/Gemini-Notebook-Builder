@@ -8,7 +8,7 @@ Aplikacja jest projektowana jako narzędzie dostępne dla osób niewidomych korz
 
 ## Stan projektu
 
-Projekt jest w fazie początkowej. Etap zerowy dostarczył szkielet repozytorium: pakiet `gnb` z modelem danych i taksonomią wyjątków, komendę diagnostyki narzędzi zewnętrznych oraz konfigurację narzędzi deweloperskich. Żaden etap przetwarzania materiałów źródłowych jeszcze nie istnieje. Kolejność prac opisuje sekcja osiemnasta pliku `CLAUDE.md`, a bieżący stan architektury — `docs/ARCHITECTURE.md`.
+Projekt jest w fazie początkowej. Etap zerowy dostarczył szkielet repozytorium. Etap pierwszy dostarczył pierwszą działającą całość: potok przetwarzania dla tekstu wklejonego oraz plików TXT i MD, z wykrywaniem kodowania, normalizacją, jednolitym liczeniem słów, deterministyczną regułą wyboru między plikiem TXT a plikiem MD, zapisem wyników, manifestem, checkpointem z zapisem atomowym i dwoma plikami logów. Potok uruchamia się poleceniem `python -m gnb.cli przetworz`. Kolejne etapy — adresy URL, YouTube, formaty dokumentowe, obrazy, audio, materiały nutowe, deduplikacja, pakowanie, interfejs WWW — opisuje sekcja osiemnasta pliku `CLAUDE.md`. Bieżący stan architektury opisuje `docs/ARCHITECTURE.md`.
 
 ## Co program ma umieć
 

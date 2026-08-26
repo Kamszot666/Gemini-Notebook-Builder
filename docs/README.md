@@ -7,9 +7,15 @@ o dokumentację skierowaną do osoby korzystającej z gotowej aplikacji.
 
 ## Stan dokumentacji
 
-Obecnie istnieje wyłącznie `ARCHITECTURE.md`, opisujący szkielet repozytorium
-powstały w etapie zerowym. Pozostałe dokumenty wymienione w sekcji
-dziewiętnastej `CLAUDE.md` — `INSTALL.md`, `CONFIGURATION.md`, `FORMATS.md`,
+Po etapie pierwszym istnieją trzy dokumenty:
+
+1. `ARCHITECTURE.md` — podział na moduły i przebieg potoku przetwarzania.
+2. `CONFIGURATION.md` — pola konfiguracji obsługiwane w tej chwili, lokalizacja
+   pliku `konfiguracja.toml` i zmienne środowiskowe z prefiksem `GNB_`.
+3. `FORMATS.md` — obsługiwane wejścia, kodowanie tekstu oraz reguła wyboru
+   między plikiem TXT a plikiem MD.
+
+Pozostałe dokumenty wymienione w sekcji dziewiętnastej `CLAUDE.md` — `INSTALL.md`,
 `ACCESSIBILITY.md`, `TROUBLESHOOTING.md` — powstaną w kolejnych etapach, razem
 z funkcjami, które mają opisywać. Dokumentacja nie opisuje funkcji, których
 aplikacja jeszcze nie posiada.

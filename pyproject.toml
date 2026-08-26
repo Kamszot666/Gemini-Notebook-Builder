@@ -12,6 +12,11 @@ license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Kamszot666" }]
 
+dependencies = [
+    "charset-normalizer>=3.3",
+    "markdown-it-py>=3.0",
+]
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",

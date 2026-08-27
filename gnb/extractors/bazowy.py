@@ -7,7 +7,8 @@ zawiera znaczniki formatowania. Nowy format dodaje się jako nową
 implementację protokołu `Ekstraktor` i wpis w rejestrze, bez zmian w pozostałych
 modułach potoku.
 
-W etapie pierwszym istnieją dwa ekstraktory: tekstu płaskiego i Markdown.
+Po etapie drugim istnieją trzy ekstraktory: tekstu płaskiego, Markdown
+oraz stron internetowych.
 """
 
 from __future__ import annotations
@@ -66,13 +67,15 @@ class RejestrEkstraktorow:
 
 
 def domyslny_rejestr() -> RejestrEkstraktorow:
-    """Buduje rejestr z ekstraktorami dostępnymi w etapie pierwszym.
+    """Buduje rejestr z ekstraktorami dostępnymi po etapie drugim.
 
     Ekstraktor Markdown jest przed ekstraktorem tekstu płaskiego, żeby źródło
     z formatem ``md`` trafiło do właściwego adaptera także wtedy, gdy jest
-    tekstem wklejonym.
+    tekstem wklejonym. Ekstraktor stron internetowych rozpoznaje własny typ
+    źródła, więc jego miejsce w kolejności nie ma znaczenia.
     """
     from gnb.extractors.markdown import EkstraktorMarkdown
+    from gnb.extractors.strona_www import EkstraktorStronyWww
     from gnb.extractors.tekst import EkstraktorTekstu
 
-    return RejestrEkstraktorow((EkstraktorMarkdown(), EkstraktorTekstu()))
+    return RejestrEkstraktorow((EkstraktorStronyWww(), EkstraktorMarkdown(), EkstraktorTekstu()))

@@ -23,6 +23,10 @@ htmlcov/
 projekty/
 Gemini Notebook Builder/
 
+# Materiały kontekstowe projektu Claude. Zostają na dysku, ale nie trafiają do
+# publicznego repozytorium, ponieważ opisują użytkownika i jego sprzęt.
+INSTRUKCJA_SYSTEMOWA_PROJEKTU.md
+
 # Lokalna konfiguracja i sekrety. Repozytorium jest publiczne, więc te pliki
 # nie mogą się w nim znaleźć w żadnej postaci.
 .env

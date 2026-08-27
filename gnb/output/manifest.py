@@ -17,7 +17,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-WERSJA_SCHEMATU = 1
+WERSJA_SCHEMATU = 2
+
+
+@dataclass(frozen=True, slots=True)
+class WpisPobrania:
+    """Dane odpowiedzi HTTP zapisywane w manifeście dla źródła pobranego ze strony."""
+
+    adres_koncowy: str
+    kod_odpowiedzi: int
+    deklarowane_kodowanie: str
+    etag: str | None
+    last_modified: str | None
+    z_pamieci_podrecznej: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +46,7 @@ class WpisZrodla:
     uzasadnienie_md: tuple[str, ...]
     pliki_wynikowe: tuple[str, ...]
     komunikat_bledu: str | None
+    pobranie: WpisPobrania | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +101,7 @@ def _do_slownika(manifest: Manifest) -> dict[str, Any]:
                 "uzasadnienie_md": list(wpis.uzasadnienie_md),
                 "pliki_wynikowe": list(wpis.pliki_wynikowe),
                 "komunikat_bledu": wpis.komunikat_bledu,
+                "pobranie": _pobranie_do_slownika(wpis.pobranie),
             }
             for wpis in manifest.zrodla
         ],
@@ -104,6 +118,20 @@ def _do_slownika(manifest: Manifest) -> dict[str, Any]:
             }
             for wpis in manifest.wyniki
         ],
+    }
+
+
+def _pobranie_do_slownika(pobranie: WpisPobrania | None) -> dict[str, Any] | None:
+    """Zamienia dane pobrania na słownik. Brak danych jest poprawny dla źródeł lokalnych."""
+    if pobranie is None:
+        return None
+    return {
+        "adres_koncowy": pobranie.adres_koncowy,
+        "kod_odpowiedzi": pobranie.kod_odpowiedzi,
+        "deklarowane_kodowanie": pobranie.deklarowane_kodowanie,
+        "etag": pobranie.etag,
+        "last_modified": pobranie.last_modified,
+        "z_pamieci_podrecznej": pobranie.z_pamieci_podrecznej,
     }
 
 
@@ -132,6 +160,8 @@ def zbuduj_widok_tekstowy(manifest: Manifest) -> str:
         if wpis_zrodla.pliki_wynikowe:
             wiersze.append("  Pliki wynikowe:")
             wiersze.extend(f"    - {plik}" for plik in wpis_zrodla.pliki_wynikowe)
+        if wpis_zrodla.pobranie is not None:
+            wiersze.extend(_wiersze_pobrania(wpis_zrodla.pobranie))
         if wpis_zrodla.komunikat_bledu:
             wiersze.append(f"  Komunikat błędu: {wpis_zrodla.komunikat_bledu}")
         wiersze.append("")
@@ -150,6 +180,21 @@ def zbuduj_widok_tekstowy(manifest: Manifest) -> str:
         wiersze.append("")
 
     return "\n".join(wiersze).rstrip("\n") + "\n"
+
+
+def _wiersze_pobrania(pobranie: WpisPobrania) -> list[str]:
+    """Buduje wiersze widoku tekstowego opisujące pobranie strony internetowej."""
+    wiersze = [
+        f"  Adres końcowy po przekierowaniach: {pobranie.adres_koncowy}",
+        f"  Kod odpowiedzi HTTP: {pobranie.kod_odpowiedzi}",
+        f"  Deklarowane kodowanie: {pobranie.deklarowane_kodowanie or 'nie podano'}",
+        f"  Wzięte z pamięci podręcznej: {'tak' if pobranie.z_pamieci_podrecznej else 'nie'}",
+    ]
+    if pobranie.etag:
+        wiersze.append(f"  ETag: {pobranie.etag}")
+    if pobranie.last_modified:
+        wiersze.append(f"  Last-Modified: {pobranie.last_modified}")
+    return wiersze
 
 
 def _opis_decyzji_md(decyzja: bool | None) -> str:

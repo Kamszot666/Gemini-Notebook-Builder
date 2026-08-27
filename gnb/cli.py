@@ -1,9 +1,15 @@
 """Wiersz poleceń aplikacji Gemini Notebook Builder.
 
-Udostępnia dwa polecenia. Polecenie ``diagnostyka`` sprawdza dostępność narzędzi
-zewnętrznych wymienionych w sekcji piątej CLAUDE.md. Polecenie ``przetworz``
-uruchamia potok przetwarzania z etapu pierwszego dla tekstu wklejonego oraz
-plików TXT i MD.
+Udostępnia trzy polecenia. Polecenie ``diagnostyka`` sprawdza dostępność
+narzędzi zewnętrznych wymienionych w sekcji piątej CLAUDE.md. Polecenie
+``przetworz`` uruchamia potok przetwarzania dla tekstu wklejonego, plików TXT
+i MD oraz adresów stron internetowych. Polecenie ``pamiec`` pokazuje stan
+wspólnej pamięci podręcznej pobranych stron i pozwala ją wyczyścić.
+
+Przed pobraniem czegokolwiek polecenie ``przetworz`` wypisuje podsumowanie listy
+adresów: ile jest poprawnych, ile duplikatów i ile wpisów odrzucono wraz
+z powodem. Opcja ``--sprawdz-liste`` kończy pracę zaraz po tym podsumowaniu,
+bez pobierania.
 
 Wyjście jest czytelne liniowo dla czytnika ekranu, bez pasków postępu i bez
 znaków sterujących przerysowujących wiersz.
@@ -20,10 +26,25 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from gnb.core.konfiguracja import wczytaj_konfiguracje
+from gnb.core.konfiguracja import Konfiguracja, wczytaj_konfiguracje
 from gnb.core.wyjatki import BladGnb
-from gnb.ingestion.wejscie import PozycjaWejsciowa, przyjmij_plik, przyjmij_tekst
+from gnb.ingestion.lista_url import (
+    PodsumowanieListyUrl,
+    opis_podsumowania,
+    wczytaj_liste_z_pliku,
+    zbierz_adresy,
+)
+from gnb.ingestion.wejscie import (
+    PozycjaWejsciowa,
+    przyjmij_plik,
+    przyjmij_tekst,
+    przyjmij_url,
+)
+from gnb.persistence.cache import otworz, wyczysc_pamiec_podreczna
 from gnb.potok import przetworz_projekt
+
+KOD_BRAK_ZRODEL = 2
+KOD_BLAD = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,20 +172,100 @@ def uruchom_diagnostyke() -> int:
     return 0
 
 
+def uruchom_pamiec(wyczysc: bool) -> int:
+    """Pokazuje stan wspólnej pamięci podręcznej, a na życzenie ją czyści.
+
+    Pamięć podręczna jest wspólna dla wszystkich projektów i leży poza katalogiem
+    projektu, dlatego jej ścieżka jest wypisywana wprost. Dzięki temu nie trzeba
+    szukać pliku po dysku.
+    """
+    try:
+        konfiguracja = wczytaj_konfiguracje()
+    except BladGnb as blad:
+        print(f"Nie udało się wczytać konfiguracji: {blad.komunikat}")
+        return KOD_BLAD
+
+    sciezka = konfiguracja.sciezka_cache
+    print(f"Plik pamięci podręcznej: {sciezka}")
+    print(f"Pamięć podręczna włączona: {'tak' if konfiguracja.uzywaj_cache else 'nie'}")
+    print(f"Maksymalny wiek wpisu w dniach: {konfiguracja.maksymalny_wiek_cache_dni}")
+
+    try:
+        if wyczysc:
+            usuniete = wyczysc_pamiec_podreczna(sciezka)
+            print(f"Usunięto wpisów: {usuniete}.")
+            return 0
+        if not sciezka.exists():
+            print("Plik jeszcze nie istnieje. Powstanie przy pierwszym pobraniu strony.")
+            return 0
+        with otworz(sciezka) as pamiec:
+            print(f"Zapamiętane zasoby: {pamiec.liczba_wpisow()}.")
+    except BladGnb as blad:
+        print(f"Nie udało się otworzyć pamięci podręcznej: {blad.komunikat}")
+        return KOD_BLAD
+    return 0
+
+
+def _zbierz_adresy_wejsciowe(
+    adresy: list[str], listy: list[str], konfiguracja: Konfiguracja
+) -> PodsumowanieListyUrl:
+    """Łączy adresy podane wprost oraz z plików list w jedno podsumowanie.
+
+    Duplikaty są wykrywane po postaci kanonicznej w obrębie całego zestawu, więc
+    ten sam adres podany raz wprost i raz w pliku listy jest jednym źródłem.
+    """
+    fragmenty = list(adresy)
+    for sciezka in listy:
+        podsumowanie_pliku = wczytaj_liste_z_pliku(
+            Path(sciezka), konfiguracja.dodatkowe_parametry_sledzace
+        )
+        fragmenty.extend(adres.podany for adres in podsumowanie_pliku.adresy)
+        fragmenty.extend(podsumowanie_pliku.duplikaty)
+        fragmenty.extend(wpis.wartosc for wpis in podsumowanie_pliku.odrzucone)
+    return zbierz_adresy("\n".join(fragmenty), konfiguracja.dodatkowe_parametry_sledzace)
+
+
 def uruchom_przetwarzanie(
     nazwa_projektu: str | None,
     pliki: list[str],
     teksty_plaskie: list[str],
     teksty_markdown: list[str],
     katalog_projektu: str | None,
+    adresy: list[str] | None = None,
+    listy_adresow: list[str] | None = None,
+    tylko_sprawdz_liste: bool = False,
 ) -> int:
     """Buduje pozycje wejściowe, uruchamia potok i wypisuje raport dla użytkownika.
 
     Zwraca kod zero, gdy potok się wykona, oraz kod dwa, gdy nie podano żadnego
     źródła. Pojedyncze błędne źródło nie zmienia kodu wyjścia — jest opisane
     w raporcie, w manifeście i w logu.
+
+    Przy opcji `tylko_sprawdz_liste` polecenie kończy się po wypisaniu
+    podsumowania listy adresów, z kodem zero także wtedy, gdy część wpisów jest
+    błędna. Wykrycie błędnych wpisów jest bowiem zamierzonym wynikiem tego
+    sprawdzenia, a nie awarią. Kod niezerowy pojawia się tylko wtedy, gdy pliku
+    listy nie da się odczytać.
     """
     moment = datetime.now(UTC)
+    try:
+        konfiguracja = wczytaj_konfiguracje()
+        podsumowanie_adresow = _zbierz_adresy_wejsciowe(
+            list(adresy or []), list(listy_adresow or []), konfiguracja
+        )
+    except BladGnb as blad:
+        print(f"Nie udało się przygotować listy adresów: {blad.komunikat}")
+        return KOD_BLAD
+
+    if podsumowanie_adresow.liczba_wykrytych:
+        print("Podsumowanie listy adresów przed pobraniem:")
+        print(opis_podsumowania(podsumowanie_adresow))
+        print("")
+
+    if tylko_sprawdz_liste:
+        print("Sprawdzenie listy zakończone. Nie pobrano żadnego adresu.")
+        return 0
+
     pozycje: list[PozycjaWejsciowa] = []
     for sciezka in pliki:
         pozycje.append(przyjmij_plik(Path(sciezka), moment))
@@ -172,13 +273,19 @@ def uruchom_przetwarzanie(
         pozycje.append(przyjmij_tekst(tresc, moment, format_tekstu="txt"))
     for tresc in teksty_markdown:
         pozycje.append(przyjmij_tekst(tresc, moment, format_tekstu="md"))
+    for adres in podsumowanie_adresow.adresy:
+        pozycje.append(
+            przyjmij_url(adres.podany, moment, konfiguracja.dodatkowe_parametry_sledzace)
+        )
 
     if not pozycje:
-        print("Nie podano żadnego źródła. Użyj opcji --plik, --tekst albo --tekst-md.")
-        return 2
+        print(
+            "Nie podano żadnego źródła. Użyj opcji --plik, --tekst, --tekst-md, "
+            "--url albo --lista-url."
+        )
+        return KOD_BRAK_ZRODEL
 
     try:
-        konfiguracja = wczytaj_konfiguracje()
         wynik = przetworz_projekt(
             pozycje,
             konfiguracja,
@@ -187,7 +294,7 @@ def uruchom_przetwarzanie(
         )
     except BladGnb as blad:
         print(f"Przetwarzanie przerwane błędem: {blad.komunikat}")
-        return 1
+        return KOD_BLAD
 
     print(f"Projekt: {wynik.nazwa_projektu}")
     print(f"Katalog projektu: {wynik.katalog_projektu}")
@@ -233,9 +340,21 @@ def main(argumenty: list[str] | None = None) -> int:
     podpolecenia = parser.add_subparsers(dest="polecenie", required=True)
     podpolecenia.add_parser("diagnostyka", help="Sprawdź dostępność narzędzi zewnętrznych.")
 
+    parser_pamiec = podpolecenia.add_parser(
+        "pamiec",
+        help="Pokaż stan wspólnej pamięci podręcznej pobranych stron albo ją wyczyść.",
+    )
+    parser_pamiec.add_argument(
+        "--wyczysc",
+        action="store_true",
+        help="Usuń całą zawartość pamięci podręcznej.",
+    )
+
     parser_przetworz = podpolecenia.add_parser(
         "przetworz",
-        help="Przetwórz tekst wklejony oraz pliki TXT i MD w ramach jednego projektu.",
+        help=(
+            "Przetwórz tekst wklejony, pliki TXT i MD oraz adresy stron w ramach jednego projektu."
+        ),
     )
     parser_przetworz.add_argument(
         "--projekt", metavar="NAZWA", default=None, help="Nazwa projektu. Domyślnie generowana."
@@ -263,6 +382,30 @@ def main(argumenty: list[str] | None = None) -> int:
         help="Tekst wklejony traktowany jako Markdown. Opcję można podać wielokrotnie.",
     )
     parser_przetworz.add_argument(
+        "--url",
+        action="append",
+        default=[],
+        metavar="ADRES",
+        help=(
+            "Adres strony internetowej. Opcję można podać wielokrotnie, "
+            "a w jednej wartości zmieścić kilka adresów rozdzielonych spacjami."
+        ),
+    )
+    parser_przetworz.add_argument(
+        "--lista-url",
+        action="append",
+        default=[],
+        metavar="SCIEZKA",
+        dest="lista_url",
+        help="Plik TXT z adresami. Opcję można podać wielokrotnie.",
+    )
+    parser_przetworz.add_argument(
+        "--sprawdz-liste",
+        action="store_true",
+        dest="sprawdz_liste",
+        help="Wypisz podsumowanie listy adresów i zakończ, bez pobierania czegokolwiek.",
+    )
+    parser_przetworz.add_argument(
         "--katalog",
         metavar="SCIEZKA",
         default=None,
@@ -274,6 +417,9 @@ def main(argumenty: list[str] | None = None) -> int:
     if ustalone.polecenie == "diagnostyka":
         return uruchom_diagnostyke()
 
+    if ustalone.polecenie == "pamiec":
+        return uruchom_pamiec(bool(ustalone.wyczysc))
+
     if ustalone.polecenie == "przetworz":
         return uruchom_przetwarzanie(
             ustalone.projekt,
@@ -281,6 +427,9 @@ def main(argumenty: list[str] | None = None) -> int:
             list(ustalone.tekst),
             list(ustalone.tekst_md),
             ustalone.katalog,
+            list(ustalone.url),
+            list(ustalone.lista_url),
+            bool(ustalone.sprawdz_liste),
         )
 
     parser.error(f"Nieznane polecenie: {ustalone.polecenie}")

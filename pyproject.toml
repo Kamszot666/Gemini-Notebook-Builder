@@ -14,13 +14,16 @@ authors = [{ name = "Kamszot666" }]
 
 dependencies = [
     "charset-normalizer>=3.3",
+    "httpx>=0.27",
     "markdown-it-py>=3.0",
+    "trafilatura>=2.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "ruff>=0.6",
+    "lxml-stubs>=0.5",
     # Przypięte na mypy 1.13.0: nowsze wersje wymagają pakietu librt z natywnym
     # DLL, które zasady kontroli aplikacji Windows blokują na komputerze
     # deweloperskim. Odpiąć, gdy problem zniknie albo znajdzie się inne obejście.

@@ -88,7 +88,10 @@ Poniższy blok zawiera komendy uruchamiania aplikacji, diagnostyki i testów. Te
 ```powershell
 python -m gnb.ui.server
 python -m gnb.cli diagnostyka
-python -m gnb.cli przetworz --projekt NAZWA --plik SCIEZKA --tekst TRESC --tekst-md TRESC
+python -m gnb.cli przetworz --projekt NAZWA --plik SCIEZKA --tekst TRESC --tekst-md TRESC --url ADRES --lista-url SCIEZKA
+python -m gnb.cli przetworz --lista-url SCIEZKA --sprawdz-liste
+python -m gnb.cli pamiec
+python -m gnb.cli pamiec --wyczysc
 pytest -q
 pytest -q -m "not siec and not wolne"
 ruff check .
@@ -101,9 +104,11 @@ Koniec bloku komend uruchamiania i testów.
 Zasady dotyczące komend:
 
 1. `python -m gnb.cli diagnostyka` musi wypisać czytelny tekstowo raport o dostępności narzędzi zewnętrznych: FFmpeg, Tesseract, LibreOffice (`soffice`), MuseScore CLI (`mscore`), Java dla Audiveris. Dla każdego brakującego narzędzia podaj nazwę, do czego służy i co przestanie działać bez niego.
-2. `python -m gnb.cli przetworz` uruchamia potok przetwarzania dla tekstu wklejonego oraz plików TXT i MD. Opcje `--plik`, `--tekst` i `--tekst-md` można podawać wielokrotnie, `--projekt` i `--katalog` są opcjonalne. Wyjście jest czytelne liniowo, bez pasków postępu i znaków sterujących, i kończy się jednym zdaniem podsumowania: ile źródeł przetworzono, ile pominięto i w którym katalogu są wyniki. Kod wyjścia zero oznacza wykonany potok, kod dwa brak podanych źródeł. Zakres formatów obsługiwanych przez to polecenie rośnie w kolejnych etapach.
-3. Testy domyślnie nie korzystają z sieci. Testy sieciowe oznaczaj markerem `siec`, testy długotrwałe markerem `wolne`. Oba są domyślnie wyłączone.
-4. Brak opcjonalnego narzędzia zewnętrznego nie może wywalić aplikacji. Ma skutkować czytelnym komunikatem i wyłączeniem konkretnej ścieżki przetwarzania.
+2. `python -m gnb.cli przetworz` uruchamia potok przetwarzania dla tekstu wklejonego, plików TXT i MD oraz adresów stron internetowych. Opcje `--plik`, `--tekst`, `--tekst-md`, `--url` i `--lista-url` można podawać wielokrotnie, `--projekt` i `--katalog` są opcjonalne. Wyjście jest czytelne liniowo, bez pasków postępu i znaków sterujących, i kończy się jednym zdaniem podsumowania: ile źródeł przetworzono, ile pominięto i w którym katalogu są wyniki. Kod wyjścia zero oznacza wykonany potok, kod dwa brak podanych źródeł. Zakres formatów obsługiwanych przez to polecenie rośnie w kolejnych etapach.
+3. Zanim cokolwiek zostanie pobrane, polecenie `przetworz` wypisuje podsumowanie listy adresów: liczbę wykrytych, poprawnych, duplikatów oraz odrzuconych wraz z powodem odrzucenia. Opcja `--sprawdz-liste` kończy pracę zaraz po tym podsumowaniu, bez pobierania. Kod wyjścia jest wtedy zerowy także wtedy, gdy część wpisów jest błędna, bo wykrycie błędnych wpisów jest zamierzonym wynikiem sprawdzenia. Kod niezerowy oznacza wyłącznie to, że pliku listy nie dało się odczytać.
+4. `python -m gnb.cli pamiec` pokazuje ścieżkę wspólnej pamięci podręcznej pobranych stron, informację o jej włączeniu, maksymalny wiek wpisu oraz liczbę zapamiętanych zasobów. Opcja `--wyczysc` usuwa całą jej zawartość. Pamięć podręczna jest wspólna dla wszystkich projektów i leży w katalogu danych aplikacji, obok pliku konfiguracji.
+5. Testy domyślnie nie korzystają z sieci. Testy sieciowe oznaczaj markerem `siec`, testy długotrwałe markerem `wolne`. Oba są domyślnie wyłączone.
+6. Brak opcjonalnego narzędzia zewnętrznego nie może wywalić aplikacji. Ma skutkować czytelnym komunikatem i wyłączeniem konkretnej ścieżki przetwarzania.
 
 ## 6. Struktura repozytorium
 

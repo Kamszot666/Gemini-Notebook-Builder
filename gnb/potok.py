@@ -1,10 +1,17 @@
-"""Orkiestracja potoku przetwarzania w zakresie etapu pierwszego.
+"""Orkiestracja potoku przetwarzania w zakresie etapów pierwszego i drugiego.
 
 Potok uruchamia etapy w stałej kolejności z sekcji ósmej CLAUDE.md, w części
-obsługiwanej przez etap pierwszy: wejście, walidacja i utworzenie źródła, import
-treści, ekstrakcja, normalizacja, klasyfikacja TXT kontra MD, zapis wyników,
-manifest, checkpoint, raport. Etapy deduplikacji, kondensacji i grupowania są
-pominięte, ale ich miejsce w kolejności jest zachowane.
+obsługiwanej przez etapy pierwszy i drugi: wejście, walidacja i utworzenie
+źródła, pobranie lub import treści, ekstrakcja, normalizacja, klasyfikacja TXT
+kontra MD, zapis wyników, manifest, checkpoint, raport. Etapy deduplikacji,
+kondensacji i grupowania są pominięte, ale ich miejsce w kolejności jest
+zachowane.
+
+Pobranie adresów jest osobną fazą, wykonywaną przed pętlą po źródłach. Dzięki
+temu strony pobierają się równolegle, z zachowaniem limitu połączeń na domenę
+i odstępu między żądaniami, a reszta potoku pozostaje synchroniczna i prosta.
+Adresy już przetworzone w poprzednim uruchomieniu nie są pobierane ponownie,
+bo ich identyfikator wynika z kanonicznej postaci adresu.
 
 Jedno uszkodzone wejście nie zatrzymuje reszty. Kończy się kontrolowanym błędem
 zapisanym w logu szczegółowym, w manifeście i w raporcie końcowym. Potok jest
@@ -15,21 +22,33 @@ checkpointu.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+import httpx
+
+from gnb.core.identyfikatory import suma_kontrolna_bajtow
 from gnb.core.konfiguracja import Konfiguracja
 from gnb.core.model import Zrodlo
 from gnb.core.nazwy import nazwa_pliku_wynikowego, wygeneruj_nazwe_projektu
 from gnb.core.stale import StatusZrodla, TypWejscia
-from gnb.core.wyjatki import BladGnb, PrzekroczonoLimit
+from gnb.core.wyjatki import BladGnb, BladTrwaly, PrzekroczonoLimit
 from gnb.extractors.bazowy import Ekstraktor, RejestrEkstraktorow, domyslny_rejestr
+from gnb.ingestion.pobieranie import (
+    OdpowiedzPobrania,
+    Pobieracz,
+    PominietePobranie,
+    UstawieniaPobierania,
+    Zadanie,
+)
 from gnb.ingestion.wejscie import (
     PozycjaWejsciowa,
     identyfikator_awaryjny,
+    identyfikator_strony,
     waliduj_i_utworz_zrodlo,
     wczytaj_tresc_zrodla,
 )
@@ -49,21 +68,39 @@ from gnb.logging_pl.dziennik import (
     DziennikWazny,
     teraz_lokalny,
 )
+from gnb.normalization.kodowanie import zdekoduj
 from gnb.normalization.normalizacja import zbuduj_dokument_znormalizowany, znormalizuj
 from gnb.output import regula_md
 from gnb.output.manifest import WERSJA_SCHEMATU as WERSJA_SCHEMATU_MANIFESTU
-from gnb.output.manifest import Manifest, WpisWyniku, WpisZrodla, zapisz_manifest
+from gnb.output.manifest import (
+    Manifest,
+    WpisPobrania,
+    WpisWyniku,
+    WpisZrodla,
+    zapisz_manifest,
+)
 from gnb.output.raport import PodsumowanieProjektu, zapisz_raport, zbuduj_raport
 from gnb.output.tekst_bez_znacznikow import zamien_markdown_na_tekst
 from gnb.output.zapis import zapisz_wyniki
+from gnb.persistence.cache import PamiecPodreczna, otworz, teraz_utc
 from gnb.persistence.checkpoint import WERSJA_SCHEMATU as WERSJA_SCHEMATU_CHECKPOINTU
-from gnb.persistence.checkpoint import Checkpoint, StanWyniku, StanZrodla, wczytaj, zapisz
+from gnb.persistence.checkpoint import (
+    Checkpoint,
+    StanPobrania,
+    StanWyniku,
+    StanZrodla,
+    wczytaj,
+    zapisz,
+)
 from gnb.persistence.projekt import UkladProjektu, ustal_uklad, utworz_katalogi
 
 _STATUSY_KONCOWE = frozenset(
     {StatusZrodla.SPAKOWANE.value, StatusZrodla.POMINIETE.value, StatusZrodla.BLAD.value}
 )
 _ROZSZERZENIE_ORYGINALU_TEKSTU = "txt"
+
+# Wynik fazy pobrania dla jednego adresu: treść, świadome pominięcie albo błąd.
+WynikFazyPobrania = OdpowiedzPobrania | PominietePobranie | BladGnb
 _MAKSYMALNA_PODSTAWA_NAZWY = 120
 
 
@@ -95,6 +132,7 @@ def przetworz_projekt(
     zegar: Callable[[], datetime] = _teraz_utc,
     zegar_lokalny: Callable[[], datetime] = teraz_lokalny,
     rejestr: RejestrEkstraktorow | None = None,
+    transport_http: httpx.AsyncBaseTransport | None = None,
 ) -> WynikPrzetwarzania:
     """Przetwarza listę wejść w ramach jednego projektu i zwraca podsumowanie.
 
@@ -102,6 +140,9 @@ def przetworz_projekt(
     szczegółowym. Argument `zegar_lokalny` podaje czas lokalny systemu, którym
     prowadzony jest przeznaczony dla użytkownika plik ``log_wazne.txt``. Oba
     zegary można podmienić w testach.
+
+    Argument `transport_http` służy wyłącznie testom. Pozwala podstawić sztuczny
+    transport i sprawdzić cały potok dla adresów bez korzystania z sieci.
     """
     rejestr = rejestr if rejestr is not None else domyslny_rejestr()
     czas_startu = zegar()
@@ -130,7 +171,10 @@ def przetworz_projekt(
             "tak" if wznowiono else "nie",
         )
 
-        wykonanie = _Wykonanie(uklad, konfiguracja, checkpoint, dziennik_wazny, log, rejestr, zegar)
+        pobrane = _pobierz_strony(pozycje, konfiguracja, checkpoint, log, transport_http)
+        wykonanie = _Wykonanie(
+            uklad, konfiguracja, checkpoint, dziennik_wazny, log, rejestr, zegar, pobrane
+        )
         for pozycja in pozycje:
             wykonanie.przetworz(pozycja)
 
@@ -177,6 +221,7 @@ class _Wykonanie:
         log: logging.Logger,
         rejestr: RejestrEkstraktorow,
         zegar: Callable[[], datetime],
+        pobrane: dict[str, WynikFazyPobrania] | None = None,
     ) -> None:
         self._uklad = uklad
         self._konfiguracja = konfiguracja
@@ -185,6 +230,7 @@ class _Wykonanie:
         self._log = log
         self._rejestr = rejestr
         self._zegar = zegar
+        self._pobrane: dict[str, WynikFazyPobrania] = pobrane if pobrane is not None else {}
 
     def przetworz(self, pozycja: PozycjaWejsciowa) -> None:
         """Przetwarza jedno wejście, aktualizując checkpoint i logi."""
@@ -222,8 +268,12 @@ class _Wykonanie:
     def _przetworz_zrodlo(self, pozycja: PozycjaWejsciowa, zrodlo: Zrodlo) -> None:
         identyfikator = zrodlo.identyfikator_zrodla
 
-        tekst, kodowanie = wczytaj_tresc_zrodla(pozycja)
-        self._zachowaj_oryginal(pozycja, zrodlo, tekst)
+        tresc = self._tresc_zrodla(pozycja, zrodlo)
+        if tresc is None:
+            return
+        tekst, kodowanie, surowe_bajty, stan_pobrania, suma_kontrolna = tresc
+
+        self._zachowaj_oryginal(pozycja, zrodlo, tekst, surowe_bajty)
         self._loguj(logging.INFO, identyfikator, f"Źródło {identyfikator}, kodowanie {kodowanie}.")
 
         ekstraktor = self._rejestr.dobierz(zrodlo.typ_zrodla, pozycja.format_zrodla)
@@ -265,7 +315,7 @@ class _Wykonanie:
             identyfikator=identyfikator,
             typ=zrodlo.typ_zrodla.value,
             pochodzenie=zrodlo.pochodzenie,
-            checksum=zrodlo.checksum or "",
+            checksum=suma_kontrolna,
             format_zrodla=pozycja.format_zrodla,
             status=StatusZrodla.SPAKOWANE.value,
             nazwa_bazowa_wyniku=nazwa_bazowa,
@@ -274,6 +324,7 @@ class _Wykonanie:
             liczba_znakow=znormalizowany.liczba_znakow,
             decyzja_md=decyzja.generuj_md,
             uzasadnienie_md=list(decyzja.spelnione_warunki),
+            pobranie=stan_pobrania,
         )
         self._zapisz_checkpoint()
         self._dziennik_wazny.zapisz(ZDARZENIE_ZRODLO_PRZYJETE)
@@ -285,6 +336,43 @@ class _Wykonanie:
             f"Zapisano {len(pliki)} plików wynikowych, wersja MD: "
             f"{'tak' if decyzja.generuj_md else 'nie'}.",
         )
+
+    def _tresc_zrodla(
+        self, pozycja: PozycjaWejsciowa, zrodlo: Zrodlo
+    ) -> tuple[str, str, bytes | None, StanPobrania | None, str] | None:
+        """Zwraca treść źródła wraz z danymi towarzyszącymi albo nic, gdy je pominięto.
+
+        Dla pliku i tekstu wklejonego treść pochodzi z odczytu wejścia. Dla
+        adresu strony pochodzi z wcześniejszej fazy pobrania. Wartość pusta
+        oznacza, że źródło zostało już zapisane jako pominięte i dalsze etapy
+        nie mają się nim zajmować.
+        """
+        if pozycja.wejscie.typ_wejscia is not TypWejscia.URL:
+            tekst, kodowanie = wczytaj_tresc_zrodla(pozycja)
+            return tekst, kodowanie, None, None, zrodlo.checksum or ""
+
+        wynik = self._pobrane.get(zrodlo.identyfikator_zrodla)
+        if isinstance(wynik, PominietePobranie):
+            self._pomin(zrodlo, pozycja, wynik.powod)
+            return None
+        if isinstance(wynik, BladGnb):
+            raise wynik
+        if wynik is None:
+            raise BladTrwaly(
+                f"Brak wyniku pobrania dla adresu {zrodlo.pochodzenie}.",
+                zrodlo.identyfikator_zrodla,
+            )
+
+        tekst, kodowanie = _zdekoduj_odpowiedz(wynik)
+        stan_pobrania = StanPobrania(
+            adres_koncowy=wynik.adres_koncowy,
+            kod_odpowiedzi=wynik.kod_odpowiedzi,
+            deklarowane_kodowanie=wynik.deklarowane_kodowanie,
+            etag=wynik.etag,
+            last_modified=wynik.last_modified,
+            z_pamieci_podrecznej=wynik.z_pamieci_podrecznej,
+        )
+        return tekst, kodowanie, wynik.tresc, stan_pobrania, suma_kontrolna_bajtow(wynik.tresc)
 
     def _tekst_dla_wersji_txt(self, ekstraktor: Ekstraktor, tekst: str) -> str | None:
         """Zwraca treść wersji TXT, gdy ma się różnić od treści wersji MD.
@@ -299,8 +387,19 @@ class _Wykonanie:
             return None
         return znormalizuj(zamien_markdown_na_tekst(tekst))
 
-    def _zachowaj_oryginal(self, pozycja: PozycjaWejsciowa, zrodlo: Zrodlo, tekst: str) -> None:
+    def _zachowaj_oryginal(
+        self,
+        pozycja: PozycjaWejsciowa,
+        zrodlo: Zrodlo,
+        tekst: str,
+        surowe_bajty: bytes | None = None,
+    ) -> None:
         """Zachowuje oryginał źródła w podkatalogu materiałów źródłowych.
+
+        Strona internetowa jest zapisywana jako surowe bajty odpowiedzi, bez
+        przekodowywania. Deklarowane kodowanie trafia do manifestu, więc ponowna
+        ekstrakcja z zachowanego pliku odczyta go poprawnie także wtedy, gdy
+        strona nie była w UTF-8.
 
         Przy wyłączonym ustawieniu `zachowuj_oryginaly` nie powstaje ani plik,
         ani sam podkatalog materiałów źródłowych.
@@ -311,6 +410,9 @@ class _Wykonanie:
         rozszerzenie = pozycja.format_zrodla or _ROZSZERZENIE_ORYGINALU_TEKSTU
         cel = self._uklad.materialy_zrodlowe / f"{zrodlo.identyfikator_zrodla}.{rozszerzenie}"
         if cel.exists():
+            return
+        if surowe_bajty is not None:
+            cel.write_bytes(surowe_bajty)
             return
         if pozycja.wejscie.typ_wejscia is TypWejscia.PLIK:
             zrodlo_pliku = Path(pozycja.wejscie.wartosc)
@@ -404,6 +506,114 @@ class _Wykonanie:
         self._log.log(poziom, komunikat, extra={"identyfikator_zrodla": identyfikator})
 
 
+def _pobierz_strony(
+    pozycje: Sequence[PozycjaWejsciowa],
+    konfiguracja: Konfiguracja,
+    checkpoint: Checkpoint,
+    log: logging.Logger,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> dict[str, WynikFazyPobrania]:
+    """Pobiera wszystkie adresy z listy wejść i zwraca wyniki po identyfikatorze źródła.
+
+    Adresy, które w checkpoincie mają już status końcowy, nie są pobierane
+    ponownie. Powtórzony adres jest pobierany raz, bo jego identyfikator wynika
+    z kanonicznej postaci adresu.
+    """
+    zadania = _zadania_do_pobrania(pozycje, checkpoint)
+    if not zadania:
+        return {}
+
+    log.info("Faza pobrania: %d adresów do pobrania.", len(zadania))
+    wyniki = asyncio.run(
+        _pobierz_asynchronicznie([zadanie for _, zadanie in zadania], konfiguracja, log, transport)
+    )
+    return {identyfikator: wynik for (identyfikator, _), wynik in zip(zadania, wyniki, strict=True)}
+
+
+def _zadania_do_pobrania(
+    pozycje: Sequence[PozycjaWejsciowa], checkpoint: Checkpoint
+) -> list[tuple[str, Zadanie]]:
+    """Buduje listę adresów do pobrania wraz z identyfikatorami ich źródeł."""
+    zadania: list[tuple[str, Zadanie]] = []
+    widziane: set[str] = set()
+    for pozycja in pozycje:
+        if pozycja.wejscie.typ_wejscia is not TypWejscia.URL:
+            continue
+        kanoniczny = pozycja.adres_kanoniczny or pozycja.wejscie.wartosc
+        identyfikator = identyfikator_strony(kanoniczny)
+        if identyfikator in widziane:
+            continue
+        stan = checkpoint.zrodla.get(identyfikator)
+        if stan is not None and stan.status in _STATUSY_KONCOWE:
+            continue
+        widziane.add(identyfikator)
+        zadania.append(
+            (
+                identyfikator,
+                Zadanie(adres_pobierania=pozycja.wejscie.wartosc, klucz_kanoniczny=kanoniczny),
+            )
+        )
+    return zadania
+
+
+async def _pobierz_asynchronicznie(
+    zadania: Sequence[Zadanie],
+    konfiguracja: Konfiguracja,
+    log: logging.Logger,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> list[WynikFazyPobrania]:
+    """Uruchamia pobieranie wszystkich adresów z zachowaniem limitów na domenę."""
+    pamiec = _otworz_pamiec_podreczna(konfiguracja, log)
+    try:
+        async with Pobieracz(
+            UstawieniaPobierania.z_konfiguracji(konfiguracja), pamiec=pamiec, transport=transport
+        ) as pobieracz:
+            return list(await pobieracz.pobierz_wiele(zadania))
+    finally:
+        if pamiec is not None:
+            pamiec.zamknij()
+
+
+def _otworz_pamiec_podreczna(
+    konfiguracja: Konfiguracja, log: logging.Logger
+) -> PamiecPodreczna | None:
+    """Otwiera wspólną pamięć podręczną i usuwa z niej przeterminowane wpisy.
+
+    Niedostępna albo uszkodzona pamięć podręczna nie zatrzymuje pracy. Zostaje
+    wtedy wyłączona na to uruchomienie, a powód trafia do logu szczegółowego,
+    ponieważ pamięć podręczna jest wygodą, a nie warunkiem przetwarzania.
+    """
+    if not konfiguracja.uzywaj_cache:
+        return None
+    try:
+        pamiec = otworz(konfiguracja.sciezka_cache)
+        usuniete = pamiec.usun_przeterminowane(konfiguracja.maksymalny_wiek_cache_dni, teraz_utc())
+    except BladGnb as blad:
+        log.warning("Pamięć podręczna wyłączona na to uruchomienie: %s", blad.komunikat)
+        return None
+    if usuniete:
+        log.info("Usunięto %d przeterminowanych wpisów pamięci podręcznej.", usuniete)
+    return pamiec
+
+
+def _zdekoduj_odpowiedz(odpowiedz: OdpowiedzPobrania) -> tuple[str, str]:
+    """Zamienia bajty odpowiedzi na tekst, korzystając z kodowania podanego przez serwer.
+
+    Kodowanie zadeklarowane przez serwer ma pierwszeństwo, bo jest informacją
+    wprost od źródła. Gdy go nie ma albo gdy zawiedzie, kodowanie jest wykrywane
+    tak samo jak dla plików lokalnych.
+    """
+    if odpowiedz.deklarowane_kodowanie:
+        try:
+            return (
+                odpowiedz.tresc.decode(odpowiedz.deklarowane_kodowanie),
+                odpowiedz.deklarowane_kodowanie,
+            )
+        except (LookupError, UnicodeDecodeError):
+            pass
+    return zdekoduj(odpowiedz.tresc)
+
+
 def _wygeneruj_nazwe_projektu(pozycje: Sequence[PozycjaWejsciowa]) -> str:
     if not pozycje:
         return wygeneruj_nazwe_projektu("")
@@ -449,6 +659,7 @@ def _zbuduj_manifest(uklad: UkladProjektu, checkpoint: Checkpoint) -> Manifest:
                 uzasadnienie_md=tuple(stan.uzasadnienie_md),
                 pliki_wynikowe=tuple(wynik.sciezka_wzgledna for wynik in stan.wyniki),
                 komunikat_bledu=stan.komunikat_bledu,
+                pobranie=_wpis_pobrania(stan.pobranie),
             )
         )
         for wynik in stan.wyniki:
@@ -470,6 +681,20 @@ def _zbuduj_manifest(uklad: UkladProjektu, checkpoint: Checkpoint) -> Manifest:
         nazwa_projektu=uklad.nazwa_projektu,
         zrodla=tuple(wpisy_zrodel),
         wyniki=tuple(wpisy_wynikow),
+    )
+
+
+def _wpis_pobrania(pobranie: StanPobrania | None) -> WpisPobrania | None:
+    """Przenosi dane pobrania z checkpointu do manifestu."""
+    if pobranie is None:
+        return None
+    return WpisPobrania(
+        adres_koncowy=pobranie.adres_koncowy,
+        kod_odpowiedzi=pobranie.kod_odpowiedzi,
+        deklarowane_kodowanie=pobranie.deklarowane_kodowanie,
+        etag=pobranie.etag,
+        last_modified=pobranie.last_modified,
+        z_pamieci_podrecznej=pobranie.z_pamieci_podrecznej,
     )
 
 

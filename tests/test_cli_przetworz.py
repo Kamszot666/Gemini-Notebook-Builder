@@ -54,3 +54,102 @@ def test_przetworz_z_bledna_sciezka_pliku_konczy_sie_kodem_zero(
 
     assert kod == 0
     assert "Źródła z błędem: 1" in capsys.readouterr().out
+
+
+def test_sprawdz_liste_konczy_sie_kodem_zero_mimo_blednych_wpisow(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GNB_KATALOG_WYNIKOW", str(tmp_path))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+
+    kod = main(
+        [
+            "przetworz",
+            "--projekt",
+            "Test listy",
+            "--lista-url",
+            str(KATALOG_DANYCH / "lista_url.txt"),
+            "--sprawdz-liste",
+        ]
+    )
+
+    wyjscie = capsys.readouterr().out
+    assert kod == 0
+    assert "Adresy poprawne: 4" in wyjscie
+    assert "Duplikaty pominięte: 2" in wyjscie
+    assert "Wpisy odrzucone: 2" in wyjscie
+    assert "Nie pobrano żadnego adresu" in wyjscie
+    assert not (tmp_path / "Test listy").exists()
+
+
+def test_sprawdz_liste_laczy_adresy_z_opcji_i_z_pliku(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GNB_KATALOG_WYNIKOW", str(tmp_path))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    lista = tmp_path / "adresy.txt"
+    lista.write_text("https://przyklad.pl/a\nhttps://przyklad.pl/b\n", encoding="utf-8")
+
+    kod = main(
+        [
+            "przetworz",
+            "--projekt",
+            "Test łączenia",
+            "--url",
+            "https://przyklad.pl/c https://przyklad.pl/a",
+            "--lista-url",
+            str(lista),
+            "--sprawdz-liste",
+        ]
+    )
+
+    wyjscie = capsys.readouterr().out
+    assert kod == 0
+    assert "Adresy poprawne: 3" in wyjscie
+    assert "Duplikaty pominięte: 1" in wyjscie
+
+
+def test_brak_pliku_listy_konczy_sie_kodem_niezerowym(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GNB_KATALOG_WYNIKOW", str(tmp_path))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+
+    kod = main(
+        [
+            "przetworz",
+            "--projekt",
+            "Test braku listy",
+            "--lista-url",
+            str(tmp_path / "nie_ma.txt"),
+            "--sprawdz-liste",
+        ]
+    )
+
+    assert kod == 1
+    assert "listy adresów" in capsys.readouterr().out
+
+
+def test_polecenie_pamiec_pokazuje_sciezke_i_stan(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    monkeypatch.setenv("GNB_SCIEZKA_CACHE", str(tmp_path / "cache.sqlite3"))
+
+    kod = main(["pamiec"])
+
+    wyjscie = capsys.readouterr().out
+    assert kod == 0
+    assert "Plik pamięci podręcznej:" in wyjscie
+    assert "cache.sqlite3" in wyjscie
+    assert "Plik jeszcze nie istnieje" in wyjscie
+
+
+def test_polecenie_pamiec_czysci_zawartosc(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    monkeypatch.setenv("GNB_SCIEZKA_CACHE", str(tmp_path / "cache.sqlite3"))
+
+    assert main(["pamiec", "--wyczysc"]) == 0
+    assert "Usunięto wpisów: 0." in capsys.readouterr().out

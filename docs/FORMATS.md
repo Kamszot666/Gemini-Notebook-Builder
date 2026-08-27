@@ -219,11 +219,19 @@ przetwarzane normalnie.
 
 ### Wybór napisów
 
-Kolejność jest deterministyczna. Najpierw napisy tworzone ręcznie, w kolejnych
-językach z listy preferencji. Potem napisy automatyczne, w tej samej kolejności
-języków. Na końcu, o ile konfiguracja na to pozwala, napisy przetłumaczone
-automatycznie. Wybrany język i typ napisów trafiają do manifestu, więc zawsze
-wiadomo, skąd wzięła się treść.
+Kolejność jest deterministyczna i ma cztery kroki. Najpierw napisy tworzone
+ręcznie, w kolejnych językach z listy preferencji. Potem napisy automatyczne,
+w tej samej kolejności języków. Potem, o ile konfiguracja na to pozwala, napisy
+przetłumaczone automatycznie. Na końcu, gdy nic z powyższego nie jest dostępne,
+napisy w dowolnym innym języku: najpierw tworzone ręcznie, potem automatyczne,
+a w obrębie grupy rosnąco według kodu języka, żeby wybór był powtarzalny.
+
+Krok czwarty można wyłączyć ustawieniem `awaryjny_dowolny_jezyk`. Jego użycie
+nie jest ciche: do `log_wazne.txt` trafia ostrzeżenie z tytułem filmu, listą
+oczekiwanych języków i językiem pobranym, a manifest dostaje osobne pole.
+Wybrany język i typ napisów trafiają do manifestu zawsze, więc wiadomo, skąd
+wzięła się treść. Do `log_wazne.txt` trafia też przy każdym filmie jeden wiersz
+mówiący, w jakim języku i jakiego rodzaju napisy pobrano.
 
 Napisy pobierają dwie wzajemnie zapasowe warstwy: `youtube-transcript-api` oraz
 `yt-dlp`. Obie potrafią przestać działać po zmianach po stronie serwisu, więc
@@ -235,6 +243,17 @@ długość i data publikacji, pochodzą z `yt-dlp`.
 Segmenty napisów są sklejane w zdania, a zdania w akapity. Usuwane są oznaczenia
 dźwięków w rodzaju „[muzyka]” oraz powtórzenia typowe dla napisów automatycznych,
 w których kolejny segment powtarza końcówkę poprzedniego.
+
+Napisy tworzone ręcznie bywają poprzedzone albo zakończone stopką tłumaczy
+społecznościowych, na przykład „Tłumaczenie: imię i nazwisko” albo „Subtitles by”.
+To nie jest wypowiedź prelegenta, a doklejona do pierwszego zdania zanieczyszcza
+materiał, bo model czytający bazę wiedzy uzna nazwiska za treść wykładu. Stopka
+jest więc wycinana z tekstu, ale nie jest kasowana: trafia do manifestu, do pola
+`atrybucja_napisow`, w całości i bez prób wydzielania nazwisk. Sprawdzane są
+wyłącznie skrajne segmenty transkrypcji, po kilka z każdej strony, i wyłącznie
+w napisach tworzonych ręcznie, ponieważ automatyczne takich stopek nie zawierają.
+Wzorce polskie wymagają dwukropka, więc zdanie prelegenta zaczynające się od słowa
+„tłumaczenie” zostaje nietknięte.
 
 Znaczniki czasu są domyślnie wyłączone. Po włączeniu ustawieniem
 `znaczniki_czasu` pojawiają się wyłącznie na początku akapitu, w postaci
@@ -289,16 +308,18 @@ każdy wiersz treści i każda komórka tabeli.
 
 ## Nazwy plików wynikowych
 
-Nazwa pliku wynikowego składa się z trzonu tytułu, dwóch podkreśleń i pierwszych
+Nazwa pliku wynikowego składa się z trzonu tytułu, podkreślenia i pierwszych
 ośmiu znaków skrótu z identyfikatora źródła, na przykład
-`baza_wiedzy_dla_asystenta_ai__3f2a9c1d.txt`.
+`baza_wiedzy_dla_asystenta_ai_3f2a9c1d.txt`. Gotowa nazwa nie zawiera ciągów
+podkreśleń ani podkreśleń na brzegach, ponieważ czytnik ekranu odczytuje każdy
+taki znak osobno.
 
 Trzon powstaje z tytułu dokumentu: małe litery, słowa łączone podkreśleniem,
 długość najwyżej sześćdziesiąt znaków, przycięcie zawsze na granicy słowa.
 Jedynym wyjątkiem jest tytuł, w którym już pierwsze słowo przekracza tę długość —
 wtedy to słowo zostaje obcięte, bo inaczej trzon byłby pusty. Gdy dokument nie ma
 tytułu albo tytuł po oczyszczeniu jest pusty lub zarezerwowany w systemie
-Windows, trzonem staje się typ źródła, na przykład `tekst_wklejony__8d1b80c0`.
+Windows, trzonem staje się typ źródła, na przykład `tekst_wklejony_8d1b80c0`.
 
 Polskie znaki diakrytyczne są zachowywane. Nazwa pliku staje się nazwą źródła
 w notatniku i jest odsłuchiwana czytnikiem ekranu, więc zamiana liter na

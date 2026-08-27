@@ -220,7 +220,7 @@ def test_tytul_filmu_staje_sie_nazwa_pliku(tmp_path: Path) -> None:
 
     katalog = wynik.katalog_projektu / "pliki_wynikowe"  # type: ignore[attr-defined]
     (plik,) = katalog.iterdir()
-    assert plik.name.startswith("jak_przygotować_bazę_wiedzy__")
+    assert plik.name.startswith("jak_przygotować_bazę_wiedzy_")
 
 
 def test_oryginal_napisow_jest_zachowany_jako_plik_json(tmp_path: Path) -> None:

@@ -22,6 +22,7 @@ from gnb.ingestion.youtube import (
     _segmenty_z_formatu,
     _wybierz_sciezke_transcript_api,
     _wybierz_sciezke_yt_dlp,
+    _wyjatek_z_komunikatu_yt_dlp,
 )
 
 _IDENTYFIKATOR = "iG9CE55wbtY"
@@ -388,3 +389,55 @@ def test_krok_awaryjny_w_warstwie_yt_dlp_bierze_automatyczne_gdy_brak_recznych()
     assert wybor is not None
     jezyk, typ, _, awaryjny = wybor
     assert (jezyk, typ, awaryjny) == ("de", TYP_NAPISOW_AUTOMATYCZNE, True)
+
+
+def test_komunikat_o_filmie_prywatnym_jest_bledem_trwalym() -> None:
+    wynik = _wyjatek_z_komunikatu_yt_dlp("ERROR: Private video. Sign in if granted access.", "xyz")
+
+    assert isinstance(wynik, BladTrwaly)
+    assert "prywatny" in wynik.komunikat
+
+
+def test_komunikat_o_filmie_usunietym_jest_bledem_trwalym() -> None:
+    wynik = _wyjatek_z_komunikatu_yt_dlp("ERROR: Video unavailable", "xyz")
+
+    assert isinstance(wynik, BladTrwaly)
+    assert "niedostępny" in wynik.komunikat
+
+
+def test_komunikat_o_ograniczeniu_wiekowym_jest_bledem_trwalym() -> None:
+    wynik = _wyjatek_z_komunikatu_yt_dlp("ERROR: Sign in to confirm your age", "xyz")
+
+    assert isinstance(wynik, BladTrwaly)
+    assert "wiekowe" in wynik.komunikat
+
+
+def test_blad_sieci_nie_jest_mylony_z_ograniczeniem_wiekowym() -> None:
+    """Regresja: dopasowanie po fragmencie słowa uznawało błąd sieci za ograniczenie wieku.
+
+    Komunikat o nieudanym pobraniu strony zawiera słowo „page”, w którym mieści
+    się fragment „age”, oraz osobno słowo „confirm”.
+    """
+    komunikat = (
+        "ERROR: unable to download API page: Sign in to confirm you are not a bot "
+        "(HTTPSConnectionPool: Max retries exceeded)"
+    )
+
+    wynik = _wyjatek_z_komunikatu_yt_dlp(komunikat, "xyz")
+
+    assert isinstance(wynik, BladPrzejsciowy)
+
+
+def test_komunikat_o_blokadzie_regionalnej_jest_bledem_trwalym() -> None:
+    wynik = _wyjatek_z_komunikatu_yt_dlp(
+        "ERROR: The uploader has not made this video available in your country", "xyz"
+    )
+
+    assert isinstance(wynik, BladTrwaly)
+    assert "regionie" in wynik.komunikat
+
+
+def test_nierozpoznany_komunikat_jest_bledem_przejsciowym() -> None:
+    wynik = _wyjatek_z_komunikatu_yt_dlp("ERROR: coś zupełnie nowego", "xyz")
+
+    assert isinstance(wynik, BladPrzejsciowy)

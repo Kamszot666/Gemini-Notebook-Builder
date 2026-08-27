@@ -9,6 +9,7 @@ from gnb.core.stale import PoziomPewnosciStruktury
 from gnb.extractors.youtube import (
     MINIMALNA_DLUGOSC_AKAPITU,
     Akapit,
+    usun_atrybucje,
     zapisz_akapity,
     zbuduj_akapity,
     zbuduj_dokument,
@@ -216,3 +217,114 @@ def test_akapit_bez_interpunkcji_jest_zamykany_po_dlugosci_maksymalnej() -> None
     assert len(akapity) >= 2
     assert isinstance(akapity[0], Akapit)
     assert not any(akapit.tekst.endswith(".") for akapit in akapity)
+
+
+def _tresci(segmenty: tuple[SegmentNapisow, ...]) -> list[str]:
+    return [segment.tekst for segment in segmenty]
+
+
+def test_stopka_tlumaczy_na_poczatku_jest_wycinana() -> None:
+    segmenty = _segmenty(
+        (0.0, "Tłumaczenie: Radek Tomaszewski"),
+        (1.0, "Korekta: Jakub Bruszewski"),
+        (2.0, "Dzień dobry. Jak się macie?"),
+    )
+
+    zachowane, atrybucja = usun_atrybucje(segmenty, TYP_NAPISOW_RECZNE)
+
+    assert _tresci(zachowane) == ["Dzień dobry. Jak się macie?"]
+    assert atrybucja == "Tłumaczenie: Radek Tomaszewski Korekta: Jakub Bruszewski"
+
+
+def test_stopka_tlumaczy_na_koncu_jest_wycinana() -> None:
+    segmenty = _segmenty(
+        (0.0, "Dzień dobry."),
+        (5.0, "Na tym kończymy wykład."),
+        (9.0, "Subtitles by the Amara community"),
+    )
+
+    zachowane, atrybucja = usun_atrybucje(segmenty, TYP_NAPISOW_RECZNE)
+
+    assert _tresci(zachowane) == ["Dzień dobry.", "Na tym kończymy wykład."]
+    assert atrybucja == "Subtitles by the Amara community"
+
+
+def test_stopka_w_obu_miejscach_jest_wycinana() -> None:
+    segmenty = _segmenty(
+        (0.0, "Translated by Anna Nowak"),
+        (2.0, "Właściwa treść wykładu."),
+        (8.0, "Reviewed by Piotr Kowalski"),
+    )
+
+    zachowane, atrybucja = usun_atrybucje(segmenty, TYP_NAPISOW_RECZNE)
+
+    assert _tresci(zachowane) == ["Właściwa treść wykładu."]
+    assert atrybucja == "Translated by Anna Nowak Reviewed by Piotr Kowalski"
+
+
+def test_brak_stopki_niczego_nie_usuwa() -> None:
+    segmenty = _segmenty((0.0, "Dzień dobry."), (3.0, "Zaczynamy wykład."))
+
+    zachowane, atrybucja = usun_atrybucje(segmenty, TYP_NAPISOW_RECZNE)
+
+    assert _tresci(zachowane) == ["Dzień dobry.", "Zaczynamy wykład."]
+    assert atrybucja == ""
+
+
+def test_slowo_tlumaczenie_w_wypowiedzi_prelegenta_zostaje() -> None:
+    """Wzorce polskie wymagają dwukropka, więc zwykła wypowiedź nie jest wycinana."""
+    segmenty = _segmenty(
+        (0.0, "Tłumaczenie maszynowe jest dziś znacznie lepsze niż dziesięć lat temu."),
+        (6.0, "Nadal jednak myli nazwy własne."),
+    )
+
+    zachowane, atrybucja = usun_atrybucje(segmenty, TYP_NAPISOW_RECZNE)
+
+    assert len(zachowane) == 2
+    assert atrybucja == ""
+
+
+def test_stopka_nie_jest_wycinana_z_napisow_automatycznych() -> None:
+    segmenty = _segmenty((0.0, "Tłumaczenie: Radek Tomaszewski"), (2.0, "Dzień dobry."))
+
+    zachowane, atrybucja = usun_atrybucje(segmenty, TYP_NAPISOW_AUTOMATYCZNE)
+
+    assert len(zachowane) == 2
+    assert atrybucja == ""
+
+
+def test_stopka_w_srodku_materialu_nie_jest_ruszana() -> None:
+    """Skanowane są wyłącznie brzegi, więc zdanie ze środka zostaje nietknięte."""
+    srodek = [(float(numer), f"Zdanie numer {numer} z wykładu.") for numer in range(1, 12)]
+    srodek[5] = (6.0, "Tłumaczenie: ktoś w środku materiału")
+    segmenty = _segmenty(*srodek)
+
+    zachowane, atrybucja = usun_atrybucje(segmenty, TYP_NAPISOW_RECZNE)
+
+    assert len(zachowane) == len(segmenty)
+    assert atrybucja == ""
+
+
+def test_stopka_w_jednym_segmencie_z_trescia_usuwa_tylko_swoj_wiersz() -> None:
+    segmenty = _segmenty((0.0, "Tłumaczenie: Anna Nowak\nDzień dobry."))
+
+    zachowane, atrybucja = usun_atrybucje(segmenty, TYP_NAPISOW_RECZNE)
+
+    assert _tresci(zachowane) == ["Dzień dobry."]
+    assert atrybucja == "Tłumaczenie: Anna Nowak"
+
+
+def test_atrybucja_trafia_do_metadanych_dokumentu() -> None:
+    segmenty = _segmenty((0.0, "Tłumaczenie: Radek Tomaszewski"), (2.0, "Właściwa treść wykładu."))
+
+    dokument = zbuduj_dokument(_wynik(segmenty))
+
+    assert dokument.metadane["atrybucja_napisow"] == "Tłumaczenie: Radek Tomaszewski"
+    assert "Tłumaczenie" not in dokument.tekst
+    assert dokument.tekst == "Właściwa treść wykładu."
+
+
+def test_dokument_bez_stopki_nie_ma_pola_atrybucji() -> None:
+    dokument = zbuduj_dokument(_wynik(_segmenty((0.0, "Właściwa treść wykładu."))))
+
+    assert "atrybucja_napisow" not in dokument.metadane

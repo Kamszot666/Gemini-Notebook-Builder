@@ -63,6 +63,27 @@ _WZORZEC_CZASU_VTT = re.compile(
 )
 _ZNACZNIKI_VTT = ("WEBVTT", "NOTE", "STYLE", "REGION")
 
+# Zwroty świadczące o ograniczeniu wiekowym filmu. Są to całe frazy, a nie
+# pojedyncze słowa, ponieważ samo „age” występuje w środku zwykłych wyrazów,
+# na przykład „page” albo „message”, i dopasowanie po fragmencie kazało uznać
+# zwykły błąd sieci za trwałe ograniczenie wieku.
+# Zwroty świadczące o blokadzie regionalnej. Serwis opisuje ją na kilka sposobów,
+# w tym zdaniem „has not made this video available in your country”, więc wzorzec
+# obejmuje sam rdzeń tych komunikatów, a nie jedno konkretne zdanie.
+_ZWROTY_BLOKADY_REGIONALNEJ = (
+    "available in your country",
+    "blocked it in your country",
+    "not available in your location",
+)
+
+_ZWROTY_OGRANICZENIA_WIEKOWEGO = (
+    "sign in to confirm your age",
+    "age-restricted",
+    "age restricted",
+    "inappropriate for some users",
+    "confirm your age",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class SegmentNapisow:
@@ -725,11 +746,11 @@ def _wyjatek_z_komunikatu_yt_dlp(komunikat: str, identyfikator_filmu: str) -> Ex
             f"Film {identyfikator_filmu} jest niedostępny albo został usunięty.",
             identyfikator_filmu,
         )
-    if "age" in tekst and "confirm" in tekst or "sign in to confirm your age" in tekst:
+    if any(zwrot in tekst for zwrot in _ZWROTY_OGRANICZENIA_WIEKOWEGO):
         return BladTrwaly(
             f"Film {identyfikator_filmu} ma ograniczenie wiekowe.", identyfikator_filmu
         )
-    if "not available in your country" in tekst or "blocked it in your country" in tekst:
+    if any(zwrot in tekst for zwrot in _ZWROTY_BLOKADY_REGIONALNEJ):
         return BladTrwaly(
             f"Film {identyfikator_filmu} nie jest dostępny w tym regionie.", identyfikator_filmu
         )

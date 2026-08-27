@@ -55,12 +55,12 @@ def test_bezpieczna_nazwa_pliku_zachowuje_poprawny_tytul() -> None:
 
 def test_nazwa_pliku_wynikowego_laczy_trzon_tytulu_ze_skrotem_zrodla() -> None:
     nazwa = nazwa_pliku_wynikowego("Baza wiedzy dla asystenta AI", "plik_tekstowy-3f2a9c1d0e8b7a65")
-    assert nazwa == "baza_wiedzy_dla_asystenta_ai__3f2a9c1d"
+    assert nazwa == "baza_wiedzy_dla_asystenta_ai_3f2a9c1d"
 
 
 def test_nazwa_pliku_wynikowego_zachowuje_polskie_znaki() -> None:
     nazwa = nazwa_pliku_wynikowego("Zażółć gęślą jaźń", "plik_tekstowy-abcdef0123456789")
-    assert nazwa == "zażółć_gęślą_jaźń__abcdef01"
+    assert nazwa == "zażółć_gęślą_jaźń_abcdef01"
 
 
 def test_nazwa_pliku_wynikowego_tnie_trzon_na_granicy_slowa() -> None:
@@ -70,16 +70,15 @@ def test_nazwa_pliku_wynikowego_tnie_trzon_na_granicy_slowa() -> None:
     )
     nazwa = nazwa_pliku_wynikowego(tytul, "plik_tekstowy-7be0e41de03fb311")
 
-    trzon = nazwa.rsplit("__", 1)[0]
+    trzon = nazwa.rsplit("_", 1)[0]
     assert len(trzon) <= 60
     assert trzon == "baza_wiedzy_dla_asystenta_ai_jest_tym_lepsza_im_mniej"
-    assert nazwa.endswith("__7be0e41d")
+    assert nazwa.endswith("_7be0e41d")
 
 
 def test_nazwa_pliku_wynikowego_uzywa_typu_zrodla_gdy_brak_tytulu() -> None:
     assert (
-        nazwa_pliku_wynikowego(None, "tekst_wklejony-8d1b80c0b30c0cd4")
-        == "tekst_wklejony__8d1b80c0"
+        nazwa_pliku_wynikowego(None, "tekst_wklejony-8d1b80c0b30c0cd4") == "tekst_wklejony_8d1b80c0"
     )
 
 
@@ -91,4 +90,29 @@ def test_nazwa_pliku_wynikowego_nie_powtarza_sie_dla_roznych_zrodel() -> None:
 
 def test_nazwa_pliku_wynikowego_odrzuca_nazwe_zarezerwowana_windows() -> None:
     nazwa = nazwa_pliku_wynikowego("CON", "plik_tekstowy-99887766aabbccdd")
-    assert nazwa == "plik_tekstowy__99887766"
+    assert nazwa == "plik_tekstowy_99887766"
+
+
+def test_nazwa_pliku_nie_zawiera_ciagow_podkreslen() -> None:
+    """Czytnik ekranu odczytuje każde podkreślenie osobno, więc ciągi są uciążliwe."""
+    nazwa = nazwa_pliku_wynikowego(
+        "Do schools kill creativity? | Sir Ken Robinson | TED", "youtube-a2aa00a5ffff1111"
+    )
+
+    assert "__" not in nazwa
+    assert nazwa == "do_schools_kill_creativity_sir_ken_robinson_ted_a2aa00a5"
+
+
+def test_tytul_zakonczony_interpunkcja_nie_daje_podwojnego_podkreslenia() -> None:
+    nazwa = nazwa_pliku_wynikowego("Raport za rok 2026...", "plik_tekstowy-1234567890abcdef")
+
+    assert nazwa == "raport_za_rok_2026_12345678"
+    assert "__" not in nazwa
+
+
+def test_ciag_znakow_niedozwolonych_nie_daje_ciagu_podkreslen() -> None:
+    nazwa = nazwa_pliku_wynikowego("Raport: 2026//08 <wersja>", "plik_tekstowy-1234567890abcdef")
+
+    assert "__" not in nazwa
+    assert not nazwa.startswith("_")
+    assert not nazwa.endswith("_")

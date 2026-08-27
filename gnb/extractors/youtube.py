@@ -217,6 +217,8 @@ def _metadane_tekstowe(wynik: WynikYouTube) -> dict[str, str]:
     }
     if wynik.napisy.metoda:
         metadane["metoda_pobrania_napisow"] = wynik.napisy.metoda
+    if wynik.napisy.awaryjny_jezyk:
+        metadane["jezyk_awaryjny"] = "tak"
     if wynik.metadane.tytul:
         metadane["tytul"] = wynik.metadane.tytul
     if wynik.metadane.kanal:

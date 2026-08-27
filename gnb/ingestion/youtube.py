@@ -44,6 +44,13 @@ TYP_NAPISOW_RECZNE = "reczne"
 TYP_NAPISOW_AUTOMATYCZNE = "automatyczne"
 TYP_NAPISOW_TLUMACZONE = "tlumaczone automatycznie"
 
+# Opisy rodzajów napisów przeznaczone dla człowieka, używane w logu ważnym.
+OPISY_TYPOW_NAPISOW = {
+    TYP_NAPISOW_RECZNE: "tworzone ręcznie",
+    TYP_NAPISOW_AUTOMATYCZNE: "automatyczne",
+    TYP_NAPISOW_TLUMACZONE: "tłumaczone maszynowo",
+}
+
 KOMUNIKAT_BRAK_NAPISOW = (
     "Film nie ma napisów w żadnym z wybranych języków, więc nie da się z niego "
     "pobrać tekstu. Źródło zostało pominięte. Transkrypcja mowy z samego dźwięku "
@@ -73,6 +80,7 @@ class Napisy:
     typ: str
     segmenty: tuple[SegmentNapisow, ...]
     metoda: str = ""
+    awaryjny_jezyk: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,6 +124,7 @@ class PreferencjeNapisow:
     jezyki: tuple[str, ...] = JEZYKI_DOMYSLNE
     dopuszczaj_automatyczne: bool = True
     dopuszczaj_tlumaczone: bool = False
+    awaryjny_dowolny_jezyk: bool = True
 
 
 class WarstwaNapisow(Protocol):
@@ -228,6 +237,11 @@ class PobieraczYouTube:
         return None
 
 
+def opis_typu_napisow(typ: str) -> str:
+    """Zwraca opis rodzaju napisów w postaci zrozumiałej bez znajomości kodu."""
+    return OPISY_TYPOW_NAPISOW.get(typ, typ)
+
+
 def klucz_pamieci_podrecznej(identyfikator_filmu: str, preferencje: PreferencjeNapisow) -> str:
     """Buduje klucz pamięci podręcznej dla napisów jednego filmu.
 
@@ -255,6 +269,7 @@ def do_json(wynik: WynikYouTube) -> bytes:
             "jezyk": wynik.napisy.jezyk,
             "typ": wynik.napisy.typ,
             "metoda": wynik.napisy.metoda,
+            "awaryjny_jezyk": wynik.napisy.awaryjny_jezyk,
             "segmenty": [
                 {"poczatek": segment.poczatek_sekundy, "tekst": segment.tekst}
                 for segment in wynik.napisy.segmenty
@@ -309,6 +324,7 @@ def z_json(dane: bytes) -> WynikYouTube | None:
             typ=str(napisy.get("typ", "")),
             segmenty=segmenty,
             metoda=str(napisy.get("metoda", "")),
+            awaryjny_jezyk=bool(napisy.get("awaryjny_jezyk", False)),
         ),
     )
 
@@ -336,7 +352,7 @@ class WarstwaTranscriptApi:
         if sciezka is None:
             return None
 
-        transkrypcja, typ = sciezka
+        transkrypcja, typ, awaryjny = sciezka
         try:
             pobrane = transkrypcja.fetch()
         except Exception as blad:  # noqa: BLE001 — biblioteka ma własną rodzinę wyjątków
@@ -354,6 +370,7 @@ class WarstwaTranscriptApi:
             typ=typ,
             segmenty=segmenty,
             metoda=self.nazwa,
+            awaryjny_jezyk=awaryjny,
         )
 
 
@@ -391,12 +408,18 @@ class WarstwaYtDlp:
         if wybor is None:
             return None
 
-        jezyk, typ, sciezka = wybor
+        jezyk, typ, sciezka, awaryjny = wybor
         tresc = self._pobierz_tresc(str(sciezka.get("url", "")), identyfikator_filmu)
         segmenty = _segmenty_z_formatu(str(sciezka.get("ext", "")), tresc)
         if not segmenty:
             return None
-        return Napisy(jezyk=jezyk, typ=typ, segmenty=segmenty, metoda=self.nazwa)
+        return Napisy(
+            jezyk=jezyk,
+            typ=typ,
+            segmenty=segmenty,
+            metoda=self.nazwa,
+            awaryjny_jezyk=awaryjny,
+        )
 
     def _informacje(self, identyfikator_filmu: str) -> dict[str, Any]:
         """Zwraca słownik informacji o filmie zwrócony przez bibliotekę."""
@@ -451,46 +474,96 @@ class _KandydatNapisow:
 
 def _wybierz_sciezke_transcript_api(
     lista: Any, preferencje: PreferencjeNapisow
-) -> tuple[Any, str] | None:
-    """Wybiera ścieżkę napisów w kolejności: ręczne, automatyczne, tłumaczone."""
+) -> tuple[Any, str, bool] | None:
+    """Wybiera ścieżkę napisów zgodnie z czterokrokową kaskadą preferencji.
+
+    Zwraca ścieżkę, typ napisów oraz informację, czy użyto kroku awaryjnego,
+    czyli języka spoza listy preferencji.
+    """
     dostepne = list(lista)
 
     for jezyk in preferencje.jezyki:
         for transkrypcja in dostepne:
             if transkrypcja.language_code == jezyk and not transkrypcja.is_generated:
-                return transkrypcja, TYP_NAPISOW_RECZNE
+                return transkrypcja, TYP_NAPISOW_RECZNE, False
 
     if preferencje.dopuszczaj_automatyczne:
         for jezyk in preferencje.jezyki:
             for transkrypcja in dostepne:
                 if transkrypcja.language_code == jezyk and transkrypcja.is_generated:
-                    return transkrypcja, TYP_NAPISOW_AUTOMATYCZNE
+                    return transkrypcja, TYP_NAPISOW_AUTOMATYCZNE, False
 
     if preferencje.dopuszczaj_tlumaczone and preferencje.jezyki:
         for transkrypcja in dostepne:
             if transkrypcja.is_translatable:
-                return transkrypcja.translate(preferencje.jezyki[0]), TYP_NAPISOW_TLUMACZONE
+                return (
+                    transkrypcja.translate(preferencje.jezyki[0]),
+                    TYP_NAPISOW_TLUMACZONE,
+                    False,
+                )
+
+    if not preferencje.awaryjny_dowolny_jezyk:
+        return None
+
+    for transkrypcja in _uporzadkuj_awaryjnie(dostepne, preferencje):
+        typ = TYP_NAPISOW_AUTOMATYCZNE if transkrypcja.is_generated else TYP_NAPISOW_RECZNE
+        return transkrypcja, typ, True
 
     return None
 
 
+def _uporzadkuj_awaryjnie(dostepne: list[Any], preferencje: PreferencjeNapisow) -> list[Any]:
+    """Porządkuje ścieżki napisów dla kroku awaryjnego, deterministycznie.
+
+    Najpierw napisy tworzone ręcznie, potem automatyczne, a w obrębie każdej
+    grupy rosnąco według kodu języka. Kolejność zwrócona przez bibliotekę nie ma
+    znaczenia, dzięki czemu dwa przebiegi na tym samym filmie dają ten sam wynik.
+    Napisy automatyczne biorą udział w tym kroku tylko wtedy, gdy konfiguracja
+    w ogóle na nie pozwala.
+    """
+    kandydaci = [
+        transkrypcja
+        for transkrypcja in dostepne
+        if preferencje.dopuszczaj_automatyczne or not transkrypcja.is_generated
+    ]
+    return sorted(kandydaci, key=lambda pozycja: (pozycja.is_generated, pozycja.language_code))
+
+
 def _wybierz_sciezke_yt_dlp(
     informacje: dict[str, Any], preferencje: PreferencjeNapisow
-) -> tuple[str, str, dict[str, Any]] | None:
-    """Wybiera ścieżkę napisów z informacji zwróconych przez ``yt-dlp``."""
+) -> tuple[str, str, dict[str, Any], bool] | None:
+    """Wybiera ścieżkę napisów z informacji zwróconych przez ``yt-dlp``.
+
+    Zwraca język, typ napisów, opis ścieżki oraz informację, czy użyto kroku
+    awaryjnego, czyli języka spoza listy preferencji.
+    """
     reczne = informacje.get("subtitles") or {}
     automatyczne = informacje.get("automatic_captions") or {}
 
     for jezyk in preferencje.jezyki:
         sciezka = _najlepszy_format(reczne.get(jezyk))
         if sciezka is not None:
-            return jezyk, TYP_NAPISOW_RECZNE, sciezka
+            return jezyk, TYP_NAPISOW_RECZNE, sciezka, False
 
     if preferencje.dopuszczaj_automatyczne:
         for jezyk in preferencje.jezyki:
             sciezka = _najlepszy_format(automatyczne.get(jezyk))
             if sciezka is not None:
-                return jezyk, TYP_NAPISOW_AUTOMATYCZNE, sciezka
+                return jezyk, TYP_NAPISOW_AUTOMATYCZNE, sciezka, False
+
+    if not preferencje.awaryjny_dowolny_jezyk:
+        return None
+
+    for jezyk in sorted(reczne):
+        sciezka = _najlepszy_format(reczne.get(jezyk))
+        if sciezka is not None:
+            return jezyk, TYP_NAPISOW_RECZNE, sciezka, True
+
+    if preferencje.dopuszczaj_automatyczne:
+        for jezyk in sorted(automatyczne):
+            sciezka = _najlepszy_format(automatyczne.get(jezyk))
+            if sciezka is not None:
+                return jezyk, TYP_NAPISOW_AUTOMATYCZNE, sciezka, True
 
     return None
 

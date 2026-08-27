@@ -24,8 +24,11 @@ projekty/
 Gemini Notebook Builder/
 
 # Materiały kontekstowe projektu Claude. Zostają na dysku, ale nie trafiają do
-# publicznego repozytorium, ponieważ opisują użytkownika i jego sprzęt.
+# publicznego repozytorium. Opisują użytkownika i jego sposób pracy, a plik
+# stanu zawiera dodatkowo dosłowną kopię kodu, który w repozytorium już jest.
+# Ich właściwym miejscem jest Wiedza projektu Claude.
 INSTRUKCJA_SYSTEMOWA_PROJEKTU.md
+STAN_PROJEKTU.md
 
 # Lokalna konfiguracja i sekrety. Repozytorium jest publiczne, więc te pliki
 # nie mogą się w nim znaleźć w żadnej postaci.

@@ -58,8 +58,12 @@ pełny zapis Markdown. Wersja TXT dostaje ten sam dokument przepisany bez znakó
 składni, ale z zachowaną strukturą:
 
 1. Nagłówek jest osobnym wierszem tekstu, bez krat.
-2. Element listy jest wierszem zaczynającym się myślnikiem i spacją, także
-   w liście numerowanej. Zagnieżdżenie jest oddane wcięciem dwóch spacji.
+2. Element listy wypunktowanej jest wierszem zaczynającym się myślnikiem
+   i spacją. Element listy numerowanej zachowuje swój numer w postaci numeru,
+   kropki i spacji, ponieważ numer niesie znaczenie: kolejność kroków oraz
+   możliwość odwołania się w tekście do konkretnego punktu. Numeracja zaczynająca
+   się od innej liczby niż jeden jest zachowywana. Zagnieżdżenie listy jest
+   oddane wcięciem dwóch spacji na każdy poziom.
 3. Tabela jest rozpisana wierszami w postaci nazwa kolumny, dwukropek, wartość,
    po jednym wierszu na komórkę i z pustym wierszem między rekordami.
 4. Blok kodu traci ogrodzenie, ale zachowuje wcięcia i łamanie wierszy.

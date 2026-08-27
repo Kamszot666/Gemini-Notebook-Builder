@@ -111,6 +111,11 @@ reguły wyboru formatu wymaga rozpoznania tabeli.
 
 Liczba słów to liczba niepustych fragmentów tekstu po podziale znormalizowanego
 tekstu na dowolnych ciągach białych znaków. Ta sama definicja jest używana
-wszędzie, gdzie projekt odwołuje się do limitu słów notatnika. Źródło
-przekraczające bezpieczny limit słów jest w etapie pierwszym oznaczane błędem —
-podział zbyt dużego źródła to zadanie etapu szóstego.
+wszędzie, gdzie projekt odwołuje się do limitu słów notatnika.
+
+Źródło przekraczające bezpieczny limit słów albo bezpieczny limit rozmiaru pliku
+dostaje status „pominiete”, a nie „blad”. Nie jest to awaria, tylko przypadek
+jeszcze nieobsłużony: podział zbyt dużego źródła na części to zadanie etapu
+szóstego. Taki sam status dostaje źródło odrzucone z powodu przekroczenia limitu
+liczby źródeł w notatniku. Każde pominięcie trafia do manifestu, do raportu
+końcowego i do logu szczegółowego, razem z komunikatem wyjaśniającym powód.

@@ -210,6 +210,12 @@ class _Wykonanie:
 
         try:
             self._przetworz_zrodlo(pozycja, zrodlo)
+        except PrzekroczonoLimit as blad:
+            # Przekroczenie limitu nie jest awarią, tylko przypadkiem jeszcze
+            # nieobsłużonym: podział zbyt dużego źródła to zadanie etapu
+            # szóstego. Taki sam status dostaje przekroczenie limitu liczby
+            # źródeł, więc obie sytuacje są opisane w ten sam sposób.
+            self._pomin(zrodlo, pozycja, blad.komunikat)
         except BladGnb as blad:
             self._zapisz_blad_zrodla(zrodlo, pozycja, blad)
 
@@ -350,23 +356,35 @@ class _Wykonanie:
         )
 
     def _zapisz_blad_wejscia(self, pozycja: PozycjaWejsciowa, blad: BladGnb) -> None:
+        """Zapisuje wejście, którego nie dało się zwalidować, jako błąd albo pominięcie.
+
+        Wejście przekraczające limit dostaje status „pominiete”, tak samo jak
+        źródło przekraczające limit słów. Pozostałe błędy walidacji, na przykład
+        brak pliku albo nieobsługiwany format, pozostają statusem „blad”.
+        """
         identyfikator = identyfikator_awaryjny(pozycja)
         pochodzenie = (
             Path(pozycja.wejscie.wartosc).name
             if pozycja.wejscie.typ_wejscia is TypWejscia.PLIK
             else "tekst wklejony"
         )
+        pominiecie = isinstance(blad, PrzekroczonoLimit)
         self._checkpoint.zrodla[identyfikator] = StanZrodla(
             identyfikator=identyfikator,
             typ=pozycja.wejscie.typ_wejscia.value,
             pochodzenie=pochodzenie,
             checksum="",
             format_zrodla=pozycja.format_zrodla,
-            status=StatusZrodla.BLAD.value,
+            status=(StatusZrodla.POMINIETE if pominiecie else StatusZrodla.BLAD).value,
             komunikat_bledu=blad.komunikat,
         )
         self._zapisz_checkpoint()
-        self._dziennik_wazny.zapisz(ZDARZENIE_ZRODLO_BLAD)
+        self._dziennik_wazny.zapisz(
+            ZDARZENIE_ZRODLO_POMINIETE if pominiecie else ZDARZENIE_ZRODLO_BLAD
+        )
+        if pominiecie:
+            self._loguj(logging.WARNING, identyfikator, f"Pominięto wejście: {blad.komunikat}")
+            return
         self._loguj(logging.ERROR, identyfikator, f"Błąd wejścia: {blad.komunikat}")
 
     def _zapisz_checkpoint(self) -> None:

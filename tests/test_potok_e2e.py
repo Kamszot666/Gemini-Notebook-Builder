@@ -207,3 +207,54 @@ def test_bledne_wejscie_nie_zatrzymuje_potoku(tmp_path: Path) -> None:
     manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
     statusy = [zrodlo["status"] for zrodlo in manifest["zrodla"]]
     assert statusy.count("blad") == 1
+
+
+def test_zrodlo_ponad_limit_slow_jest_pominiete_a_nie_bledne(tmp_path: Path) -> None:
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path, bezpieczny_limit_slow=5)
+    moment = datetime(2026, 8, 26, 9, 0, tzinfo=UTC)
+    pozycje = [
+        przyjmij_tekst("Ten tekst ma zdecydowanie więcej niż pięć słów w swojej treści.", moment),
+        przyjmij_tekst("Krótki tekst.", moment),
+    ]
+
+    wynik = przetworz_projekt(
+        pozycje, konfiguracja, nazwa_projektu="Test limitu słów", zegar=_zegar_krokowy()
+    )
+
+    assert wynik.liczba_pominietych == 1
+    assert wynik.liczba_bledow == 0
+    assert wynik.liczba_przetworzonych == 1
+
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    pominiete = [zrodlo for zrodlo in manifest["zrodla"] if zrodlo["status"] == "pominiete"]
+    assert len(pominiete) == 1
+    assert "etapu szóstego" in (pominiete[0]["komunikat_bledu"] or "")
+
+    raport = wynik.sciezka_raportu.read_text(encoding="utf-8")
+    assert "Liczba źródeł pominiętych: 1" in raport
+    assert "Liczba źródeł z błędem: 0" in raport
+
+    log_szczegolowy = (wynik.katalog_projektu / "logi" / "log_szczegolowy.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "Pominięto źródło" in log_szczegolowy
+
+
+def test_plik_ponad_bezpieczny_limit_rozmiaru_jest_pominiety(tmp_path: Path) -> None:
+    katalog_zrodel = tmp_path / "zrodla"
+    katalog_zrodel.mkdir()
+    duzy_plik = katalog_zrodel / "duzy.txt"
+    duzy_plik.write_text("słowo " * 200_000, encoding="utf-8")
+
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path / "wyniki", bezpieczny_limit_mb=1)
+    pozycje = [przyjmij_plik(duzy_plik, datetime(2026, 8, 26, 9, 0, tzinfo=UTC))]
+
+    wynik = przetworz_projekt(
+        pozycje, konfiguracja, nazwa_projektu="Test limitu rozmiaru", zegar=_zegar_krokowy()
+    )
+
+    assert wynik.liczba_pominietych == 1
+    assert wynik.liczba_bledow == 0
+
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    assert [zrodlo["status"] for zrodlo in manifest["zrodla"]] == ["pominiete"]

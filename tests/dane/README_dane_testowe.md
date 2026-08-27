@@ -4,6 +4,15 @@ Wszystkie pliki w tym katalogu zostały wygenerowane od zera na potrzeby testów
 
 Docelowa lokalizacja w repozytorium: `tests/dane/`.
 
+## Zasada dotycząca sieci w testach
+
+Testy automatyczne nie korzystają z sieci. Dotyczy to również etapu trzeciego:
+przypadki napisów tworzonych ręcznie, napisów wyłącznie automatycznych, braku
+napisów, filmu niedostępnego, filmu prywatnego oraz błędu przejściowego są
+odwzorowane danymi sztucznymi, tak samo jak w etapie drugim pobieranie stron
+odwzorowano podstawionym transportem HTTP. Testy sięgające do prawdziwego
+serwisu, jeżeli w ogóle powstaną, mają marker `siec`, domyślnie wyłączony.
+
 ## Co który plik sprawdza
 
 1. `dokument_strukturalny.md` — dokument z hierarchią nagłówków, dwiema listami i tabelą. Reguła z sekcji ósmej pliku `CLAUDE.md` powinna dla niego wygenerować wersję MD obok TXT.
@@ -13,7 +22,7 @@ Docelowa lokalizacja w repozytorium: `tests/dane/`.
 5. `tabela_metod.csv` — dane tabelaryczne ze średnikiem jako separatorem. Sprawdza zachowanie znaczenia struktury tabelarycznej.
 6. `napisy.srt` oraz `napisy.vtt` — sprawdzają usuwanie znaczników czasu z podstawowego TXT przy zachowaniu wersji technicznej.
 7. `lista_url.txt` — lista adresów zawierająca: adres poprawny, jego dokładny duplikat, ten sam adres z parametrem śledzącym, dwa adresy w jednym wierszu rozdzielone spacją, tekst niebędący adresem, adres z błędnym protokołem oraz adres domeny, która nie istnieje. Sprawdza walidację, kanonizację adresów i to, czy jeden błędny wpis nie zatrzymuje całej paczki.
-8. `lista_youtube.txt` — trzy adresy filmów YouTube, po jednym adresie w wierszu. Pierwszy adres to kandydat na film z napisami tworzonymi ręcznie, drugi na film wyłącznie z napisami automatycznymi, trzeci na film bez żadnych napisów, ponieważ nie zawiera mowy. Dostępność napisów nie została zweryfikowana. Trzeba ją potwierdzić przed etapem trzecim poleceniem `yt-dlp` z opcją `--list-subs`, a w razie niezgodności podmienić adres.
+8. `lista_youtube.txt` — jeden zweryfikowany adres filmu z napisami tworzonymi ręcznie. Weryfikację wykonano 27 sierpnia 2026 poleceniem `yt-dlp` z opcją `--list-subs`. Dwa wcześniejsze adresy zostały usunięte, ponieważ nie pasowały do swoich ról: film „Me at the zoo” miał testować przypadek wyłącznie automatyczny, a ma także napisy ręczne angielskie i niemieckie, natomiast animacja miała nie mieć żadnych napisów, a ma ręczne angielskie i francuskie. Pozostałe przypadki, czyli film wyłącznie z napisami automatycznymi oraz film bez żadnych napisów, są odwzorowane w testach danymi sztucznymi, a nie prawdziwymi adresami. Powód: dostępność napisów w serwisie zmienia się w czasie i zależy od regionu, więc test oparty na prawdziwym adresie przestałby być powtarzalny. Ten jeden adres służy wyłącznie do jednorazowego sprawdzenia na żywo, po napisaniu kodu, na komputerze użytkownika.
 9. `dokument.docx` — nagłówki, akapity i lista wypunktowana.
 10. `prezentacja.pptx` — dwa slajdy z tytułem i listą.
 11. `dokument.odt` — wymaga LibreOffice w trybie bez okna.

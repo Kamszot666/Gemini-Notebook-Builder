@@ -14,6 +14,7 @@ from gnb.extractors.strona_www import (
     METODA_GLOWNA,
     METODA_ZAPASOWA,
     EkstraktorStronyWww,
+    czy_wymaga_skryptow,
 )
 from gnb.output import regula_md
 
@@ -150,3 +151,37 @@ def test_mechanizm_zapasowy_odzyskuje_akapity_i_tytul() -> None:
     assert "wystarczająco długi" in dokument.tekst
     assert "alert" not in dokument.tekst
     assert "Menu serwisu" not in dokument.tekst
+
+
+def _strona_ze_skryptami() -> str:
+    """Buduje rozbudowaną stronę, w której treść powstaje dopiero w przeglądarce."""
+    szkielet = '<div class="kontener"></div>' * 100
+    skrypt = "<script>window.__DANE__ = [];</script>" * 20
+    return (
+        '<!DOCTYPE html><html lang="pl"><head><meta charset="utf-8">'
+        '<title>Aplikacja</title></head><body><div id="root"></div>'
+        f"{szkielet}{skrypt}</body></html>"
+    )
+
+
+def test_strona_budowana_skryptami_jest_rozpoznana() -> None:
+    strona = _strona_ze_skryptami()
+    dokument = _ekstraktor().wyekstrahuj("strona_www-5", strona)
+
+    assert czy_wymaga_skryptow(strona, dokument.tekst) is True
+
+
+def test_zwykly_artykul_nie_jest_uznany_za_wymagajacy_skryptow() -> None:
+    tekst = (KATALOG_DANYCH / "artykul_oryginal.html").read_text(encoding="utf-8")
+    dokument = _ekstraktor().wyekstrahuj("strona_www-1", tekst)
+
+    assert czy_wymaga_skryptow(tekst, dokument.tekst) is False
+
+
+def test_krotka_poprawna_strona_nie_jest_uznana_za_wymagajaca_skryptow() -> None:
+    strona = (
+        "<html><head><title>Notatka</title></head><body>"
+        "<script>console.log(1)</script>"
+        "<p>Krótka, ale poprawna notatka.</p></body></html>"
+    )
+    assert czy_wymaga_skryptow(strona, "Krótka, ale poprawna notatka.") is False

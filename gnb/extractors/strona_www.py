@@ -20,6 +20,12 @@ Odnośniki wewnątrzwierszowe nie są zachowywane. Adres w środku zdania czyni
 tekst trudnym do odsłuchania czytnikiem ekranu, a pochodzenie całego artykułu
 i tak jest zapisane w manifeście oraz w nagłówku pliku wynikowego.
 
+Strony budowane w całości przez skrypty są rozpoznawane i nazywane wprost.
+Bez przeglądarki nie da się z nich pobrać treści, a przeglądarka bezgłowa
+oznaczałaby setki megabajtów zależności natywnych, więc taki materiał jest
+świadomie poza zakresem projektu. Zamiast milczącego pominięcia użytkownik
+dostaje komunikat mówiący, czego zabrakło, i podpowiedź obejścia.
+
 Treść strony jest danymi, nigdy instrukcją. Ekstraktor niczego z niej nie
 wykonuje i nie interpretuje poleceń, które mogłyby się w niej znaleźć.
 """
@@ -52,6 +58,22 @@ _ZNACZNIKI_NIETRESCIOWE = (
 )
 _MINIMALNA_DLUGOSC_AKAPITU_ZAPASOWEGO = 40
 _DOMYSLNY_POZIOM_NAGLOWKA = 2
+
+# Progi rozpoznania strony budowanej skryptami. Dokument musi być rozbudowany,
+# zawierać skrypty i jednocześnie dawać znikomą treść po ekstrakcji. Dopiero te
+# trzy warunki naraz świadczą o tym, że treść powstaje dopiero w przeglądarce,
+# a nie o tym, że artykuł jest po prostu krótki.
+MINIMALNA_DLUGOSC_DOKUMENTU_ZE_SKRYPTAMI = 2000
+MAKSYMALNA_DLUGOSC_TRESCI_SZCZATKOWEJ = 200
+_ZNACZNIK_SKRYPTU = "<script"
+
+KOMUNIKAT_WYMAGA_SKRYPTOW = (
+    "Strona buduje treść dopiero w przeglądarce, przez wykonanie skryptów, więc "
+    "nie da się z niej pobrać tekstu bez przeglądarki. Źródło zostało pominięte. "
+    "Obejście działające już teraz: otwórz stronę w przeglądarce, zaznacz i skopiuj "
+    "treść artykułu, a następnie wklej ją jako tekst. Zapisanie strony do pliku HTML "
+    "będzie można wykorzystać po etapie czwartym, który doda obsługę plików HTML."
+)
 
 
 class EkstraktorStronyWww:
@@ -112,6 +134,20 @@ class EkstraktorStronyWww:
             tytul=tytul,
             ostrzezenia=[ostrzezenie],
         )
+
+
+def czy_wymaga_skryptow(tekst_strony: str, tresc_wyekstrahowana: str) -> bool:
+    """Rozstrzyga, czy strona buduje treść dopiero przez wykonanie skryptów.
+
+    Warunki muszą być spełnione jednocześnie: dokument jest rozbudowany, zawiera
+    znacznik skryptu, a mimo to ekstrakcja dała treść znikomą albo pustą. Sam
+    krótki artykuł nie wystarczy, bo krótkie strony bywają w pełni poprawne.
+    """
+    if len(tresc_wyekstrahowana.strip()) > MAKSYMALNA_DLUGOSC_TRESCI_SZCZATKOWEJ:
+        return False
+    if len(tekst_strony) < MINIMALNA_DLUGOSC_DOKUMENTU_ZE_SKRYPTAMI:
+        return False
+    return _ZNACZNIK_SKRYPTU in tekst_strony.lower()
 
 
 def _wywolaj_trafilature(tekst: str) -> str | None:

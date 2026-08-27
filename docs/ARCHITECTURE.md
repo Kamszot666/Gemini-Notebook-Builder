@@ -61,7 +61,8 @@ identyfikator wynika z kanonicznej postaci adresu, a nie z treści.
   ponowieniami, rosnącym odstępem, limitem połączeń na domenę i obsługą pamięci
   podręcznej.
 - `gnb/ingestion/robots.py` — odczyt pliku `robots.txt` i decyzja o zgodzie na
-  pobranie adresu.
+  pobranie adresu, zgodnie z RFC 9309: 2xx oznacza reguły, 4xx zgodę, a 5xx
+  i błąd sieci zakaz po wyczerpaniu ponowień.
 
 ## Pakiet gnb.extractors
 
@@ -89,7 +90,8 @@ identyfikator wynika z kanonicznej postaci adresu, a nie z treści.
   z zachowaną strukturą, używane do wersji TXT źródeł markdownowych.
 - `gnb/output/manifest.py` — `manifest.json` jako źródło prawdy i `manifest.txt`
   jako czytelny widok.
-- `gnb/output/raport.py` — raport końcowy jako zwykły tekst.
+- `gnb/output/raport.py` — raport końcowy jako zwykły tekst, wraz z wykazem
+  źródeł pominiętych i błędnych oraz powodem każdego z nich.
 
 ## Pakiet gnb.persistence
 

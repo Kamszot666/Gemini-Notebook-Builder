@@ -56,8 +56,40 @@ między żądaniami. Klient przedstawia się nazwą wskazującą projekt i domy�
 respektuje plik `robots.txt`.
 
 Sytuacje kończące się statusem „pominiete”, czyli świadomym pominięciem, a nie
-błędem: zakaz w pliku `robots.txt`, zasób, który nie jest stroną HTML, oraz zasób
-przekraczający bezpieczny limit pobrania.
+błędem: zakaz w pliku `robots.txt`, nieosiągalny plik `robots.txt`, zasób, który
+nie jest stroną HTML, zasób przekraczający bezpieczny limit pobrania oraz strona
+budująca treść dopiero przez wykonanie skryptów.
+
+### Reguły witryny, czyli plik robots.txt
+
+Polityka jest zgodna z RFC 9309, sekcja 2.3.1, i wygląda tak:
+
+1. Odpowiedź z rodziny 2xx oznacza wczytanie reguł i stosowanie się do nich.
+2. Odpowiedź z rodziny 4xx, w tym 401 i 403, oznacza brak reguł, czyli zgodę na
+   pobieranie. Ma to również znaczenie praktyczne: witryny za zaporą aplikacyjną
+   często odpowiadają kodem 403 na sam plik `robots.txt` przy nietypowym
+   kliencie, mimo że artykuł jest publicznie dostępny w przeglądarce.
+3. Odpowiedź z rodziny 5xx oraz błąd sieci oznaczają reguły nieokreślone, a wtedy
+   obowiązuje pełny zakaz. Taka sytuacja jest najpierw ponawiana zgodnie
+   z ustawieniami odstępów, a dopiero po wyczerpaniu prób źródło zostaje
+   pominięte z komunikatem wyjaśniającym.
+
+Wynik odczytu reguł jest zapamiętywany na czas jednego uruchomienia i dotyczy
+całej witryny, więc wiele adresów z jednego serwisu pyta o ten plik tylko raz.
+
+### Strony budowane skryptami
+
+Serwisy, które bez wykonania skryptów zwracają pusty szkielet strony, są
+rozpoznawane i nazywane wprost. Warunki muszą zajść jednocześnie: dokument jest
+rozbudowany, zawiera znacznik skryptu, a mimo to ekstrakcja daje treść znikomą
+albo pustą.
+
+Takie źródło dostaje status „pominiete”, a jego powód trafia do manifestu i do
+raportu końcowego. Komunikat podpowiada obejście działające już teraz: otwórz
+stronę w przeglądarce, skopiuj treść artykułu i wklej ją jako tekst.
+
+Obsługa takich stron przez przeglądarkę bezgłową jest świadomie poza zakresem
+projektu, ponieważ wymagałaby setek megabajtów zależności natywnych.
 
 Sytuacje kończące się statusem „blad”: odpowiedzi 401, 403, 404 i 410 oraz
 wyczerpanie ponowień przy błędach przejściowych, czyli przekroczeniu limitu

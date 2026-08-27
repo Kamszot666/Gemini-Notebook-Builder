@@ -269,3 +269,81 @@ def test_pamiec_podreczna_oszczedza_pobranie_w_drugim_projekcie(tmp_path: Path) 
     )
 
     assert len(serwer.zadania) == zadania_po_pierwszym
+
+
+def _strona_ze_skryptami() -> bytes:
+    """Rozbudowana strona, w której treść powstaje dopiero po wykonaniu skryptów."""
+    szkielet = '<div class="kontener"></div>' * 100
+    skrypt = "<script>window.__DANE__ = [];</script>" * 20
+    return (
+        '<!DOCTYPE html><html lang="pl"><head><meta charset="utf-8">'
+        '<title>Aplikacja</title></head><body><div id="root"></div>'
+        f"{szkielet}{skrypt}</body></html>"
+    ).encode()
+
+
+def test_strona_wymagajaca_skryptow_jest_pomijana_z_wyjasnieniem(tmp_path: Path) -> None:
+    odpowiedz = httpx.Response(
+        200, content=_strona_ze_skryptami(), headers={"content-type": "text/html; charset=utf-8"}
+    )
+    serwer = _Serwer({"/artykul": odpowiedz})
+
+    wynik = przetworz_projekt(
+        _pozycje(_ADRES_ARTYKULU),
+        _konfiguracja(tmp_path),
+        nazwa_projektu="Test skryptów",
+        zegar=_zegar_krokowy(),
+        transport_http=serwer.transport(),
+    )
+
+    assert wynik.liczba_pominietych == 1
+    assert wynik.liczba_bledow == 0
+    assert not list((wynik.katalog_projektu / "pliki_wynikowe").iterdir())
+
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    (zrodlo,) = manifest["zrodla"]
+    assert zrodlo["status"] == "pominiete"
+    assert "skryptów" in zrodlo["komunikat_bledu"]
+    assert "wklej ją jako tekst" in zrodlo["komunikat_bledu"]
+
+    raport = wynik.sciezka_raportu.read_text(encoding="utf-8")
+    assert "Źródła nieprzetworzone, liczba: 1" in raport
+    assert _ADRES_ARTYKULU in raport
+    assert "skryptów" in raport
+
+
+def test_raport_wymienia_powod_pominiecia_przez_robots(tmp_path: Path) -> None:
+    reguly = "User-agent: *\nDisallow: /"
+    serwer = _Serwer({"/robots.txt": httpx.Response(200, text=reguly)})
+
+    wynik = przetworz_projekt(
+        _pozycje(_ADRES_ARTYKULU),
+        _konfiguracja(tmp_path, respektuj_robots=True),
+        nazwa_projektu="Test raportu robots",
+        zegar=_zegar_krokowy(),
+        transport_http=serwer.transport(),
+    )
+
+    raport = wynik.sciezka_raportu.read_text(encoding="utf-8")
+    assert "Źródła nieprzetworzone, liczba: 1" in raport
+    assert "Status: pominiete" in raport
+    assert "robots.txt" in raport
+
+
+def test_niedostepny_plik_robots_konczy_pominieciem_calego_zrodla(tmp_path: Path) -> None:
+    serwer = _Serwer({"/robots.txt": httpx.Response(503)})
+
+    wynik = przetworz_projekt(
+        _pozycje(_ADRES_ARTYKULU),
+        _konfiguracja(tmp_path, respektuj_robots=True),
+        nazwa_projektu="Test niedostępnych reguł",
+        zegar=_zegar_krokowy(),
+        transport_http=serwer.transport(),
+    )
+
+    assert wynik.liczba_pominietych == 1
+    assert wynik.liczba_bledow == 0
+
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    (zrodlo,) = manifest["zrodla"]
+    assert "RFC 9309" in zrodlo["komunikat_bledu"]

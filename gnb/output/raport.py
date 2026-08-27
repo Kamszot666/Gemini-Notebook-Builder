@@ -6,9 +6,13 @@ po deduplikacji, liczbę plików wynikowych w podziale na formaty, procent
 wykorzystania limitu źródeł, największy plik wynikowy, łączną liczbę słów oraz
 czas pracy.
 
-W etapie pierwszym nie ma jeszcze deduplikacji ani plików PDF, więc odpowiednie
-liczby są zerowe. Raport zawsze wypisuje wszystkie pozycje, żeby jego układ był
-przewidywalny.
+Po liczbach raport wymienia z nazwy każde źródło pominięte oraz każde źródło
+zakończone błędem, razem z powodem. Sama liczba pominięć nie mówi użytkownikowi,
+czego zabrakło, a odszukiwanie tego w manifeście jest niewygodne przy odsłuchu
+czytnikiem ekranu.
+
+Dopóki nie ma deduplikacji ani plików PDF, odpowiednie liczby są zerowe. Raport
+zawsze wypisuje wszystkie pozycje, żeby jego układ był przewidywalny.
 """
 
 from __future__ import annotations
@@ -18,8 +22,18 @@ from pathlib import Path
 
 
 @dataclass(frozen=True, slots=True)
+class ZrodloNieprzetworzone:
+    """Źródło pominięte albo zakończone błędem, wraz z powodem do pokazania."""
+
+    identyfikator: str
+    pochodzenie: str
+    status: str
+    powod: str
+
+
+@dataclass(frozen=True, slots=True)
 class PodsumowanieProjektu:
-    """Zestaw liczb potrzebnych do zbudowania raportu końcowego."""
+    """Zestaw liczb i wykaz źródeł nieprzetworzonych, potrzebne do raportu końcowego."""
 
     liczba_wejsc: int
     liczba_zrodel_poprawnych: int
@@ -35,6 +49,7 @@ class PodsumowanieProjektu:
     najwiekszy_plik_bajtow: int
     laczna_liczba_slow: int
     czas_pracy_sekundy: float
+    zrodla_nieprzetworzone: tuple[ZrodloNieprzetworzone, ...] = ()
 
 
 def zbuduj_raport(nazwa_projektu: str, podsumowanie: PodsumowanieProjektu) -> str:
@@ -65,7 +80,24 @@ def zbuduj_raport(nazwa_projektu: str, podsumowanie: PodsumowanieProjektu) -> st
         f"Łączna liczba słów w plikach wynikowych: {podsumowanie.laczna_liczba_slow}",
         f"Czas pracy: {_opis_czasu(podsumowanie.czas_pracy_sekundy)}",
     ]
+    wiersze.extend(_wiersze_zrodel_nieprzetworzonych(podsumowanie.zrodla_nieprzetworzone))
     return "\n".join(wiersze) + "\n"
+
+
+def _wiersze_zrodel_nieprzetworzonych(
+    zrodla: tuple[ZrodloNieprzetworzone, ...],
+) -> list[str]:
+    """Buduje wykaz źródeł pominiętych i błędnych wraz z powodem, po jednym na akapit."""
+    if not zrodla:
+        return []
+    wiersze = ["", "Źródła nieprzetworzone, liczba: " + str(len(zrodla)), ""]
+    for zrodlo in zrodla:
+        wiersze.append(f"Źródło: {zrodlo.pochodzenie}")
+        wiersze.append(f"  Identyfikator: {zrodlo.identyfikator}")
+        wiersze.append(f"  Status: {zrodlo.status}")
+        wiersze.append(f"  Powód: {zrodlo.powod}")
+        wiersze.append("")
+    return wiersze[:-1]
 
 
 def zapisz_raport(sciezka: Path, tresc: str) -> None:

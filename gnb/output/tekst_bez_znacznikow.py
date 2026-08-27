@@ -9,8 +9,11 @@ dokumentu, a nie wycięciem znaków.
 Reguły przepisania:
 
 1. Nagłówek staje się osobnym wierszem tekstu bez krat.
-2. Element listy staje się wierszem zaczynającym się myślnikiem i spacją.
-   Zagnieżdżenie jest oddawane wcięciem dwóch spacji na poziom.
+2. Element listy wypunktowanej staje się wierszem zaczynającym się myślnikiem
+   i spacją. Element listy numerowanej zachowuje swój numer w postaci numeru,
+   kropki i spacji, ponieważ numer niesie znaczenie: kolejność kroków oraz
+   możliwość odwołania się w tekście do konkretnego punktu. Zagnieżdżenie jest
+   oddawane wcięciem dwóch spacji na poziom.
 3. Tabela jest rozpisywana wierszami w postaci nazwa kolumny, dwukropek,
    wartość, po jednym wierszu na komórkę i pustym wierszu między rekordami.
 4. Blok kodu traci ogrodzenie, ale zachowuje wcięcia i łamanie wierszy.
@@ -29,19 +32,23 @@ na podstawie tego, czy użyty ekstraktor zwraca tekst ze znacznikami.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from markdown_it.token import Token
 
 from gnb.extractors.markdown import utworz_parser
 
-PREFIKS_ELEMENTU_LISTY = "- "
+PREFIKS_ELEMENTU_LISTY_WYPUNKTOWANEJ = "- "
 WCIECIE_ZAGNIEZDZENIA = "  "
 ROZDZIELACZ_KOMORKI_TABELI = ": "
+_PIERWSZY_NUMER_DOMYSLNY = 1
 
 # Parser jest ten sam co w ekstraktorze Markdown. Obie ścieżki muszą widzieć
 # dokładnie tę samą strukturę, w tym tabele, które nie należą do CommonMark.
 _PARSER = utworz_parser()
 
-_TOKENY_OTWARCIA_LISTY = ("bullet_list_open", "ordered_list_open")
+_TOKEN_OTWARCIA_LISTY_NUMEROWANEJ = "ordered_list_open"
+_TOKENY_OTWARCIA_LISTY = ("bullet_list_open", _TOKEN_OTWARCIA_LISTY_NUMEROWANEJ)
 _TOKENY_ZAMKNIECIA_LISTY = ("bullet_list_close", "ordered_list_close")
 _TOKENY_ZAMKNIECIA_BLOKU = ("heading_close", "paragraph_close", "blockquote_close")
 _TOKENY_KODU = ("fence", "code_block")
@@ -52,13 +59,29 @@ def zamien_markdown_na_tekst(tekst: str) -> str:
     return _Przepisywacz().przepisz(_PARSER.parse(tekst))
 
 
+@dataclass(slots=True)
+class _StanListy:
+    """Stan jednej otwartej listy: rodzaj oraz numer kolejnego elementu."""
+
+    numerowana: bool
+    numer_nastepnego: int = _PIERWSZY_NUMER_DOMYSLNY
+
+    def kolejny_prefiks(self) -> str:
+        """Zwraca prefiks kolejnego elementu i przesuwa numerację o jeden."""
+        if not self.numerowana:
+            return PREFIKS_ELEMENTU_LISTY_WYPUNKTOWANEJ
+        prefiks = f"{self.numer_nastepnego}. "
+        self.numer_nastepnego += 1
+        return prefiks
+
+
 class _Przepisywacz:
     """Stan przepisywania jednego dokumentu z tokenów na wiersze tekstu."""
 
     def __init__(self) -> None:
         self._wiersze: list[str] = []
-        self._stos_list: list[str] = []
-        self._pierwszy_wiersz_elementu = False
+        self._stos_list: list[_StanListy] = []
+        self._prefiks_elementu: str | None = None
         self._w_tabeli = False
         self._w_naglowku_tabeli = False
         self._naglowki_tabeli: list[str] = []
@@ -76,14 +99,16 @@ class _Przepisywacz:
         if typ == "inline":
             self._obsluz_inline(token)
         elif typ in _TOKENY_OTWARCIA_LISTY:
-            self._stos_list.append(typ)
+            self._stos_list.append(_nowa_lista(token))
         elif typ in _TOKENY_ZAMKNIECIA_LISTY:
             if self._stos_list:
                 self._stos_list.pop()
             if not self._stos_list:
                 self._pusty_wiersz()
         elif typ == "list_item_open":
-            self._pierwszy_wiersz_elementu = True
+            self._prefiks_elementu = (
+                self._stos_list[-1].kolejny_prefiks() if self._stos_list else None
+            )
         elif typ in _TOKENY_KODU:
             self._obsluz_kod(token)
         elif typ == "html_block":
@@ -122,16 +147,20 @@ class _Przepisywacz:
         self._wiersze.extend(tresc.split("\n"))
 
     def _dopisz_element_listy(self, tresc: str) -> None:
-        """Dopisuje treść jako element listy, z wcięciem odpowiadającym zagnieżdżeniu."""
+        """Dopisuje treść jako element listy, z wcięciem odpowiadającym zagnieżdżeniu.
+
+        Pierwszy wiersz elementu dostaje prefiks wyznaczony przy otwarciu
+        elementu: myślnik ze spacją w liście wypunktowanej albo numer, kropkę
+        i spację w liście numerowanej. Kolejne wiersze tego samego elementu są
+        wcięte, żeby nie wyglądały na nowy punkt.
+        """
         wciecie = WCIECIE_ZAGNIEZDZENIA * (len(self._stos_list) - 1)
-        prefiks = (
-            PREFIKS_ELEMENTU_LISTY if self._pierwszy_wiersz_elementu else WCIECIE_ZAGNIEZDZENIA
-        )
+        prefiks = self._prefiks_elementu or WCIECIE_ZAGNIEZDZENIA
         linie = tresc.split("\n")
         self._wiersze.append(f"{wciecie}{prefiks}{linie[0]}")
         for dalsza_linia in linie[1:]:
             self._wiersze.append(f"{wciecie}{WCIECIE_ZAGNIEZDZENIA}{dalsza_linia}")
-        self._pierwszy_wiersz_elementu = False
+        self._prefiks_elementu = None
 
     def _obsluz_kod(self, token: Token) -> None:
         """Dopisuje zawartość bloku kodu bez ogrodzenia, zachowując wcięcia."""
@@ -165,6 +194,23 @@ class _Przepisywacz:
         """Dopisuje pusty wiersz, o ile poprzedni wiersz nie jest już pusty."""
         if self._wiersze and self._wiersze[-1] != "":
             self._wiersze.append("")
+
+
+def _nowa_lista(token: Token) -> _StanListy:
+    """Buduje stan listy na podstawie tokenu jej otwarcia.
+
+    Lista numerowana może zaczynać się od numeru innego niż jeden. Markdown-it
+    przekazuje wtedy atrybut ``start``, który jest tu uwzględniany, żeby TXT
+    zachował tę samą numerację co dokument źródłowy.
+    """
+    if token.type != _TOKEN_OTWARCIA_LISTY_NUMEROWANEJ:
+        return _StanListy(numerowana=False)
+    surowy_start = token.attrGet("start")
+    try:
+        pierwszy_numer = int(str(surowy_start))
+    except (TypeError, ValueError):
+        pierwszy_numer = _PIERWSZY_NUMER_DOMYSLNY
+    return _StanListy(numerowana=True, numer_nastepnego=pierwszy_numer)
 
 
 def tekst_inline(token: Token) -> str:

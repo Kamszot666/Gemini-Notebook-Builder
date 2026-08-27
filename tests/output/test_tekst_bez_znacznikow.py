@@ -90,14 +90,44 @@ def test_elementy_listy_zaczynaja_sie_myslnikiem_i_spacja() -> None:
     assert txt.splitlines() == ["- Pierwszy", "- Drugi"]
 
 
-def test_lista_numerowana_takze_dostaje_myslnik() -> None:
-    txt = _wersja_txt("1. Pierwszy krok\n2. Drugi krok\n")
-    assert txt.splitlines() == ["- Pierwszy krok", "- Drugi krok"]
+def test_lista_numerowana_zachowuje_numeracje() -> None:
+    txt = _wersja_txt("1. Pierwszy krok\n2. Drugi krok\n3. Trzeci krok\n")
+    assert txt.splitlines() == ["1. Pierwszy krok", "2. Drugi krok", "3. Trzeci krok"]
 
 
-def test_lista_zagniezdzona_jest_oddana_wcieciem() -> None:
+def test_lista_numerowana_zaczynajaca_sie_od_innego_numeru_zachowuje_start() -> None:
+    txt = _wersja_txt("3. Trzeci krok\n4. Czwarty krok\n")
+    assert txt.splitlines() == ["3. Trzeci krok", "4. Czwarty krok"]
+
+
+def test_numeracja_kazdej_listy_liczy_sie_od_poczatku() -> None:
+    txt = _wersja_txt("1. Pierwsza lista\n\nAkapit rozdzielający.\n\n1. Druga lista\n")
+    wiersze = txt.splitlines()
+    assert wiersze[0] == "1. Pierwsza lista"
+    assert wiersze[-1] == "1. Druga lista"
+
+
+def test_lista_zagniezdzona_jest_oddana_wcieciem_dwoch_spacji() -> None:
     txt = _wersja_txt("- Poziom pierwszy\n    - Poziom drugi\n")
     assert txt.splitlines() == ["- Poziom pierwszy", "  - Poziom drugi"]
+
+
+def test_trzeci_poziom_listy_ma_wciecie_czterech_spacji() -> None:
+    zrodlo = "- Poziom pierwszy\n    - Poziom drugi\n        - Poziom trzeci\n"
+    assert _wersja_txt(zrodlo).splitlines() == [
+        "- Poziom pierwszy",
+        "  - Poziom drugi",
+        "    - Poziom trzeci",
+    ]
+
+
+def test_lista_numerowana_zagniezdzona_w_wypunktowanej_zachowuje_oba_zapisy() -> None:
+    zrodlo = "- Punkt nadrzędny\n    1. Pierwszy podpunkt\n    2. Drugi podpunkt\n"
+    assert _wersja_txt(zrodlo).splitlines() == [
+        "- Punkt nadrzędny",
+        "  1. Pierwszy podpunkt",
+        "  2. Drugi podpunkt",
+    ]
 
 
 def test_tabela_jest_rozpisana_nazwa_dwukropek_wartosc() -> None:

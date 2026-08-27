@@ -69,6 +69,14 @@ identyfikator wynika z kanonicznej postaci adresu, a nie z treści.
   podręcznej.
 - `gnb/ingestion/youtube.py` — pobieranie napisów dwiema wzajemnie zapasowymi
   warstwami oraz metadanych filmu, wraz z zapisem wyniku do pamięci podręcznej.
+
+Wzajemna zastępowalność warstw dotyczy wyłącznie samych napisów. Metadanych
+filmu, czyli tytułu, kanału, długości i daty publikacji, nie udostępnia
+`youtube-transcript-api`, więc pochodzą one zawsze z `yt-dlp`. Oznacza to, że
+`yt-dlp` nie jest warstwą zapasową, tylko zależnością twardą dla pełnej obsługi
+serwisu YouTube i nie da się go po prostu wyłączyć. Bez niego film nadal dostanie
+transkrypcję, ale bez tytułu, kanału i długości, a więc i bez sensownej nazwy
+pliku wynikowego.
 - `gnb/ingestion/robots.py` — odczyt pliku `robots.txt` i decyzja o zgodzie na
   pobranie adresu, zgodnie z RFC 9309: 2xx oznacza reguły, 4xx zgodę, a 5xx
   i błąd sieci zakaz po wyczerpaniu ponowień.
@@ -154,7 +162,15 @@ w tym pominięcie zakazane przez `robots.txt`, błąd 404, zasób innego typu,
 wznowienie bez ponownego pobrania oraz oszczędność pobrania dzięki pamięci
 podręcznej.
 
-Żaden test nie korzysta z sieci. Pobieranie jest sprawdzane na sztucznym
+Testy są zbierane w trybie importu `importlib`, ustawionym w `pyproject.toml`.
+Dzięki temu pliki testowe o tej samej nazwie mogą leżeć w różnych katalogach,
+na przykład `tests/core/test_youtube.py` obok `tests/ingestion/test_youtube.py`.
+W domyślnym trybie takie pliki zderzają się przy zbieraniu testów.
+
+Testy kanaryjne w `tests/test_youtube_kanaryjny.py` są jedynymi, które sięgają do
+prawdziwego serwisu. Mają marker `siec`, są domyślnie wyłączone i sprawdzają
+wyłącznie to, czy każda z dwóch warstw pobierania nadal się przebija. Poza nimi
+żaden test nie korzysta z sieci. Pobieranie jest sprawdzane na sztucznym
 transporcie `httpx.MockTransport`, a odstępy i ponowienia na podstawionym
 usypiaczu, więc testy są deterministyczne i nie czekają naprawdę. Ewentualne
 testy sieciowe mają dostać marker `siec`, domyślnie wyłączony.

@@ -92,14 +92,19 @@ python -m gnb.cli przetworz --projekt NAZWA --plik SCIEZKA --tekst TRESC --tekst
 python -m gnb.cli przetworz --lista-url SCIEZKA --sprawdz-liste
 python -m gnb.cli pamiec
 python -m gnb.cli pamiec --wyczysc
-pytest -q
-pytest -q -m "not siec and not wolne"
-ruff check .
-ruff format .
-mypy gnb
+python -m pytest -q
+python -m pytest -q -m "not siec and not wolne"
+python -m pytest -m siec
+python -m ruff check .
+python -m ruff format .
+python -m mypy gnb
 ```
 
 Koniec bloku komend uruchamiania i testów.
+
+Narzędzia deweloperskie uruchamiaj przez `python -m`, a nie przez ich własne pliki wykonywalne z katalogu `Scripts`. Nie jest to ozdobnik i nie skracaj tego zapisu. Pliki takie jak `pytest.exe` nie są programami, tylko nakładkami generowanymi lokalnie przez `pip` w momencie instalacji. Nie mają podpisu cyfrowego ani reputacji w chmurze Microsoftu, ponieważ powstają na jednym komputerze, więc kontrola aplikacji Windows potrafi je zablokować. Zdarzyło się to w tym projekcie dwa razy: przy bibliotece DLL wymaganej przez nowszą wersję mypy oraz przy `pytest.exe`, którego nakładka została przepisana podczas instalacji zależności etapu trzeciego. Wywołanie `python -m` uruchamia podpisany `python.exe` i ładuje narzędzie jako moduł, więc kod wykonuje się identycznie.
+
+Nie jest to obchodzenie zabezpieczenia w rozumieniu sekcji trzeciej. Ta zasada dotyczy paywalli, logowania i zabezpieczeń treści, a nie sposobu uruchamiania własnego narzędzia deweloperskiego.
 
 Zasady dotyczące komend:
 
@@ -108,7 +113,8 @@ Zasady dotyczące komend:
 3. Zanim cokolwiek zostanie pobrane, polecenie `przetworz` wypisuje podsumowanie listy adresów: liczbę wykrytych, poprawnych, duplikatów oraz odrzuconych wraz z powodem odrzucenia. Opcja `--sprawdz-liste` kończy pracę zaraz po tym podsumowaniu, bez pobierania. Kod wyjścia jest wtedy zerowy także wtedy, gdy część wpisów jest błędna, bo wykrycie błędnych wpisów jest zamierzonym wynikiem sprawdzenia. Kod niezerowy oznacza wyłącznie to, że pliku listy nie dało się odczytać.
 4. `python -m gnb.cli pamiec` pokazuje ścieżkę wspólnej pamięci podręcznej pobranych stron, informację o jej włączeniu, maksymalny wiek wpisu oraz liczbę zapamiętanych zasobów. Opcja `--wyczysc` usuwa całą jej zawartość. Pamięć podręczna jest wspólna dla wszystkich projektów i leży w katalogu danych aplikacji, obok pliku konfiguracji.
 5. Testy domyślnie nie korzystają z sieci. Testy sieciowe oznaczaj markerem `siec`, testy długotrwałe markerem `wolne`. Oba są domyślnie wyłączone.
-6. Brak opcjonalnego narzędzia zewnętrznego nie może wywalić aplikacji. Ma skutkować czytelnym komunikatem i wyłączeniem konkretnej ścieżki przetwarzania.
+6. Testy kanaryjne z markerem `siec`, uruchamiane poleceniem `python -m pytest -m siec`, sprawdzają wyłącznie to, czy warstwy pobierania nadal przebijają się do serwisu. Uruchamiaj je po każdej aktualizacji `youtube-transcript-api` albo `yt-dlp` oraz wtedy, gdy pobieranie napisów zaczyna zawodzić bez zmian w naszym kodzie. Nie sprawdzają one treści napisów, bo autor filmu może ją poprawić, a test czerwieniłby się bez powodu. Przy braku dostępu do sieci pomijają się z czytelnym komunikatem zamiast kończyć błędem.
+7. Brak opcjonalnego narzędzia zewnętrznego nie może wywalić aplikacji. Ma skutkować czytelnym komunikatem i wyłączeniem konkretnej ścieżki przetwarzania.
 
 ## 6. Struktura repozytorium
 
@@ -444,7 +450,7 @@ Kolejność jest wiążąca.
 
 1. Na początku etapu utwórz gałąź funkcjonalną z aktualnego `main`, o nazwie w postaci `etap-NN-krotki-opis`, na przykład `etap-01-pipeline-tekstowy`. Nie pracuj bezpośrednio na `main`.
 2. W trakcie etapu rób małe, tematyczne commity z wiadomościami po polsku w trybie rozkazującym.
-3. Przed wysłaniem uruchom komplet kontroli: `ruff check .`, `ruff format --check .`, `mypy gnb` oraz `pytest -q -m "not siec and not wolne"`. Wszystkie muszą przejść.
+3. Przed wysłaniem uruchom komplet kontroli: `python -m ruff check .`, `python -m ruff format --check .`, `python -m mypy gnb` oraz `python -m pytest -q -m "not siec and not wolne"`. Wszystkie muszą przejść. Postać `python -m` jest obowiązkowa z powodu opisanego w sekcji piątej.
 4. Jeżeli którakolwiek kontrola nie przechodzi, nie wysyłaj niczego. Napraw problem i powtórz krok trzeci. Wysłanie kodu z czerwonymi testami jest złamaniem tej procedury.
 5. Sprawdź, czy do commitów nie trafiło nic, co nie powinno być publiczne: sekrety, tokeny, bezwzględne ścieżki z nazwą konta użytkownika, prywatne materiały źródłowe, katalog wyników.
 6. Wyślij gałąź poleceniem `git push -u origin nazwa-galezi`.
@@ -477,6 +483,12 @@ Te rozwiązania zostały rozważone i odrzucone. Zapis istnieje po to, żeby nie
 
 1. ODRZUCONE: przeglądarka bezgłowa, czyli Playwright albo Selenium, do stron wymagających JavaScriptu. Powody w kolejności ważności. Po pierwsze, Chromium to kilkaset megabajtów plików wykonywalnych i bibliotek natywnych, a kontrola aplikacji Windows na komputerze deweloperskim zablokowała już pojedynczą bibliotekę DLL wymaganą przez nowszą wersję mypy, więc ryzyko zablokowania całej przeglądarki jest realne, a diagnoza takiego problemu przy pracy z czytnikiem ekranu jest kosztowna. Po drugie, strony niedające się odczytać bez wykonania skryptów to mały ułamek materiałów, a istnieje dla nich obejście: zapisanie strony z przeglądarki do pliku i podanie jej jako pliku lokalnego. Po trzecie, uruchamianie przeglądarki dla każdego adresu byłoby wielokrotnie droższe niż żądanie HTTP. Warunek rewizji: gdyby projekt miał kiedyś działać na serwerze z Linuksem, gdzie kontrola aplikacji nie obowiązuje, obsługa taka może wrócić wyłącznie jako moduł opcjonalny, którego brak nie zatrzymuje aplikacji, na tej samej zasadzie co moduł globalnego skrótu z sekcji dwunastej.
 2. ODRZUCONE: frameworki crawlerowe, czyli Crawlee for Python oraz Scrapy razem ze `scrapy-playwright`. Powody. Po pierwsze, te narzędzia rozwiązują zadanie, którego ten projekt nie ma: odkrywanie nowych adresów przez podążanie za odnośnikami, kolejkowanie tysięcy żądań i zarządzanie wieloma sesjami. Aplikacja dostaje od użytkownika gotową listę adresów, a limit notatnika wynosi sto źródeł na planie Plus, więc skala rzędu tysiąca artykułów, dla której te frameworki są projektowane, tutaj nie występuje. Po drugie, mechanizmy, dla których zwykle się je dobiera, czyli ponowienia, rosnący odstęp, ograniczanie częstotliwości na domenę, wykrywanie duplikatów i kolejkowanie, są już zaimplementowane w `gnb/ingestion` i pokryte testami. Po trzecie, Scrapy stoi na Twisted, a nasz klient na asyncio, więc jego dołożenie oznaczałoby konflikt pętli zdarzeń i przepisanie działającego kodu. Warunek rewizji: gdyby projekt kiedyś miał sam odkrywać adresy, na przykład z mapy witryny albo kanału RSS, wtedy warto wrócić do tej oceny, ale nadal osobno rozważyć, czy nie wystarczy prosty moduł czytający `sitemap.xml`.
+
+## 18e. Zagadnienia otwarte
+
+Sprawy zauważone w trakcie pracy, świadomie odłożone, żeby nie ruszać ich przy okazji innej zmiany. Każda pozycja ma objaw, przyczynę i propozycję do rozważenia.
+
+1. Nazwa katalogu projektu przy pojedynczym źródle sieciowym. Objaw: dla jednego filmu katalog nazywa się `https_www_youtube_com_watch_v_ig9ce55wbty`, mimo że tytuł filmu jest znany i został poprawnie użyty w nazwie pliku wynikowego. Przyczyna: nazwa projektu powstaje przed pobraniem źródła, więc w tym momencie tytuł nie jest jeszcze znany, a nazwa jest generowana z adresu. Propozycja do rozważenia: przy pojedynczym źródle wyznaczać nazwę projektu po pobraniu, a przed utworzeniem katalogu. Zmiana nazwy katalogu już po utworzeniu odpada, bo oznaczałaby przenoszenie katalogu w trakcie pracy, co koliduje z checkpointem i wznawianiem. Decyzja przy etapie czwartym A. Zamiana liter na małe dotyczy wyłącznie nazwy katalogu i nie sięga identyfikatora filmu, więc danych to nie psuje.
 
 ## 19. Kryterium ukończenia funkcji
 

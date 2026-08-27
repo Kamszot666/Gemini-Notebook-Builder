@@ -69,6 +69,7 @@ NAZWA_PLIKU_CACHE = "cache.sqlite3"
 DOMYSLNE_JEZYKI_NAPISOW: tuple[str, ...] = ("pl", "en")
 DOMYSLNE_NAPISY_AUTOMATYCZNE = True
 DOMYSLNE_NAPISY_TLUMACZONE = False
+DOMYSLNY_AWARYJNY_DOWOLNY_JEZYK = True
 DOMYSLNE_ZNACZNIKI_CZASU = False
 
 NAZWA_KATALOGU_APLIKACJI_WINDOWS = "Gemini Notebook Builder"
@@ -111,6 +112,7 @@ _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
     PREFIKS_ZMIENNYCH + "JEZYKI_NAPISOW": "jezyki_napisow",
     PREFIKS_ZMIENNYCH + "NAPISY_AUTOMATYCZNE": "napisy_automatyczne",
     PREFIKS_ZMIENNYCH + "NAPISY_TLUMACZONE": "napisy_tlumaczone",
+    PREFIKS_ZMIENNYCH + "AWARYJNY_DOWOLNY_JEZYK": "awaryjny_dowolny_jezyk",
     PREFIKS_ZMIENNYCH + "ZNACZNIKI_CZASU": "znaczniki_czasu",
 }
 _ZNANE_POLA = frozenset(_ZMIENNE_SRODOWISKOWE.values())
@@ -167,6 +169,7 @@ class Konfiguracja:
     jezyki_napisow: tuple[str, ...] = DOMYSLNE_JEZYKI_NAPISOW
     napisy_automatyczne: bool = DOMYSLNE_NAPISY_AUTOMATYCZNE
     napisy_tlumaczone: bool = DOMYSLNE_NAPISY_TLUMACZONE
+    awaryjny_dowolny_jezyk: bool = DOMYSLNY_AWARYJNY_DOWOLNY_JEZYK
     znaczniki_czasu: bool = DOMYSLNE_ZNACZNIKI_CZASU
 
 
@@ -272,6 +275,9 @@ def wczytaj_konfiguracje(
         ),
         napisy_tlumaczone=_jako_prawda_falsz(
             scalone, "napisy_tlumaczone", domyslna.napisy_tlumaczone
+        ),
+        awaryjny_dowolny_jezyk=_jako_prawda_falsz(
+            scalone, "awaryjny_dowolny_jezyk", domyslna.awaryjny_dowolny_jezyk
         ),
         znaczniki_czasu=_jako_prawda_falsz(scalone, "znaczniki_czasu", domyslna.znaczniki_czasu),
     )

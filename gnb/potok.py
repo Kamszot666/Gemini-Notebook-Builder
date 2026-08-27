@@ -65,6 +65,7 @@ from gnb.ingestion.youtube import (
     WynikYouTube,
     do_json,
     klucz_pamieci_podrecznej,
+    opis_typu_napisow,
     z_json,
 )
 from gnb.logging_pl.dziennik import (
@@ -72,6 +73,8 @@ from gnb.logging_pl.dziennik import (
     NAZWA_LOGU_WAZNEGO,
     ZDARZENIE_CHECKPOINT_ZAPISANY,
     ZDARZENIE_MANIFEST_ZAPISANY,
+    ZDARZENIE_NAPISY_INNY_JEZYK,
+    ZDARZENIE_NAPISY_WYBRANE,
     ZDARZENIE_PLIK_WYNIKOWY_ZAPISANY,
     ZDARZENIE_PROJEKT_UTWORZONY,
     ZDARZENIE_PROJEKT_WZNOWIONY,
@@ -351,6 +354,7 @@ class _Wykonanie:
 
         surowe = do_json(wynik)
         self._zachowaj_oryginal(pozycja, zrodlo, dokument.tekst, surowe)
+        self._odnotuj_napisy(wynik)
         self._loguj(
             logging.INFO,
             identyfikator,
@@ -363,6 +367,28 @@ class _Wykonanie:
             tekst_txt=None,
             stan_pobrania=None,
             metadane=dict(dokument.metadane),
+        )
+
+    def _odnotuj_napisy(self, wynik: WynikYouTube) -> None:
+        """Zapisuje w logu ważnym, jakie napisy wybrano dla filmu.
+
+        Wpis powstaje zawsze, bo język i rodzaj napisów są informacją o jakości
+        materiału, a użytkownik nie powinien musieć zaglądać do manifestu, żeby
+        się ich dowiedzieć. Sięgnięcie po język spoza listy preferencji dostaje
+        dodatkowy wiersz ostrzeżenia, żeby podmiana języka nie była cicha.
+        """
+        opis_typu = opis_typu_napisow(wynik.napisy.typ)
+        self._dziennik_wazny.zapisz(
+            f"{ZDARZENIE_NAPISY_WYBRANE}: język {wynik.napisy.jezyk}, {opis_typu}"
+        )
+        if not wynik.napisy.awaryjny_jezyk:
+            return
+
+        oczekiwane = ", ".join(self._konfiguracja.jezyki_napisow) or "brak"
+        opis_filmu = wynik.metadane.tytul or wynik.adres_kanoniczny
+        self._dziennik_wazny.zapisz(
+            f"{ZDARZENIE_NAPISY_INNY_JEZYK}: {opis_filmu}, oczekiwano "
+            f"{oczekiwane}, pobrano {wynik.napisy.jezyk}"
         )
 
     def _przygotuj_tresc(
@@ -823,6 +849,7 @@ def _preferencje_napisow(konfiguracja: Konfiguracja) -> PreferencjeNapisow:
         jezyki=konfiguracja.jezyki_napisow,
         dopuszczaj_automatyczne=konfiguracja.napisy_automatyczne,
         dopuszczaj_tlumaczone=konfiguracja.napisy_tlumaczone,
+        awaryjny_dowolny_jezyk=konfiguracja.awaryjny_dowolny_jezyk,
     )
 
 

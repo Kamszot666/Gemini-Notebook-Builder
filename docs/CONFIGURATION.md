@@ -130,7 +130,14 @@ Nazwa pola w pliku TOML, odpowiadająca zmienna środowiskowa oraz znaczenie:
    przetłumaczonych automatycznie na pierwszy język z listy preferencji, gdy nie
    ma żadnych innych. Domyślnie wyłączona, ponieważ tłumaczenie maszynowe napisów
    automatycznych zwielokrotnia liczbę pomyłek.
-4. `znaczniki_czasu`, zmienna `GNB_ZNACZNIKI_CZASU`. Dopisywanie znacznika czasu
+4. `awaryjny_dowolny_jezyk`, zmienna `GNB_AWARYJNY_DOWOLNY_JEZYK`. Zgoda na
+   pobranie napisów w dowolnym dostępnym języku, gdy nie ma ich w żadnym
+   z preferowanych. Domyślnie włączona, ponieważ film trafił na listę źródeł
+   świadomie, a napisy w innym języku są danymi poprawnymi, tylko nie
+   w preferowanym języku. Użycie tego kroku jest odnotowywane w `log_wazne.txt`
+   oraz w manifeście, więc podmiana języka nie jest cicha. Po wyłączeniu film bez
+   napisów w preferowanych językach jest pomijany.
+5. `znaczniki_czasu`, zmienna `GNB_ZNACZNIKI_CZASU`. Dopisywanie znacznika czasu
    na początku każdego akapitu transkrypcji. Domyślnie wyłączone. Znaczniki
    ułatwiają odnalezienie fragmentu w filmie, ale przy odsłuchu czytnikiem
    ekranu przeszkadzają, dlatego nie są domyślne.
@@ -207,6 +214,7 @@ dodatkowe_parametry_sledzace = []
 jezyki_napisow = ["pl", "en"]
 napisy_automatyczne = true
 napisy_tlumaczone = false
+awaryjny_dowolny_jezyk = true
 znaczniki_czasu = false
 
 uzywaj_cache = true

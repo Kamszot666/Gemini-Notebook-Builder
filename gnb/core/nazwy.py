@@ -33,7 +33,7 @@ MAKSYMALNA_DLUGOSC_NAZWY = 100
 MAKSYMALNA_LICZBA_SLOW_W_NAZWIE = 8
 MAKSYMALNA_DLUGOSC_TRZONU_NAZWY_PLIKU = 60
 DLUGOSC_SKROTU_W_NAZWIE_PLIKU = 8
-ROZDZIELACZ_SKROTU_W_NAZWIE_PLIKU = "__"
+ROZDZIELACZ_SKROTU_W_NAZWIE_PLIKU = "_"
 _NAZWA_AWARYJNA_PROJEKTU = "projekt"
 _NAZWA_AWARYJNA_ZRODLA = "zrodlo"
 
@@ -103,20 +103,25 @@ def bezpieczna_nazwa_pliku(propozycja: str, *, nazwa_awaryjna: str) -> str:
 def nazwa_pliku_wynikowego(tytul: str | None, identyfikator_zrodla: str) -> str:
     """Buduje nazwę pliku wynikowego bez rozszerzenia: trzon tytułu i skrót źródła.
 
-    Nazwa ma postać trzonu tytułu, dwóch podkreśleń i pierwszych ośmiu znaków
-    skrótu z identyfikatora źródła, na przykład
-    ``baza_wiedzy_dla_asystenta_ai__3f2a9c1d``. Skrót zapewnia unikalność nazwy
-    bez licznika kolizji i pozwala powiązać plik z wpisem w manifeście bez
-    otwierania go. Nazwa jest stabilna między uruchomieniami, bo identyfikator
-    źródła jest wyprowadzany deterministycznie z jego treści, a nie z kolejności
-    podania źródeł.
+    Nazwa ma postać trzonu tytułu, podkreślenia i pierwszych ośmiu znaków skrótu
+    z identyfikatora źródła, na przykład ``baza_wiedzy_dla_asystenta_ai_3f2a9c1d``.
+    Skrót zapewnia unikalność nazwy bez licznika kolizji i pozwala powiązać plik
+    z wpisem w manifeście bez otwierania go. Nazwa jest stabilna między
+    uruchomieniami, bo identyfikator źródła jest wyprowadzany deterministycznie
+    z jego treści, a nie z kolejności podania źródeł.
+
+    Gotowa nazwa nie zawiera ciągów podkreśleń ani podkreśleń na brzegach.
+    Czytnik ekranu odczytuje każdy taki znak osobno, więc ich powielenie jest
+    realną uciążliwością przy przeglądaniu katalogu, a nie drobiazgiem
+    kosmetycznym.
     """
     trzon = bezpieczna_nazwa_pliku(
         _trzon_z_tytulu(tytul or ""),
         nazwa_awaryjna=_czlon_typu_z_identyfikatora(identyfikator_zrodla),
     )
     skrot = _skrot_z_identyfikatora(identyfikator_zrodla)
-    return f"{trzon}{ROZDZIELACZ_SKROTU_W_NAZWIE_PLIKU}{skrot}"
+    nazwa = f"{trzon}{ROZDZIELACZ_SKROTU_W_NAZWIE_PLIKU}{skrot}"
+    return _WIELE_PODKRESLEN.sub("_", nazwa).strip("_")
 
 
 def _trzon_z_tytulu(tytul: str) -> str:

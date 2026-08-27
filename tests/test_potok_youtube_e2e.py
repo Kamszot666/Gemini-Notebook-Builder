@@ -220,7 +220,7 @@ def test_tytul_filmu_staje_sie_nazwa_pliku(tmp_path: Path) -> None:
 
     katalog = wynik.katalog_projektu / "pliki_wynikowe"  # type: ignore[attr-defined]
     (plik,) = katalog.iterdir()
-    assert plik.name.startswith("jak_przygotować_bazę_wiedzy__")
+    assert plik.name.startswith("jak_przygotować_bazę_wiedzy_")
 
 
 def test_oryginal_napisow_jest_zachowany_jako_plik_json(tmp_path: Path) -> None:
@@ -397,3 +397,64 @@ def test_napisy_automatyczne_sa_odnotowane_w_manifescie(tmp_path: Path) -> None:
     (zrodlo,) = manifest["zrodla"]
     assert zrodlo["metadane"]["typ_napisow"] == TYP_NAPISOW_AUTOMATYCZNE
     assert zrodlo["metadane"]["jezyk_napisow"] == "en"
+
+
+def _log_wazny(wynik: object) -> str:
+    """Zwraca treść pliku log_wazne.txt projektu."""
+    katalog = wynik.katalog_projektu  # type: ignore[attr-defined]
+    return (katalog / "logi" / "log_wazne.txt").read_text(encoding="utf-8")
+
+
+def test_log_wazny_mowi_jakie_napisy_pobrano(tmp_path: Path) -> None:
+    wynik = _uruchom(tmp_path, nazwa="Test logu napisów")
+
+    log = _log_wazny(wynik)
+    assert "Napisy wybrane: język pl, tworzone ręcznie" in log
+
+
+def test_log_wazny_odnotowuje_napisy_automatyczne(tmp_path: Path) -> None:
+    napisy = Napisy(jezyk="en", typ=TYP_NAPISOW_AUTOMATYCZNE, segmenty=_SEGMENTY, metoda="atrapa")
+    pobieracz, _ = _pobieracz(napisy=napisy)
+
+    wynik = _uruchom(tmp_path, pobieracz=pobieracz, nazwa="Test logu automatycznych")
+
+    assert "Napisy wybrane: język en, automatyczne" in _log_wazny(wynik)
+
+
+def test_napisy_w_innym_jezyku_sa_uzyte_i_zglaszane_w_logu(tmp_path: Path) -> None:
+    napisy = Napisy(
+        jezyk="de",
+        typ=TYP_NAPISOW_RECZNE,
+        segmenty=_SEGMENTY,
+        metoda="atrapa",
+        awaryjny_jezyk=True,
+    )
+    pobieracz, _ = _pobieracz(napisy=napisy)
+
+    wynik = _uruchom(tmp_path, pobieracz=pobieracz, nazwa="Test języka awaryjnego")
+
+    assert wynik.liczba_przetworzonych == 1  # type: ignore[attr-defined]
+
+    log = _log_wazny(wynik)
+    assert "Napisy wybrane: język de, tworzone ręcznie" in log
+    assert "Uwaga, napisy w innym języku niż preferowane" in log
+    assert "oczekiwano pl, en, pobrano de" in log
+    assert "Jak przygotować bazę wiedzy" in log
+
+    manifest = json.loads(
+        wynik.sciezka_manifestu.read_text(encoding="utf-8")  # type: ignore[attr-defined]
+    )
+    (zrodlo,) = manifest["zrodla"]
+    assert zrodlo["metadane"]["jezyk_napisow"] == "de"
+    assert zrodlo["metadane"]["jezyk_awaryjny"] == "tak"
+
+
+def test_napisy_w_preferowanym_jezyku_nie_daja_ostrzezenia(tmp_path: Path) -> None:
+    wynik = _uruchom(tmp_path, nazwa="Test bez ostrzeżenia")
+
+    assert "Uwaga, napisy w innym języku" not in _log_wazny(wynik)
+    manifest = json.loads(
+        wynik.sciezka_manifestu.read_text(encoding="utf-8")  # type: ignore[attr-defined]
+    )
+    (zrodlo,) = manifest["zrodla"]
+    assert "jezyk_awaryjny" not in zrodlo["metadane"]

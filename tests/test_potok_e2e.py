@@ -63,8 +63,8 @@ def test_potok_przetwarza_rozne_zrodla_i_stosuje_regule_md(tmp_path: Path) -> No
     pliki = {p.name for p in katalog_wynikow.iterdir()}
 
     trzon = "jak_przygotować_bazę_wiedzy_dla_asystenta_ai"
-    assert len(list(katalog_wynikow.glob(f"{trzon}__*.txt"))) == 1
-    assert len(list(katalog_wynikow.glob(f"{trzon}__*.md"))) == 1
+    assert len(list(katalog_wynikow.glob(f"{trzon}_*.txt"))) == 1
+    assert len(list(katalog_wynikow.glob(f"{trzon}_*.md"))) == 1
 
     liczba_md = sum(1 for nazwa in pliki if nazwa.endswith(".md"))
     assert liczba_md == 1, "wersję MD dostaje tylko dokument_strukturalny.md"
@@ -78,8 +78,8 @@ def test_wersja_txt_zrodla_markdown_nie_jest_kopia_wersji_md(tmp_path: Path) -> 
 
     katalog_wynikow = wynik.katalog_projektu / "pliki_wynikowe"
     trzon = "jak_przygotować_bazę_wiedzy_dla_asystenta_ai"
-    (plik_txt,) = katalog_wynikow.glob(f"{trzon}__*.txt")
-    (plik_md,) = katalog_wynikow.glob(f"{trzon}__*.md")
+    (plik_txt,) = katalog_wynikow.glob(f"{trzon}_*.txt")
+    (plik_md,) = katalog_wynikow.glob(f"{trzon}_*.md")
 
     tresc_txt = plik_txt.read_text(encoding="utf-8")
     tresc_md = plik_md.read_text(encoding="utf-8")
@@ -103,7 +103,7 @@ def test_nazwa_pliku_wynikowego_wiaze_plik_ze_zrodlem_z_manifestu(tmp_path: Path
         skrot = zrodlo["identyfikator"].rsplit("-", 1)[-1][:8]
         for sciezka_wzgledna in zrodlo["pliki_wynikowe"]:
             nazwa = Path(sciezka_wzgledna).stem
-            assert nazwa.endswith(f"__{skrot}"), nazwa
+            assert nazwa.endswith(f"_{skrot}"), nazwa
             assert " " not in nazwa
             assert nazwa == nazwa.lower()
 
@@ -114,7 +114,7 @@ def test_plik_windows1250_jest_odczytany_bez_utraty_polskich_znakow(tmp_path: Pa
         _pozycje(), konfiguracja, nazwa_projektu="Test kodowania", zegar=_zegar_krokowy()
     )
 
-    pasujace = list((wynik.katalog_projektu / "pliki_wynikowe").glob("zażółć_gęślą_jaźń__*.txt"))
+    pasujace = list((wynik.katalog_projektu / "pliki_wynikowe").glob("zażółć_gęślą_jaźń_*.txt"))
     assert len(pasujace) == 1, "polskie znaki mają zostać zachowane także w nazwie pliku"
     assert "Zażółć gęślą jaźń." in pasujace[0].read_text(encoding="utf-8")
 

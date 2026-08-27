@@ -20,7 +20,9 @@ from gnb.ingestion.youtube import (
     SegmentNapisow,
     WynikYouTube,
     _segmenty_z_formatu,
+    _wybierz_sciezke_transcript_api,
     _wybierz_sciezke_yt_dlp,
+    _wyjatek_z_komunikatu_yt_dlp,
 )
 
 _IDENTYFIKATOR = "iG9CE55wbtY"
@@ -229,8 +231,9 @@ def test_wybor_sciezki_yt_dlp_preferuje_reczne_przed_automatycznymi() -> None:
     wybor = _wybierz_sciezke_yt_dlp(informacje, PreferencjeNapisow(jezyki=("pl", "en")))
 
     assert wybor is not None
-    jezyk, typ, _ = wybor
+    jezyk, typ, _, awaryjny = wybor
     assert (jezyk, typ) == ("en", TYP_NAPISOW_RECZNE)
+    assert awaryjny is False
 
 
 def test_wybor_sciezki_yt_dlp_bierze_automatyczne_gdy_brak_recznych() -> None:
@@ -242,8 +245,9 @@ def test_wybor_sciezki_yt_dlp_bierze_automatyczne_gdy_brak_recznych() -> None:
     wybor = _wybierz_sciezke_yt_dlp(informacje, PreferencjeNapisow(jezyki=("pl",)))
 
     assert wybor is not None
-    jezyk, typ, _ = wybor
+    jezyk, typ, _, awaryjny = wybor
     assert (jezyk, typ) == ("pl", TYP_NAPISOW_AUTOMATYCZNE)
+    assert awaryjny is False
 
 
 def test_wylaczone_napisy_automatyczne_daja_brak_wyboru() -> None:
@@ -252,7 +256,9 @@ def test_wylaczone_napisy_automatyczne_daja_brak_wyboru() -> None:
         "automatic_captions": {"pl": [{"ext": "json3", "url": "https://przyklad.pl/pl.json3"}]},
     }
 
-    preferencje = PreferencjeNapisow(jezyki=("pl",), dopuszczaj_automatyczne=False)
+    preferencje = PreferencjeNapisow(
+        jezyki=("pl",), dopuszczaj_automatyczne=False, awaryjny_dowolny_jezyk=False
+    )
     assert _wybierz_sciezke_yt_dlp(informacje, preferencje) is None
 
 
@@ -287,3 +293,151 @@ def test_kolejnosc_jezykow_decyduje_o_wyborze() -> None:
 
     wybor = _wybierz_sciezke_yt_dlp(informacje, PreferencjeNapisow(jezyki=("en", "pl")))
     assert wybor is not None and wybor[0] == "en"
+
+
+class _TranskrypcjaAtrapa:
+    """Atrapa ścieżki napisów zwracanej przez youtube-transcript-api."""
+
+    def __init__(self, language_code: str, is_generated: bool, is_translatable: bool = False):
+        self.language_code = language_code
+        self.is_generated = is_generated
+        self.is_translatable = is_translatable
+
+    def translate(self, jezyk: str) -> _TranskrypcjaAtrapa:
+        return _TranskrypcjaAtrapa(jezyk, self.is_generated)
+
+
+def test_krok_awaryjny_siega_po_dowolny_jezyk_gdy_brak_preferowanych() -> None:
+    dostepne = [
+        _TranskrypcjaAtrapa("de", is_generated=False),
+        _TranskrypcjaAtrapa("fr", is_generated=False),
+    ]
+
+    wybor = _wybierz_sciezke_transcript_api(dostepne, PreferencjeNapisow(jezyki=("pl", "en")))
+
+    assert wybor is not None
+    transkrypcja, typ, awaryjny = wybor
+    assert (transkrypcja.language_code, typ, awaryjny) == ("de", TYP_NAPISOW_RECZNE, True)
+
+
+def test_krok_awaryjny_daje_sie_wylaczyc() -> None:
+    dostepne = [_TranskrypcjaAtrapa("de", is_generated=False)]
+    preferencje = PreferencjeNapisow(jezyki=("pl",), awaryjny_dowolny_jezyk=False)
+
+    assert _wybierz_sciezke_transcript_api(dostepne, preferencje) is None
+
+
+def test_krok_awaryjny_woli_reczne_przed_automatycznymi() -> None:
+    dostepne = [
+        _TranskrypcjaAtrapa("aa", is_generated=True),
+        _TranskrypcjaAtrapa("zz", is_generated=False),
+    ]
+
+    wybor = _wybierz_sciezke_transcript_api(dostepne, PreferencjeNapisow(jezyki=("pl",)))
+
+    assert wybor is not None
+    transkrypcja, typ, awaryjny = wybor
+    assert (transkrypcja.language_code, typ, awaryjny) == ("zz", TYP_NAPISOW_RECZNE, True)
+
+
+def test_krok_awaryjny_jest_deterministyczny_niezaleznie_od_kolejnosci_biblioteki() -> None:
+    pierwsza = [
+        _TranskrypcjaAtrapa("fr", is_generated=False),
+        _TranskrypcjaAtrapa("de", is_generated=False),
+    ]
+    druga = list(reversed(pierwsza))
+    preferencje = PreferencjeNapisow(jezyki=("pl",))
+
+    wybor_pierwszy = _wybierz_sciezke_transcript_api(pierwsza, preferencje)
+    wybor_drugi = _wybierz_sciezke_transcript_api(druga, preferencje)
+
+    assert wybor_pierwszy is not None and wybor_drugi is not None
+    assert wybor_pierwszy[0].language_code == wybor_drugi[0].language_code == "de"
+
+
+def test_krok_awaryjny_pomija_automatyczne_gdy_sa_wylaczone() -> None:
+    dostepne = [_TranskrypcjaAtrapa("de", is_generated=True)]
+    preferencje = PreferencjeNapisow(jezyki=("pl",), dopuszczaj_automatyczne=False)
+
+    assert _wybierz_sciezke_transcript_api(dostepne, preferencje) is None
+
+
+def test_krok_awaryjny_w_warstwie_yt_dlp_woli_reczne_i_najnizszy_kod_jezyka() -> None:
+    informacje = {
+        "subtitles": {
+            "fr": [{"ext": "json3", "url": "https://przyklad.pl/fr.json3"}],
+            "de": [{"ext": "json3", "url": "https://przyklad.pl/de.json3"}],
+        },
+        "automatic_captions": {"aa": [{"ext": "json3", "url": "https://przyklad.pl/aa.json3"}]},
+    }
+
+    wybor = _wybierz_sciezke_yt_dlp(informacje, PreferencjeNapisow(jezyki=("pl", "en")))
+
+    assert wybor is not None
+    jezyk, typ, _, awaryjny = wybor
+    assert (jezyk, typ, awaryjny) == ("de", TYP_NAPISOW_RECZNE, True)
+
+
+def test_krok_awaryjny_w_warstwie_yt_dlp_bierze_automatyczne_gdy_brak_recznych() -> None:
+    informacje = {
+        "subtitles": {},
+        "automatic_captions": {"de": [{"ext": "json3", "url": "https://przyklad.pl/de.json3"}]},
+    }
+
+    wybor = _wybierz_sciezke_yt_dlp(informacje, PreferencjeNapisow(jezyki=("pl",)))
+
+    assert wybor is not None
+    jezyk, typ, _, awaryjny = wybor
+    assert (jezyk, typ, awaryjny) == ("de", TYP_NAPISOW_AUTOMATYCZNE, True)
+
+
+def test_komunikat_o_filmie_prywatnym_jest_bledem_trwalym() -> None:
+    wynik = _wyjatek_z_komunikatu_yt_dlp("ERROR: Private video. Sign in if granted access.", "xyz")
+
+    assert isinstance(wynik, BladTrwaly)
+    assert "prywatny" in wynik.komunikat
+
+
+def test_komunikat_o_filmie_usunietym_jest_bledem_trwalym() -> None:
+    wynik = _wyjatek_z_komunikatu_yt_dlp("ERROR: Video unavailable", "xyz")
+
+    assert isinstance(wynik, BladTrwaly)
+    assert "niedostępny" in wynik.komunikat
+
+
+def test_komunikat_o_ograniczeniu_wiekowym_jest_bledem_trwalym() -> None:
+    wynik = _wyjatek_z_komunikatu_yt_dlp("ERROR: Sign in to confirm your age", "xyz")
+
+    assert isinstance(wynik, BladTrwaly)
+    assert "wiekowe" in wynik.komunikat
+
+
+def test_blad_sieci_nie_jest_mylony_z_ograniczeniem_wiekowym() -> None:
+    """Regresja: dopasowanie po fragmencie słowa uznawało błąd sieci za ograniczenie wieku.
+
+    Komunikat o nieudanym pobraniu strony zawiera słowo „page”, w którym mieści
+    się fragment „age”, oraz osobno słowo „confirm”.
+    """
+    komunikat = (
+        "ERROR: unable to download API page: Sign in to confirm you are not a bot "
+        "(HTTPSConnectionPool: Max retries exceeded)"
+    )
+
+    wynik = _wyjatek_z_komunikatu_yt_dlp(komunikat, "xyz")
+
+    assert isinstance(wynik, BladPrzejsciowy)
+
+
+def test_komunikat_o_blokadzie_regionalnej_jest_bledem_trwalym() -> None:
+    wynik = _wyjatek_z_komunikatu_yt_dlp(
+        "ERROR: The uploader has not made this video available in your country", "xyz"
+    )
+
+    assert isinstance(wynik, BladTrwaly)
+    assert "regionie" in wynik.komunikat
+
+
+def test_nierozpoznany_komunikat_jest_bledem_przejsciowym() -> None:
+    wynik = _wyjatek_z_komunikatu_yt_dlp("ERROR: coś zupełnie nowego", "xyz")
+
+    assert isinstance(wynik, BladPrzejsciowy)

@@ -59,7 +59,11 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-addopts = "-ra"
+# Tryb importu „importlib” pozwala mieć pliki testowe o tej samej nazwie
+# w różnych katalogach, na przykład tests/core/test_youtube.py oraz
+# tests/ingestion/test_youtube.py. W domyślnym trybie „prepend” takie pliki
+# zderzają się przy zbieraniu testów, dopóki katalogi testów nie są pakietami.
+addopts = "-ra --import-mode=importlib"
 testpaths = ["tests"]
 markers = [
     "siec: test wymaga dostępu do sieci, domyślnie pominięty",

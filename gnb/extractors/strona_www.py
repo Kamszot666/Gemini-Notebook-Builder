@@ -16,9 +16,18 @@ poziom średni, więc dobrze zbudowany artykuł może dostać wersję MD. Wynik
 z mechanizmu zapasowego dostaje poziom niski, więc wersja MD nie powstanie,
 ponieważ struktura nie została rozpoznana, tylko odzyskana z resztek.
 
-Odnośniki wewnątrzwierszowe nie są zachowywane. Adres w środku zdania czyni
-tekst trudnym do odsłuchania czytnikiem ekranu, a pochodzenie całego artykułu
-i tak jest zapisane w manifeście oraz w nagłówku pliku wynikowego.
+Adresy odnośników nie zostają w środku zdań, ponieważ czynią tekst trudnym do
+odsłuchania czytnikiem ekranu. Nie są jednak gubione: w miejscu odnośnika zostaje
+sam jego tekst, a na końcu dokumentu powstaje sekcja „Odnośniki wymienione
+w artykule” z ponumerowaną listą w postaci tekst odnośnika, myślnik, adres.
+Adres zacytowany przez autora bywa jedynym wskazaniem badania albo danych,
+a identyfikowalność źródeł jest czwartym priorytetem z sekcji czwartej CLAUDE.md,
+wyżej niż wygoda formatowania.
+
+Zbierane są wyłącznie odnośniki o pełnym adresie z rodziny HTTP. Odsyłacze
+w obrębie tej samej strony, adresy poczty i wywołania skryptów są pomijane,
+podobnie jak adresy względne, których bez znajomości adresu bazowego nie da się
+rozwinąć do postaci użytecznej dla czytelnika.
 
 Strony budowane w całości przez skrypty są rozpoznawane i nazywane wprost.
 Bez przeglądarki nie da się z nich pobrać treści, a przeglądarka bezgłowa
@@ -32,6 +41,8 @@ wykonuje i nie interpretuje poleceń, które mogłyby się w niej znaleźć.
 
 from __future__ import annotations
 
+import re
+from dataclasses import dataclass
 from typing import Any
 
 import trafilatura
@@ -67,20 +78,40 @@ MINIMALNA_DLUGOSC_DOKUMENTU_ZE_SKRYPTAMI = 2000
 MAKSYMALNA_DLUGOSC_TRESCI_SZCZATKOWEJ = 200
 _ZNACZNIK_SKRYPTU = "<script"
 
+NAGLOWEK_SEKCJI_ODNOSNIKOW = "Odnośniki wymienione w artykule"
+_BIALE_ZNAKI = re.compile(r"\s+")
+_SCHEMATY_ODNOSNIKOW = ("http://", "https://")
+
 KOMUNIKAT_WYMAGA_SKRYPTOW = (
     "Strona buduje treść dopiero w przeglądarce, przez wykonanie skryptów, więc "
     "nie da się z niej pobrać tekstu bez przeglądarki. Źródło zostało pominięte. "
-    "Obejście działające już teraz: otwórz stronę w przeglądarce, zaznacz i skopiuj "
-    "treść artykułu, a następnie wklej ją jako tekst. Zapisanie strony do pliku HTML "
-    "będzie można wykorzystać po etapie czwartym, który doda obsługę plików HTML."
+    "Obejście: otwórz stronę w przeglądarce i zapisz ją do pliku, a następnie podaj "
+    "ten plik jako źródło lokalne. Pliki HTML będą obsługiwane od etapu czwartego, "
+    "a już teraz działa skopiowanie treści artykułu i wklejenie jej jako tekst."
 )
 
 
+@dataclass(frozen=True, slots=True)
+class Odnosnik:
+    """Jeden odnośnik zewnętrzny wymieniony w artykule."""
+
+    tekst: str
+    adres: str
+
+
 class EkstraktorStronyWww:
-    """Ekstraktor treści artykułu ze strony internetowej."""
+    """Ekstraktor treści artykułu ze strony internetowej.
+
+    Argument `zachowuj_odnosniki` odpowiada ustawieniu konfiguracji o tej samej
+    nazwie. Wyłączenie go usuwa końcową sekcję z wykazem odnośników, a sama treść
+    artykułu pozostaje bez zmian.
+    """
 
     metoda = "strona_www"
     tekst_zawiera_znaczniki = True
+
+    def __init__(self, zachowuj_odnosniki: bool = True) -> None:
+        self._zachowuj_odnosniki = zachowuj_odnosniki
 
     def obsluguje(self, typ_zrodla: TypZrodla, format_zrodla: str) -> bool:
         return typ_zrodla is TypZrodla.STRONA_WWW and format_zrodla in FORMATY_STRON
@@ -109,9 +140,12 @@ class EkstraktorStronyWww:
             return None
 
         metadane = _metadane_z_drzewa(drzewo)
+        odnosniki = _odnosniki_z_drzewa(drzewo)
+        if odnosniki:
+            metadane["liczba_odnosnikow"] = str(len(odnosniki))
         return DokumentWyekstrahowany(
             identyfikator_zrodla=identyfikator_zrodla,
-            tekst=_markdown_z_blokow(bloki),
+            tekst=self._z_sekcja_odnosnikow(_markdown_z_blokow(bloki), odnosniki),
             poziom_pewnosci_struktury=PoziomPewnosciStruktury.SREDNI,
             metoda_ekstrakcji=METODA_GLOWNA,
             tytul=metadane.get("tytul"),
@@ -119,16 +153,23 @@ class EkstraktorStronyWww:
             metadane=metadane,
         )
 
+    def _z_sekcja_odnosnikow(self, tekst: str, odnosniki: list[Odnosnik]) -> str:
+        """Dopisuje na końcu tekstu wykaz odnośników, o ile jest co wypisać."""
+        if not self._zachowuj_odnosniki or not odnosniki:
+            return tekst
+        sekcja = _sekcja_odnosnikow(odnosniki)
+        return f"{tekst}\n\n{sekcja}" if tekst else sekcja
+
     def _zapasowy(self, identyfikator_zrodla: str, tekst: str) -> DokumentWyekstrahowany:
         """Odzyskuje akapity przez lxml, gdy trafilatura nic nie zwróciła."""
-        akapity, tytul = _akapity_zapasowe(tekst)
+        akapity, tytul, odnosniki = _akapity_zapasowe(tekst)
         ostrzezenie = (
             "Treść odzyskana mechanizmem zapasowym, bez rozpoznania struktury dokumentu. "
             "Wersja Markdown nie powstanie."
         )
         return DokumentWyekstrahowany(
             identyfikator_zrodla=identyfikator_zrodla,
-            tekst="\n\n".join(akapity),
+            tekst=self._z_sekcja_odnosnikow("\n\n".join(akapity), odnosniki),
             poziom_pewnosci_struktury=PoziomPewnosciStruktury.NISKI,
             metoda_ekstrakcji=METODA_ZAPASOWA,
             tytul=tytul,
@@ -157,7 +198,7 @@ def _wywolaj_trafilature(tekst: str) -> str | None:
         output_format="xml",
         include_tables=True,
         include_formatting=True,
-        include_links=False,
+        include_links=True,
         include_comments=False,
         with_metadata=True,
         favor_precision=True,
@@ -217,7 +258,7 @@ def _bloki_z_drzewa(drzewo: etree._Element) -> list[BlokTresci]:
                     BlokTresci(rodzaj=RodzajBloku.TABELA, poziom=0, tresc="\n".join(wiersze))
                 )
         elif znacznik == "quote":
-            tresc = _tekst_elementu(element)
+            tresc = _tekst_cytatu(element)
             if tresc:
                 bloki.append(BlokTresci(rodzaj=RodzajBloku.CYTAT, poziom=0, tresc=tresc))
         elif znacznik == "code":
@@ -225,6 +266,57 @@ def _bloki_z_drzewa(drzewo: etree._Element) -> list[BlokTresci]:
             if tresc:
                 bloki.append(BlokTresci(rodzaj=RodzajBloku.KOD, poziom=0, tresc=tresc))
     return bloki
+
+
+def _tekst_cytatu(element: etree._Element) -> str:
+    """Zwraca treść cytatu blokowego, zachowując podział na akapity.
+
+    Cytat bywa złożony z kilku akapitów. Sklejenie ich bez rozdzielenia zlałoby
+    ostatnie słowo jednego zdania z pierwszym słowem następnego, dlatego akapity
+    są rozdzielane znakiem nowej linii.
+    """
+    akapity = [_tekst_elementu(akapit) for akapit in element.findall("p")]
+    akapity = [akapit for akapit in akapity if akapit]
+    if akapity:
+        return "\n".join(akapity)
+    return _tekst_elementu(element)
+
+
+def _odnosniki_z_drzewa(drzewo: etree._Element) -> list[Odnosnik]:
+    """Zbiera odnośniki zewnętrzne w kolejności wystąpienia, bez powtórzeń.
+
+    Powtórzony adres pojawia się na liście raz, z tekstem pierwszego wystąpienia,
+    ponieważ wykaz ma wskazywać źródła, a nie liczyć odwołania.
+    """
+    zebrane: dict[str, Odnosnik] = {}
+    for element in drzewo.iter("ref"):
+        adres = str(element.get("target") or "").strip()
+        if not _czy_odnosnik_zewnetrzny(adres) or adres in zebrane:
+            continue
+        tekst = _tekst_elementu(element).strip()
+        zebrane[adres] = Odnosnik(tekst=tekst or adres, adres=adres)
+    return list(zebrane.values())
+
+
+def _czy_odnosnik_zewnetrzny(adres: str) -> bool:
+    """Rozstrzyga, czy adres nadaje się do wykazu odnośników.
+
+    Do wykazu trafiają wyłącznie pełne adresy HTTP i HTTPS. Odsyłacz w obrębie
+    tej samej strony, adres poczty, wywołanie skryptu oraz adres względny są
+    pomijane, bo albo nie wskazują źródła, albo bez adresu bazowego nie dają się
+    rozwinąć do postaci użytecznej dla czytelnika.
+    """
+    return adres.lower().startswith(_SCHEMATY_ODNOSNIKOW)
+
+
+def _sekcja_odnosnikow(odnosniki: list[Odnosnik]) -> str:
+    """Buduje końcową sekcję z ponumerowanym wykazem odnośników."""
+    wiersze = [f"## {NAGLOWEK_SEKCJI_ODNOSNIKOW}", ""]
+    wiersze.extend(
+        f"{numer}. {odnosnik.tekst} — {odnosnik.adres}"
+        for numer, odnosnik in enumerate(odnosniki, start=1)
+    )
+    return "\n".join(wiersze)
 
 
 def _markdown_z_blokow(bloki: list[BlokTresci]) -> str:
@@ -305,6 +397,12 @@ def _poziom_listy(rend: str | None) -> int:
 def _tekst_elementu(element: etree._Element) -> str:
     """Zwraca tekst elementu razem z tekstem elementów zagnieżdżonych.
 
+    Fragmenty są sklejane dokładnie tak, jak występują w dokumencie, a dopiero
+    potem ciągi białych znaków są skracane do pojedynczej spacji. Sklejanie przez
+    dostawianie spacji psułoby interpunkcję wokół elementów wewnątrzwierszowych:
+    zdanie „jak pokazuje badanie, dane” zamieniałoby się w „jak pokazuje badanie
+    , dane”, gdy słowo „badanie” jest odnośnikiem.
+
     Iterator lxml potrafi zwrócić także bajty, na przykład dla komentarzy, więc
     każdy fragment jest sprowadzany do napisu przed sklejeniem.
     """
@@ -312,15 +410,15 @@ def _tekst_elementu(element: etree._Element) -> str:
         fragment.decode("utf-8", "replace") if isinstance(fragment, bytes) else str(fragment)
         for fragment in element.itertext()
     )
-    return " ".join(fragment.strip() for fragment in fragmenty if fragment.strip())
+    return _BIALE_ZNAKI.sub(" ", "".join(fragmenty)).strip()
 
 
-def _akapity_zapasowe(tekst: str) -> tuple[list[str], str | None]:
-    """Odzyskuje akapity i tytuł ze strony, gdy zawiodła ekstrakcja główna."""
+def _akapity_zapasowe(tekst: str) -> tuple[list[str], str | None, list[Odnosnik]]:
+    """Odzyskuje akapity, tytuł i odnośniki ze strony, gdy zawiodła ekstrakcja główna."""
     try:
         drzewo = html.fromstring(tekst)
     except (etree.ParserError, etree.XMLSyntaxError, ValueError):
-        return [], None
+        return [], None, []
 
     for znacznik in _ZNACZNIKI_NIETRESCIOWE:
         for element in drzewo.findall(f".//{znacznik}"):
@@ -336,4 +434,13 @@ def _akapity_zapasowe(tekst: str) -> tuple[list[str], str | None]:
         tresc = _tekst_elementu(element)
         if len(tresc) >= _MINIMALNA_DLUGOSC_AKAPITU_ZAPASOWEGO:
             akapity.append(tresc)
-    return akapity, tytul or None
+
+    zebrane: dict[str, Odnosnik] = {}
+    for element in drzewo.iter("a"):
+        adres = str(element.get("href") or "").strip()
+        if not _czy_odnosnik_zewnetrzny(adres) or adres in zebrane:
+            continue
+        tresc_odnosnika = _tekst_elementu(element).strip()
+        zebrane[adres] = Odnosnik(tekst=tresc_odnosnika or adres, adres=adres)
+
+    return akapity, tytul or None, list(zebrane.values())

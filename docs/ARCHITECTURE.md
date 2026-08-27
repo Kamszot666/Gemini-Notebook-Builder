@@ -75,6 +75,8 @@ identyfikator wynika z kanonicznej postaci adresu, a nie z treści.
   wysoki poziom pewności, rozpoznane bloki strukturalne.
 - `gnb/extractors/strona_www.py` — treść artykułu przez `trafilatura`, średni
   poziom pewności, z mechanizmem zapasowym na `lxml` o niskim poziomie pewności.
+  Zbiera też odnośniki zewnętrzne i dopisuje na końcu treści ich ponumerowany
+  wykaz, a w samym zdaniu zostawia sam tekst odnośnika.
 
 ## Pakiet gnb.normalization
 

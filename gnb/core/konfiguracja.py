@@ -29,6 +29,7 @@ DOMYSLNY_BEZPIECZNY_LIMIT_SLOW = 480_000
 DOMYSLNY_BEZPIECZNY_LIMIT_MB = 190
 DOMYSLNE_FORMATY_WYNIKOWE: tuple[str, ...] = ("txt", "md")
 DOMYSLNE_ZACHOWYWANIE_ORYGINALOW = True
+DOMYSLNE_ZACHOWYWANIE_ODNOSNIKOW = True
 
 # Ustawienia pobierania stron internetowych. Nazwa klienta jest rozpoznawalna
 # i wskazuje projekt, zgodnie z wymaganiem sekcji piętnastej CLAUDE.md.
@@ -79,6 +80,7 @@ _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
     PREFIKS_ZMIENNYCH + "BEZPIECZNY_LIMIT_MB": "bezpieczny_limit_mb",
     PREFIKS_ZMIENNYCH + "FORMATY_WYNIKOWE": "formaty_wynikowe",
     PREFIKS_ZMIENNYCH + "ZACHOWUJ_ORYGINALY": "zachowuj_oryginaly",
+    PREFIKS_ZMIENNYCH + "ZACHOWUJ_ODNOSNIKI": "zachowuj_odnosniki",
     PREFIKS_ZMIENNYCH + "NAZWA_KLIENTA": "nazwa_klienta",
     PREFIKS_ZMIENNYCH + "LIMIT_CZASU_SEKUNDY": "limit_czasu_sekundy",
     PREFIKS_ZMIENNYCH + "LICZBA_PONOWIEN": "liczba_ponowien",
@@ -129,6 +131,7 @@ class Konfiguracja:
     bezpieczny_limit_mb: int = DOMYSLNY_BEZPIECZNY_LIMIT_MB
     formaty_wynikowe: tuple[str, ...] = DOMYSLNE_FORMATY_WYNIKOWE
     zachowuj_oryginaly: bool = DOMYSLNE_ZACHOWYWANIE_ORYGINALOW
+    zachowuj_odnosniki: bool = DOMYSLNE_ZACHOWYWANIE_ODNOSNIKOW
     nazwa_klienta: str = DOMYSLNA_NAZWA_KLIENTA
     limit_czasu_sekundy: float = DOMYSLNY_LIMIT_CZASU_SEKUNDY
     liczba_ponowien: int = DOMYSLNA_LICZBA_PONOWIEN
@@ -196,6 +199,9 @@ def wczytaj_konfiguracje(
         formaty_wynikowe=_jako_formaty(scalone, domyslna.formaty_wynikowe),
         zachowuj_oryginaly=_jako_prawda_falsz(
             scalone, "zachowuj_oryginaly", domyslna.zachowuj_oryginaly
+        ),
+        zachowuj_odnosniki=_jako_prawda_falsz(
+            scalone, "zachowuj_odnosniki", domyslna.zachowuj_odnosniki
         ),
         nazwa_klienta=_jako_napis(scalone, "nazwa_klienta", domyslna.nazwa_klienta),
         limit_czasu_sekundy=_jako_liczba_rzeczywista(

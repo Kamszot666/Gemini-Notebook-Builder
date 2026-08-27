@@ -43,6 +43,7 @@ def _ustawienia(**nadpisania: object) -> UstawieniaPobierania:
         "odstep_miedzy_zadaniami_sekundy": 0.5,
         "polaczenia_na_domene": 3,
         "respektuj_robots": False,
+        "wyjatek_robots_dla_zrodel_jawnych": False,
         "maksymalny_rozmiar_pobrania_mb": 1,
         "uzywaj_cache": False,
         "maksymalny_wiek_cache_dni": 30,
@@ -522,3 +523,76 @@ def test_blad_certyfikatu_jest_bledem_trwalym_i_nie_jest_ponawiany() -> None:
         asyncio.run(_pobierz(_ustawienia(liczba_ponowien=3), _transport(obsluga)))
 
     assert len(proby) == 1
+
+
+def _obsluga_z_zakazem(zapytania: list[str]) -> Callable[[httpx.Request], httpx.Response]:
+    """Serwer zabraniający wszystkiego w robots.txt, zliczający zapytania o reguły."""
+
+    def obsluga(zadanie: httpx.Request) -> httpx.Response:
+        if zadanie.url.path == "/robots.txt":
+            zapytania.append(str(zadanie.url))
+            return httpx.Response(200, text="User-agent: *\nDisallow: /")
+        return httpx.Response(200, content=_STRONA, headers={"content-type": "text/html"})
+
+    return obsluga
+
+
+def test_adres_wskazany_jawnie_nie_podlega_kontroli_robots() -> None:
+    zapytania: list[str] = []
+
+    async def uruchom() -> object:
+        zegar = _Zegar()
+        async with Pobieracz(
+            _ustawienia(respektuj_robots=True, wyjatek_robots_dla_zrodel_jawnych=True),
+            transport=_transport(_obsluga_z_zakazem(zapytania)),
+            usypiacz=zegar.uspij,
+            zegar_monotoniczny=zegar,
+            zegar_utc=lambda: _MOMENT,
+        ) as pobieracz:
+            return await pobieracz.pobierz(Zadanie(_ADRES, _ADRES, wskazany_jawnie=True))
+
+    wynik = asyncio.run(uruchom())
+
+    assert isinstance(wynik, OdpowiedzPobrania)
+    assert zapytania == [], "plik reguł nie powinien być w ogóle pobierany"
+
+
+def test_adres_znaleziony_przez_program_podlega_kontroli_robots() -> None:
+    zapytania: list[str] = []
+
+    async def uruchom() -> object:
+        zegar = _Zegar()
+        async with Pobieracz(
+            _ustawienia(respektuj_robots=True, wyjatek_robots_dla_zrodel_jawnych=True),
+            transport=_transport(_obsluga_z_zakazem(zapytania)),
+            usypiacz=zegar.uspij,
+            zegar_monotoniczny=zegar,
+            zegar_utc=lambda: _MOMENT,
+        ) as pobieracz:
+            return await pobieracz.pobierz(Zadanie(_ADRES, _ADRES, wskazany_jawnie=False))
+
+    wynik = asyncio.run(uruchom())
+
+    assert isinstance(wynik, PominietePobranie)
+    assert "robots.txt" in wynik.powod
+    assert len(zapytania) == 1
+
+
+def test_wylaczony_wyjatek_przywraca_kontrole_dla_adresu_jawnego() -> None:
+    zapytania: list[str] = []
+
+    async def uruchom() -> object:
+        zegar = _Zegar()
+        async with Pobieracz(
+            _ustawienia(respektuj_robots=True, wyjatek_robots_dla_zrodel_jawnych=False),
+            transport=_transport(_obsluga_z_zakazem(zapytania)),
+            usypiacz=zegar.uspij,
+            zegar_monotoniczny=zegar,
+            zegar_utc=lambda: _MOMENT,
+        ) as pobieracz:
+            return await pobieracz.pobierz(Zadanie(_ADRES, _ADRES, wskazany_jawnie=True))
+
+    wynik = asyncio.run(uruchom())
+
+    assert isinstance(wynik, PominietePobranie)
+    assert len(zapytania) == 1

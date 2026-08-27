@@ -577,7 +577,10 @@ async def _pobierz_asynchronicznie(
     pamiec = _otworz_pamiec_podreczna(konfiguracja, log)
     try:
         async with Pobieracz(
-            UstawieniaPobierania.z_konfiguracji(konfiguracja), pamiec=pamiec, transport=transport
+            UstawieniaPobierania.z_konfiguracji(konfiguracja),
+            pamiec=pamiec,
+            transport=transport,
+            log=log,
         ) as pobieracz:
             return list(await pobieracz.pobierz_wiele(zadania))
     finally:

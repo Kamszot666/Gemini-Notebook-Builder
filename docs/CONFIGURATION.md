@@ -87,10 +87,20 @@ Nazwa pola w pliku TOML, odpowiadająca zmienna środowiskowa oraz znaczenie:
    równoczesnych połączeń do jednej domeny. Domyślnie 3.
 8. `respektuj_robots`, zmienna `GNB_RESPEKTUJ_ROBOTS`. Respektowanie pliku
    `robots.txt`. Domyślnie włączone.
-9. `maksymalny_rozmiar_pobrania_mb`, zmienna
+9. `wyjatek_robots_dla_zrodel_jawnych`, zmienna
+   `GNB_WYJATEK_ROBOTS_DLA_ZRODEL_JAWNYCH`. Wyłącza kontrolę pliku `robots.txt`
+   dla adresów, które podałeś wprost na liście źródeł. Domyślnie włączony.
+   Adres, który program znalazłby sam w treści innego źródła, podlega kontroli
+   bez wyjątku. Każde zastosowanie wyjątku jest zapisywane w
+   `log_szczegolowy.txt` razem z adresem, żeby dało się je sprawdzić. Ustawienie
+   wartości fałsz przywraca kontrolę dla wszystkich adresów; filmy z YouTube są
+   wtedy pomijane, ponieważ serwis zabrania w swoim pliku reguł pobierania
+   ścieżki `/watch`. Uzasadnienie i warunki zakresu opisuje sekcja piętnasta
+   `CLAUDE.md`.
+10. `maksymalny_rozmiar_pobrania_mb`, zmienna
    `GNB_MAKSYMALNY_ROZMIAR_POBRANIA_MB`. Bezpieczny limit rozmiaru pobieranego
    zasobu. Domyślnie 20. Zasób większy jest pomijany, a nie obcinany.
-10. `sciezka_certyfikatow`, zmienna `GNB_SCIEZKA_CERTYFIKATOW`. Ścieżka pliku PEM
+11. `sciezka_certyfikatow`, zmienna `GNB_SCIEZKA_CERTYFIKATOW`. Ścieżka pliku PEM
     z certyfikatami zaufanych wystawców. Domyślnie pusta, co oznacza magazyn
     wbudowany w bibliotekę HTTP. Ustaw to pole, jeżeli ruch przechodzi przez
     firmowy serwer pośredniczący albo przez program antywirusowy podstawiający
@@ -102,7 +112,7 @@ Nazwa pola w pliku TOML, odpowiadająca zmienna środowiskowa oraz znaczenie:
     a nie cichym pominięciem ustawienia. Nie ma i nie będzie ustawienia
     wyłączającego weryfikację certyfikatu, ponieważ byłoby to obejście
     zabezpieczenia, zakazane w sekcji trzeciej `CLAUDE.md`.
-11. `dodatkowe_parametry_sledzace`, zmienna `GNB_DODATKOWE_PARAMETRY_SLEDZACE`.
+12. `dodatkowe_parametry_sledzace`, zmienna `GNB_DODATKOWE_PARAMETRY_SLEDZACE`.
     Dodatkowe nazwy parametrów adresu uznawanych za śledzące, usuwane obok listy
     wbudowanej. W pliku TOML lista, w zmiennej środowiskowej wartości rozdzielone
     przecinkiem.
@@ -171,6 +181,7 @@ maksymalny_odstep_sekundy = 30
 odstep_miedzy_zadaniami_sekundy = 1
 polaczenia_na_domene = 3
 respektuj_robots = true
+wyjatek_robots_dla_zrodel_jawnych = true
 maksymalny_rozmiar_pobrania_mb = 20
 sciezka_certyfikatow = ""
 dodatkowe_parametry_sledzace = []

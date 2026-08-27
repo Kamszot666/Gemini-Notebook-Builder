@@ -43,6 +43,11 @@ DOMYSLNY_MAKSYMALNY_ODSTEP_SEKUNDY = 30.0
 DOMYSLNY_ODSTEP_MIEDZY_ZADANIAMI_SEKUNDY = 1.0
 DOMYSLNE_POLACZENIA_NA_DOMENE = 3
 DOMYSLNE_RESPEKTOWANIE_ROBOTS = True
+
+# Wyjątek od kontroli robots.txt dla adresów wskazanych wprost przez użytkownika.
+# Uzasadnienie i cztery warunki zakresu opisuje sekcja piętnasta CLAUDE.md,
+# podsekcja o wyjątku dla źródeł wskazanych jawnie.
+DOMYSLNY_WYJATEK_ROBOTS_DLA_ZRODEL_JAWNYCH = True
 DOMYSLNY_MAKSYMALNY_ROZMIAR_POBRANIA_MB = 20
 
 # Pusta wartość oznacza magazyn zaufanych certyfikatów wbudowany w bibliotekę
@@ -89,6 +94,7 @@ _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
     PREFIKS_ZMIENNYCH + "ODSTEP_MIEDZY_ZADANIAMI_SEKUNDY": "odstep_miedzy_zadaniami_sekundy",
     PREFIKS_ZMIENNYCH + "POLACZENIA_NA_DOMENE": "polaczenia_na_domene",
     PREFIKS_ZMIENNYCH + "RESPEKTUJ_ROBOTS": "respektuj_robots",
+    PREFIKS_ZMIENNYCH + "WYJATEK_ROBOTS_DLA_ZRODEL_JAWNYCH": "wyjatek_robots_dla_zrodel_jawnych",
     PREFIKS_ZMIENNYCH + "MAKSYMALNY_ROZMIAR_POBRANIA_MB": "maksymalny_rozmiar_pobrania_mb",
     PREFIKS_ZMIENNYCH + "SCIEZKA_CERTYFIKATOW": "sciezka_certyfikatow",
     PREFIKS_ZMIENNYCH + "UZYWAJ_CACHE": "uzywaj_cache",
@@ -140,6 +146,7 @@ class Konfiguracja:
     odstep_miedzy_zadaniami_sekundy: float = DOMYSLNY_ODSTEP_MIEDZY_ZADANIAMI_SEKUNDY
     polaczenia_na_domene: int = DOMYSLNE_POLACZENIA_NA_DOMENE
     respektuj_robots: bool = DOMYSLNE_RESPEKTOWANIE_ROBOTS
+    wyjatek_robots_dla_zrodel_jawnych: bool = DOMYSLNY_WYJATEK_ROBOTS_DLA_ZRODEL_JAWNYCH
     maksymalny_rozmiar_pobrania_mb: int = DOMYSLNY_MAKSYMALNY_ROZMIAR_POBRANIA_MB
     sciezka_certyfikatow: str = DOMYSLNA_SCIEZKA_CERTYFIKATOW
     uzywaj_cache: bool = DOMYSLNE_UZYWANIE_CACHE

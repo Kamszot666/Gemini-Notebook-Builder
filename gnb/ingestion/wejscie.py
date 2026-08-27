@@ -53,11 +53,17 @@ class PozycjaWejsciowa:
     Pole `adres_kanoniczny` jest wypełnione wyłącznie dla adresów stron. Wartość
     w `wejscie.wartosc` jest wtedy adresem wysyłanym do serwera, czyli może mieć
     inną kolejność parametrów niż postać kanoniczna.
+
+    Pole `wskazane_jawnie` mówi, czy wejście pochodzi wprost z listy podanej przez
+    użytkownika. Od tego zależy wyjątek od kontroli pliku ``robots.txt`` opisany
+    w sekcji piętnastej CLAUDE.md. Adres znaleziony kiedyś przez sam program
+    w treści innego źródła będzie miał tu wartość fałsz.
     """
 
     wejscie: WejscieSurowe
     format_zrodla: str
     adres_kanoniczny: str | None = None
+    wskazane_jawnie: bool = True
 
 
 def przyjmij_tekst(

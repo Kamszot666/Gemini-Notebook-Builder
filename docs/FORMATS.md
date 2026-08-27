@@ -77,6 +77,20 @@ Polityka jest zgodna z RFC 9309, sekcja 2.3.1, i wygląda tak:
 Wynik odczytu reguł jest zapamiętywany na czas jednego uruchomienia i dotyczy
 całej witryny, więc wiele adresów z jednego serwisu pyta o ten plik tylko raz.
 
+Od tej kontroli jest jeden wyjątek. Adres, który podałeś wprost na liście źródeł,
+nie podlega sprawdzeniu pliku `robots.txt`. Powód: protokół opisany w RFC 9309
+jest adresowany do klientów automatycznych, które same odkrywają adresy
+i przeszukują serwis, a ten program wykonuje pojedyncze, jawne polecenie
+człowieka dotyczące jednego wskazanego zasobu. Adres, który program znalazłby sam
+w treści innego źródła, podlega kontroli bez wyjątku. Każde zastosowanie wyjątku
+jest zapisywane w logu szczegółowym razem z adresem, a sam wyjątek można wyłączyć
+ustawieniem `wyjatek_robots_dla_zrodel_jawnych`. Decyduje pochodzenie adresu,
+a nie domena, więc żaden serwis nie jest traktowany szczególnie.
+
+Warunki korzystania z serwisu są zagadnieniem odrębnym od pliku `robots.txt`
+i program ich nie ocenia. Odpowiedzialność za zgodność użycia z warunkami serwisu
+spoczywa na osobie korzystającej z narzędzia.
+
 ### Strony budowane skryptami
 
 Serwisy, które bez wykonania skryptów zwracają pusty szkielet strony, są

@@ -154,6 +154,11 @@ w tym pominięcie zakazane przez `robots.txt`, błąd 404, zasób innego typu,
 wznowienie bez ponownego pobrania oraz oszczędność pobrania dzięki pamięci
 podręcznej.
 
+Testy są zbierane w trybie importu `importlib`, ustawionym w `pyproject.toml`.
+Dzięki temu pliki testowe o tej samej nazwie mogą leżeć w różnych katalogach,
+na przykład `tests/core/test_youtube.py` obok `tests/ingestion/test_youtube.py`.
+W domyślnym trybie takie pliki zderzają się przy zbieraniu testów.
+
 Żaden test nie korzysta z sieci. Pobieranie jest sprawdzane na sztucznym
 transporcie `httpx.MockTransport`, a odstępy i ponowienia na podstawionym
 usypiaczu, więc testy są deterministyczne i nie czekają naprawdę. Ewentualne

@@ -11,16 +11,22 @@ Z tego powodu włączony jest tryb WAL, ustawiony jest limit czasu oczekiwania n
 blokadę, a zajętość bazy jest zgłaszana jako `BladPrzejsciowy`, czyli sytuacja
 do ponowienia, nigdy jako awaria przetwarzania.
 
-Zawartość pamięci podręcznej jest odtwarzalna, bo zawsze można pobrać zasób
-ponownie. Dlatego niezgodna wersja schematu nie jest naprawiana migracją, tylko
-świadomie odrzucana: tabele są tworzone od nowa, a stara zawartość znika.
-Numer wersji jest zapisany w bazie, więc świadoma migracja będzie możliwa
-później, gdy zawartość zacznie być kosztowna do odtworzenia.
+Treść stron jest zapisywana w postaci skompresowanej biblioteką ``zlib``.
+Dokument HTML kurczy się kilkukrotnie, a koszt procesora jest pomijalny wobec
+czasu pobierania. Nazwa użytej metody kompresji jest zapisana przy każdym
+rekordzie, więc metodę da się później zmienić bez unieważniania całej bazy,
+a wpisy zapisane wcześniej bez kompresji nadal dają się odczytać.
+
+Numer wersji schematu jest zapisany w bazie. Znane starsze wersje są migrowane,
+czyli uzupełniane o brakujące kolumny z zachowaniem dotychczasowej zawartości.
+Wersja nieznana jest świadomie odrzucana, a tabela zakładana od nowa, ponieważ
+zawartość pamięci podręcznej zawsze da się odtworzyć, pobierając zasób ponownie.
 """
 
 from __future__ import annotations
 
 import sqlite3
+import zlib
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -29,8 +35,14 @@ from pathlib import Path
 
 from gnb.core.wyjatki import BladPrzejsciowy, BladTrwaly
 
-WERSJA_SCHEMATU = 1
+WERSJA_SCHEMATU = 2
 LIMIT_CZASU_BLOKADY_MS = 5000
+
+# Nazwy metod kompresji zapisywane przy rekordzie. Wartość „brak” mają wpisy
+# sprzed wprowadzenia kompresji oraz wpisy, których kompresja nie opłaciła się.
+KOMPRESJA_BRAK = "brak"
+KOMPRESJA_ZLIB = "zlib"
+_ZNANE_METODY_KOMPRESJI = (KOMPRESJA_BRAK, KOMPRESJA_ZLIB)
 
 _KOMUNIKAT_ZAJETEJ_BAZY = (
     "Pamięć podręczna jest w tej chwili zajęta przez inne uruchomienie aplikacji. "
@@ -79,7 +91,7 @@ class PamiecPodreczna:
         with _zamien_bledy_sqlite():
             wiersz = self._polaczenie.execute(
                 "SELECT klucz, adres_koncowy, kod_odpowiedzi, typ_zawartosci, "
-                "deklarowane_kodowanie, etag, last_modified, tresc, pobrano "
+                "deklarowane_kodowanie, etag, last_modified, tresc, pobrano, kompresja "
                 "FROM zasoby WHERE klucz = ?",
                 (klucz,),
             ).fetchone()
@@ -93,23 +105,30 @@ class PamiecPodreczna:
             deklarowane_kodowanie=wiersz[4],
             etag=wiersz[5],
             last_modified=wiersz[6],
-            tresc=wiersz[7],
+            tresc=_rozpakuj(wiersz[7], str(wiersz[9])),
             pobrano=datetime.fromisoformat(wiersz[8]),
         )
 
     def zapisz(self, wpis: WpisCache) -> None:
-        """Zapisuje zasób, nadpisując wcześniejszy wpis o tym samym kluczu."""
+        """Zapisuje zasób, nadpisując wcześniejszy wpis o tym samym kluczu.
+
+        Treść jest kompresowana, o ile kompresja faktycznie zmniejsza rozmiar.
+        Użyta metoda jest zapisywana obok treści, więc odczyt nie musi jej
+        zgadywać.
+        """
+        spakowana, metoda = _spakuj(wpis.tresc)
         with _zamien_bledy_sqlite(), self._polaczenie:
             self._polaczenie.execute(
                 "INSERT INTO zasoby (klucz, adres_koncowy, kod_odpowiedzi, typ_zawartosci, "
-                "deklarowane_kodowanie, etag, last_modified, tresc, pobrano) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "deklarowane_kodowanie, etag, last_modified, tresc, pobrano, kompresja) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT(klucz) DO UPDATE SET adres_koncowy = excluded.adres_koncowy, "
                 "kod_odpowiedzi = excluded.kod_odpowiedzi, "
                 "typ_zawartosci = excluded.typ_zawartosci, "
                 "deklarowane_kodowanie = excluded.deklarowane_kodowanie, "
                 "etag = excluded.etag, last_modified = excluded.last_modified, "
-                "tresc = excluded.tresc, pobrano = excluded.pobrano",
+                "tresc = excluded.tresc, pobrano = excluded.pobrano, "
+                "kompresja = excluded.kompresja",
                 (
                     wpis.klucz,
                     wpis.adres_koncowy,
@@ -118,8 +137,9 @@ class PamiecPodreczna:
                     wpis.deklarowane_kodowanie,
                     wpis.etag,
                     wpis.last_modified,
-                    wpis.tresc,
+                    spakowana,
                     wpis.pobrano.isoformat(),
+                    metoda,
                 ),
             )
 
@@ -164,17 +184,21 @@ class PamiecPodreczna:
         self.zamknij()
 
     def _przygotuj_schemat(self) -> None:
-        """Tworzy schemat albo odrzuca zawartość zapisaną w innej wersji schematu."""
+        """Tworzy schemat, migruje znane starsze wersje albo odrzuca wersję nieznaną."""
         with self._polaczenie:
             self._polaczenie.execute(
                 "CREATE TABLE IF NOT EXISTS wersja_schematu (numer INTEGER NOT NULL)"
             )
             wiersz = self._polaczenie.execute("SELECT numer FROM wersja_schematu").fetchone()
-            if wiersz is not None and int(wiersz[0]) != WERSJA_SCHEMATU:
-                self._polaczenie.execute("DROP TABLE IF EXISTS zasoby")
+            zapisana_wersja = int(wiersz[0]) if wiersz is not None else None
+
+            if zapisana_wersja is not None and zapisana_wersja != WERSJA_SCHEMATU:
+                if not self._migruj(zapisana_wersja):
+                    self._polaczenie.execute("DROP TABLE IF EXISTS zasoby")
                 self._polaczenie.execute("DELETE FROM wersja_schematu")
-                wiersz = None
-            if wiersz is None:
+                zapisana_wersja = None
+
+            if zapisana_wersja is None:
                 self._polaczenie.execute(
                     "INSERT INTO wersja_schematu (numer) VALUES (?)", (WERSJA_SCHEMATU,)
                 )
@@ -188,8 +212,41 @@ class PamiecPodreczna:
                 "etag TEXT, "
                 "last_modified TEXT, "
                 "tresc BLOB NOT NULL, "
-                "pobrano TEXT NOT NULL)"
+                "pobrano TEXT NOT NULL, "
+                f"kompresja TEXT NOT NULL DEFAULT '{KOMPRESJA_BRAK}')"
             )
+
+    def _migruj(self, zapisana_wersja: int) -> bool:
+        """Podnosi schemat ze znanej starszej wersji. Zwraca fałsz dla wersji nieznanej.
+
+        Migracja z wersji pierwszej dopisuje kolumnę z nazwą metody kompresji
+        i nadaje jej wartość „brak”, ponieważ wpisy z tamtej wersji trzymają
+        treść nieskompresowaną. Dzięki temu dotychczasowa zawartość pozostaje
+        czytelna i nie trzeba pobierać wszystkiego jeszcze raz.
+        """
+        if zapisana_wersja != 1:
+            return False
+        if not self._czy_tabela_istnieje("zasoby"):
+            return True
+        if "kompresja" not in self._kolumny("zasoby"):
+            self._polaczenie.execute(
+                f"ALTER TABLE zasoby ADD COLUMN kompresja TEXT NOT NULL DEFAULT '{KOMPRESJA_BRAK}'"
+            )
+        return True
+
+    def _czy_tabela_istnieje(self, nazwa: str) -> bool:
+        """Sprawdza, czy tabela o podanej nazwie istnieje w bazie."""
+        wiersz = self._polaczenie.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", (nazwa,)
+        ).fetchone()
+        return wiersz is not None
+
+    def _kolumny(self, nazwa_tabeli: str) -> set[str]:
+        """Zwraca nazwy kolumn podanej tabeli."""
+        return {
+            str(wiersz[1])
+            for wiersz in self._polaczenie.execute(f"PRAGMA table_info({nazwa_tabeli})")
+        }
 
 
 def otworz(sciezka: Path) -> PamiecPodreczna:
@@ -212,6 +269,39 @@ def wyczysc_pamiec_podreczna(sciezka: Path) -> int:
 def teraz_utc() -> datetime:
     """Zwraca bieżący moment w czasie UTC, używany do znaczników pamięci podręcznej."""
     return datetime.now(UTC)
+
+
+def _spakuj(tresc: bytes) -> tuple[bytes, str]:
+    """Kompresuje treść, o ile kompresja realnie zmniejsza jej rozmiar.
+
+    Krótkie odpowiedzi i materiały już skompresowane potrafią po spakowaniu
+    zajmować więcej miejsca, więc w takim wypadku zapisywana jest postać
+    pierwotna, oznaczona jako niekompresowana.
+    """
+    spakowana = zlib.compress(tresc)
+    if len(spakowana) < len(tresc):
+        return spakowana, KOMPRESJA_ZLIB
+    return tresc, KOMPRESJA_BRAK
+
+
+def _rozpakuj(tresc: bytes, metoda: str) -> bytes:
+    """Odtwarza treść zapisaną wskazaną metodą kompresji.
+
+    Nieznana nazwa metody kończy się błędem trwałym z czytelnym komunikatem.
+    Oznacza bowiem wpis zapisany przez nowszą wersję aplikacji, którego nie
+    wolno po cichu potraktować jako treści surowej.
+    """
+    if metoda == KOMPRESJA_BRAK:
+        return tresc
+    if metoda == KOMPRESJA_ZLIB:
+        try:
+            return zlib.decompress(tresc)
+        except zlib.error as blad:
+            raise BladTrwaly(f"Nie udało się rozpakować wpisu pamięci podręcznej: {blad}") from blad
+    raise BladTrwaly(
+        f"Wpis pamięci podręcznej zapisano nieznaną metodą kompresji „{metoda}”. "
+        f"Znane metody to: {', '.join(_ZNANE_METODY_KOMPRESJI)}."
+    )
 
 
 @contextmanager

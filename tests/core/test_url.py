@@ -7,6 +7,7 @@ import pytest
 from gnb.core.url import (
     adres_kanoniczny,
     adres_pobierania,
+    bez_danych_logowania,
     czy_parametr_sledzacy,
     czy_wyglada_na_adres,
     waliduj_adres,
@@ -111,3 +112,24 @@ def test_rozpoznawanie_parametrow_sledzacych(nazwa: str, oczekiwane: bool) -> No
 
 def test_pusty_zestaw_parametrow_nie_zostawia_znaku_zapytania() -> None:
     assert adres_kanoniczny("https://przyklad.pl/a?utm_source=x") == "https://przyklad.pl/a"
+
+
+def test_postac_kanoniczna_nie_zawiera_danych_logowania() -> None:
+    kanoniczny = adres_kanoniczny("https://uzytkownik:tajne@przyklad.pl/a")
+    assert kanoniczny == "https://przyklad.pl/a"
+    assert "tajne" not in kanoniczny
+
+
+def test_adres_pobierania_zachowuje_dane_logowania() -> None:
+    assert (
+        adres_pobierania("https://uzytkownik:tajne@przyklad.pl/a")
+        == "https://uzytkownik:tajne@przyklad.pl/a"
+    )
+
+
+def test_usuwanie_danych_logowania_z_dowolnego_adresu() -> None:
+    assert (
+        bez_danych_logowania("https://uzytkownik:tajne@przyklad.pl/a?b=1")
+        == "https://przyklad.pl/a?b=1"
+    )
+    assert bez_danych_logowania("https://przyklad.pl/a") == "https://przyklad.pl/a"

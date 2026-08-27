@@ -7,13 +7,16 @@ o dokumentację skierowaną do osoby korzystającej z gotowej aplikacji.
 
 ## Stan dokumentacji
 
-Po etapie pierwszym istnieją trzy dokumenty:
+Po etapie drugim istnieją trzy dokumenty:
 
-1. `ARCHITECTURE.md` — podział na moduły i przebieg potoku przetwarzania.
+1. `ARCHITECTURE.md` — podział na moduły i przebieg potoku przetwarzania, wraz
+   z osobną fazą pobierania stron.
 2. `CONFIGURATION.md` — pola konfiguracji obsługiwane w tej chwili, lokalizacja
-   pliku `konfiguracja.toml` i zmienne środowiskowe z prefiksem `GNB_`.
-3. `FORMATS.md` — obsługiwane wejścia, kodowanie tekstu oraz reguła wyboru
-   między plikiem TXT a plikiem MD.
+   pliku `konfiguracja.toml`, zmienne środowiskowe z prefiksem `GNB_` oraz
+   ustawienia pobierania i wspólnej pamięci podręcznej.
+3. `FORMATS.md` — obsługiwane wejścia, w tym adresy stron internetowych,
+   kodowanie tekstu, obsługa błędów sieciowych oraz reguła wyboru między plikiem
+   TXT a plikiem MD.
 
 Pozostałe dokumenty wymienione w sekcji dziewiętnastej `CLAUDE.md` — `INSTALL.md`,
 `ACCESSIBILITY.md`, `TROUBLESHOOTING.md` — powstaną w kolejnych etapach, razem

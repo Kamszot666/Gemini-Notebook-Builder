@@ -45,6 +45,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from gnb.core.konfiguracja import Konfiguracja
+from gnb.core.url import bez_danych_logowania
 from gnb.core.wyjatki import BladGnb, BladPrzejsciowy, BladTrwaly
 from gnb.ingestion.robots import KontrolerRobots
 from gnb.persistence.cache import PamiecPodreczna, WpisCache, teraz_utc
@@ -337,7 +338,7 @@ class Pobieracz:
         """Buduje wynik pobrania i zapisuje go w pamięci podręcznej."""
         wynik = OdpowiedzPobrania(
             adres_zadany=zadanie.adres_pobierania,
-            adres_koncowy=str(odpowiedz.url),
+            adres_koncowy=bez_danych_logowania(str(odpowiedz.url)),
             kod_odpowiedzi=odpowiedz.status_code,
             tresc=tresc,
             typ_zawartosci=_typ_zawartosci(odpowiedz),

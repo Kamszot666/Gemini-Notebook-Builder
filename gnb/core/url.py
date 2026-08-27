@@ -20,6 +20,12 @@ dwa różne źródła w jedno.
 
 Przedrostek ``www`` nie jest usuwany z nazwy hosta, ponieważ istnieją serwisy,
 w których wersja z nim i bez niego to dwie różne witryny.
+
+Nazwa użytkownika i hasło wpisane w adresie występują wyłącznie w postaci
+pobierania. Postać kanoniczna jest ich pozbawiona, ponieważ trafia do manifestu,
+checkpointu i nazw plików wynikowych, a sekcja trzecia CLAUDE.md zabrania
+zapisywania tam danych logowania. Ten sam zasób z danymi logowania i bez nich ma
+przy tym tę samą tożsamość, co jest zachowaniem poprawnym.
 """
 
 from __future__ import annotations
@@ -127,7 +133,7 @@ def adres_kanoniczny(adres: str, dodatkowe_parametry_sledzace: Iterable[str] = (
     return urlunsplit(
         (
             czesci.scheme.lower(),
-            _autorytet(czesci.scheme, czesci.netloc),
+            _autorytet(czesci.scheme, czesci.netloc, z_danymi_logowania=False),
             _sciezka(czesci.path),
             urlencode(sorted(parametry)),
             _fragment(czesci.fragment),
@@ -149,10 +155,31 @@ def adres_pobierania(adres: str, dodatkowe_parametry_sledzace: Iterable[str] = (
     return urlunsplit(
         (
             czesci.scheme.lower(),
-            _autorytet(czesci.scheme, czesci.netloc),
+            _autorytet(czesci.scheme, czesci.netloc, z_danymi_logowania=True),
             _sciezka(czesci.path),
             urlencode(parametry),
             _fragment(czesci.fragment),
+        )
+    )
+
+
+def bez_danych_logowania(adres: str) -> str:
+    """Zwraca adres pozbawiony nazwy użytkownika i hasła.
+
+    Używane wszędzie tam, gdzie adres jest zapisywany albo pokazywany: manifest,
+    checkpoint, logi i komunikaty. Dane logowania zostają wyłącznie w adresie
+    wysyłanym do serwera.
+    """
+    czesci = urlsplit(adres)
+    if "@" not in czesci.netloc:
+        return adres
+    return urlunsplit(
+        (
+            czesci.scheme,
+            _autorytet(czesci.scheme, czesci.netloc, z_danymi_logowania=False),
+            czesci.path,
+            czesci.query,
+            czesci.fragment,
         )
     )
 
@@ -179,8 +206,12 @@ def _bez_parametrow_sledzacych(
     ]
 
 
-def _autorytet(schemat: str, netloc: str) -> str:
-    """Buduje część autorytetu adresu: host małymi literami, bez domyślnego portu."""
+def _autorytet(schemat: str, netloc: str, *, z_danymi_logowania: bool) -> str:
+    """Buduje część autorytetu adresu: host małymi literami, bez domyślnego portu.
+
+    Dane logowania są zachowywane tylko wtedy, gdy adres ma trafić do serwera.
+    W postaci zapisywanej i pokazywanej użytkownikowi są pomijane.
+    """
     czesci = urlsplit(f"{schemat}://{netloc}")
     host = (czesci.hostname or "").lower()
     port = czesci.port
@@ -188,7 +219,7 @@ def _autorytet(schemat: str, netloc: str) -> str:
         port = None
 
     dane_logowania = ""
-    if czesci.username:
+    if z_danymi_logowania and czesci.username:
         dane_logowania = czesci.username
         if czesci.password:
             dane_logowania = f"{dane_logowania}:{czesci.password}"

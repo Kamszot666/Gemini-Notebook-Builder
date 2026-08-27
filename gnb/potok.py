@@ -47,6 +47,7 @@ from gnb.logging_pl.dziennik import (
     ZDARZENIE_ZRODLO_PRZYJETE,
     DziennikSzczegolowy,
     DziennikWazny,
+    teraz_lokalny,
 )
 from gnb.normalization.normalizacja import zbuduj_dokument_znormalizowany
 from gnb.output import regula_md
@@ -91,9 +92,16 @@ def przetworz_projekt(
     nazwa_projektu: str | None = None,
     wlasny_katalog_projektu: Path | None = None,
     zegar: Callable[[], datetime] = _teraz_utc,
+    zegar_lokalny: Callable[[], datetime] = teraz_lokalny,
     rejestr: RejestrEkstraktorow | None = None,
 ) -> WynikPrzetwarzania:
-    """Przetwarza listę wejść w ramach jednego projektu i zwraca podsumowanie."""
+    """Przetwarza listę wejść w ramach jednego projektu i zwraca podsumowanie.
+
+    Argument `zegar` podaje czas UTC używany w checkpoincie, manifeście i logu
+    szczegółowym. Argument `zegar_lokalny` podaje czas lokalny systemu, którym
+    prowadzony jest przeznaczony dla użytkownika plik ``log_wazne.txt``. Oba
+    zegary można podmienić w testach.
+    """
     rejestr = rejestr if rejestr is not None else domyslny_rejestr()
     czas_startu = zegar()
 
@@ -107,7 +115,7 @@ def przetworz_projekt(
     wznowiono = istniejacy_checkpoint is not None
     checkpoint = istniejacy_checkpoint or _nowy_checkpoint(uklad, konfiguracja, zegar())
 
-    dziennik_wazny = DziennikWazny(uklad.logi / NAZWA_LOGU_WAZNEGO, zegar)
+    dziennik_wazny = DziennikWazny(uklad.logi / NAZWA_LOGU_WAZNEGO, zegar_lokalny)
     with DziennikSzczegolowy(
         uklad.logi / NAZWA_LOGU_SZCZEGOLOWEGO, uklad.identyfikator_projektu
     ) as log:

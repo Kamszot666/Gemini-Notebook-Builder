@@ -3,17 +3,24 @@
 Plik ``log_wazne.txt`` zawiera wpisy w formacie ``ZDARZENIE|Godzina:Minuta``, po
 jednym na wiersz. Na początku każdego dnia oraz przy pierwszym wpisie po
 uruchomieniu aplikacji dopisywany jest wiersz z datą w postaci
-``--- RRRR-MM-DD ---``. Format wpisów jest zatwierdzony w sekcji czternastej
-CLAUDE.md i nie wolno go zmieniać.
+``--- RRRR-MM-DD (czas lokalny) ---``. Format wpisów jest zatwierdzony w sekcji
+czternastej CLAUDE.md i nie wolno go zmieniać.
+
+Ten log jest prowadzony w czasie lokalnym systemu, ponieważ czyta go użytkownik.
+Wiersz daty niesie o tym jawną informację, żeby przy zestawianiu obu logów nie
+było wątpliwości, w jakiej strefie zapisano godzinę. Log szczegółowy, manifest
+i checkpoint pozostają w czasie UTC jako dane techniczne.
 
 Plik ``log_szczegolowy.txt`` zawiera czas, poziom, moduł, identyfikator źródła,
 komunikat oraz informację o wyjątku. Jest konfigurowany na standardowym module
-``logging``.
+``logging``, a jego znaczniki czasu są zapisywane w czasie UTC, żeby dane
+techniczne były niezależne od strefy czasowej maszyny.
 """
 
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -38,8 +45,13 @@ _FORMAT_LOGU_SZCZEGOLOWEGO = (
     "%(asctime)s|%(levelname)s|%(name)s|%(identyfikator_zrodla)s|%(message)s"
 )
 
+# Oznaczenie dopisywane do wiersza daty w log_wazne.txt. Mówi wprost, że godziny
+# w tym pliku są czasem lokalnym systemu, a nie czasem UTC.
+OZNACZENIE_CZASU_LOKALNEGO = "czas lokalny"
 
-def _teraz_systemowy() -> datetime:
+
+def teraz_lokalny() -> datetime:
+    """Zwraca bieżący moment w czasie lokalnym systemu, ze świadomością strefy."""
     return datetime.now().astimezone()
 
 
@@ -49,9 +61,12 @@ class DziennikWazny:
     Wiersz z datą jest dopisywany przy pierwszym wpisie w danym cyklu życia
     obiektu oraz za każdym razem, gdy zmieni się dzień. Odpowiada to wymaganiu,
     że data pojawia się także przy pierwszym wpisie po uruchomieniu aplikacji.
+
+    Domyślnym zegarem jest czas lokalny systemu. Podanie własnego zegara służy
+    testom i nie zmienia znaczenia wiersza daty.
     """
 
-    def __init__(self, sciezka: Path, zegar: Callable[[], datetime] = _teraz_systemowy) -> None:
+    def __init__(self, sciezka: Path, zegar: Callable[[], datetime] = teraz_lokalny) -> None:
         self._sciezka = sciezka
         self._zegar = zegar
         self._data_ostatniego_wpisu: str | None = None
@@ -68,11 +83,23 @@ class DziennikWazny:
         self._sciezka.parent.mkdir(parents=True, exist_ok=True)
         with self._sciezka.open("a", encoding="utf-8", newline="\n") as plik:
             if self._przed_pierwszym_wpisem or data != self._data_ostatniego_wpisu:
-                plik.write(f"--- {data} ---\n")
+                plik.write(f"--- {data} ({OZNACZENIE_CZASU_LOKALNEGO}) ---\n")
             plik.write(f"{zdarzenie}|{godzina_minuta}\n")
 
         self._przed_pierwszym_wpisem = False
         self._data_ostatniego_wpisu = data
+
+
+class _FormatterUtc(logging.Formatter):
+    """Formatter zapisujący znaczniki czasu w czasie UTC, a nie w czasie lokalnym.
+
+    Domyślny formatter modułu ``logging`` używa czasu lokalnego. Log szczegółowy
+    jest danymi technicznymi zestawianymi z manifestem i checkpointem, które są
+    prowadzone w czasie UTC, więc musi używać tej samej podstawy czasu. Czas
+    lokalny jest zarezerwowany dla pliku ``log_wazne.txt``.
+    """
+
+    converter = time.gmtime
 
 
 class _FiltrIdentyfikatoraZrodla(logging.Filter):
@@ -100,7 +127,7 @@ class DziennikSzczegolowy:
     def __enter__(self) -> logging.Logger:
         self._sciezka.parent.mkdir(parents=True, exist_ok=True)
         uchwyt = logging.FileHandler(self._sciezka, encoding="utf-8")
-        uchwyt.setFormatter(logging.Formatter(_FORMAT_LOGU_SZCZEGOLOWEGO))
+        uchwyt.setFormatter(_FormatterUtc(_FORMAT_LOGU_SZCZEGOLOWEGO))
         uchwyt.addFilter(_FiltrIdentyfikatoraZrodla())
         self._logger.addHandler(uchwyt)
         self._logger.setLevel(logging.DEBUG)

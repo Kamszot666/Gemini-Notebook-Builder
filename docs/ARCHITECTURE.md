@@ -82,8 +82,11 @@ kończy się kontrolowanym błędem zapisanym w logu, manifeście i raporcie.
 ## Pakiet gnb.logging_pl
 
 - `gnb/logging_pl/dziennik.py` — `log_wazne.txt` w formacie
-  `ZDARZENIE|Godzina:Minuta` z wierszem daty `--- RRRR-MM-DD ---` na początku
-  dnia i po uruchomieniu, oraz `log_szczegolowy.txt` na module `logging`.
+  `ZDARZENIE|Godzina:Minuta` z wierszem daty `--- RRRR-MM-DD (czas lokalny) ---`
+  na początku dnia i po uruchomieniu, oraz `log_szczegolowy.txt` na module
+  `logging`. Log ważny jest prowadzony w czasie lokalnym systemu, ponieważ czyta
+  go użytkownik. Log szczegółowy, manifest i checkpoint są prowadzone w czasie
+  UTC jako dane techniczne.
 
 ## Wiersz poleceń
 

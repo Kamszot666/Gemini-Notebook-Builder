@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 from gnb.core.konfiguracja import Konfiguracja
@@ -12,6 +12,22 @@ from gnb.ingestion.wejscie import PozycjaWejsciowa, przyjmij_plik, przyjmij_teks
 from gnb.potok import przetworz_projekt
 
 KATALOG_DANYCH = Path(__file__).resolve().parent / "dane"
+
+
+# Strefa czasu lokalnego użyta w testach, odpowiadająca polskiemu czasowi
+# letniemu. Pozwala sprawdzić, że log ważny jest prowadzony w czasie lokalnym,
+# a nie w czasie UTC używanym przez pozostałe zapisy.
+_STREFA_LOKALNA = timezone(timedelta(hours=2))
+
+
+def _zegar_lokalny_krokowy() -> Callable[[], datetime]:
+    stan = {"teraz": datetime(2026, 8, 26, 22, 30, tzinfo=_STREFA_LOKALNA)}
+
+    def zegar() -> datetime:
+        stan["teraz"] = stan["teraz"] + timedelta(seconds=1)
+        return stan["teraz"]
+
+    return zegar
 
 
 def _zegar_krokowy() -> Callable[[], datetime]:
@@ -86,7 +102,11 @@ def test_plik_windows1250_jest_odczytany_bez_utraty_polskich_znakow(tmp_path: Pa
 def test_manifest_i_checkpoint_powstaja_i_sa_spojne(tmp_path: Path) -> None:
     konfiguracja = Konfiguracja(katalog_wynikow=tmp_path)
     wynik = przetworz_projekt(
-        _pozycje(), konfiguracja, nazwa_projektu="Test spójności", zegar=_zegar_krokowy()
+        _pozycje(),
+        konfiguracja,
+        nazwa_projektu="Test spójności",
+        zegar=_zegar_krokowy(),
+        zegar_lokalny=_zegar_lokalny_krokowy(),
     )
 
     manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
@@ -94,8 +114,34 @@ def test_manifest_i_checkpoint_powstaja_i_sa_spojne(tmp_path: Path) -> None:
     assert wynik.sciezka_raportu.exists()
 
     log_wazny = (wynik.katalog_projektu / "logi" / "log_wazne.txt").read_text(encoding="utf-8")
-    assert log_wazny.startswith("--- 2026-08-26 ---")
+    assert log_wazny.startswith("--- 2026-08-26 (czas lokalny) ---")
     assert "Projekt zakończony|" in log_wazny
+
+
+def test_log_wazny_jest_prowadzony_w_czasie_lokalnym(tmp_path: Path) -> None:
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path)
+    wynik = przetworz_projekt(
+        _pozycje(),
+        konfiguracja,
+        nazwa_projektu="Test stref czasowych",
+        zegar=_zegar_krokowy(),
+        zegar_lokalny=_zegar_lokalny_krokowy(),
+    )
+
+    katalog_logow = wynik.katalog_projektu / "logi"
+    log_wazny = (katalog_logow / "log_wazne.txt").read_text(encoding="utf-8")
+    log_szczegolowy = (katalog_logow / "log_szczegolowy.txt").read_text(encoding="utf-8")
+
+    # Zegar lokalny testu startuje o 22:30, więc taką godzinę ma pierwszy wpis.
+    assert log_wazny.startswith("--- 2026-08-26 (czas lokalny) ---")
+    assert "Projekt utworzony|22:30" in log_wazny
+
+    # Log szczegółowy nie korzysta z podstawionych zegarów, tylko z zegara
+    # systemowego, dlatego sprawdzany jest jego rozjazd wobec bieżącego czasu
+    # UTC. Zapis w czasie lokalnym dałby tu przesunięcie o pełną strefę.
+    pierwszy_znacznik = log_szczegolowy.split("|", 1)[0].split(",", 1)[0]
+    zapisany = datetime.strptime(pierwszy_znacznik, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
+    assert abs((datetime.now(UTC) - zapisany).total_seconds()) < 300
 
 
 def test_wznowienie_nie_duplikuje_ani_nie_gubi_zrodel(tmp_path: Path) -> None:

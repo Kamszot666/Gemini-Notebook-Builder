@@ -20,7 +20,7 @@ Te punkty są rozstrzygnięte przez użytkownika. Nie otwieraj ich ponownie bez 
 
 1. Plan notatnika: Gemini Notebook Plus. Domyślny limit źródeł w konfiguracji wynosi 100.
 2. Domyślny globalny skrót: Control plus Shift plus F12. Kombinacja Caps Lock plus F12 pozostaje opcją do wyboru przez użytkownika, wymagającą trybu haka niskopoziomowego opisanego w sekcji dwunastej.
-3. Plik `log_wazne.txt` zachowuje format wpisów `ZDARZENIE|Godzina:Minuta`, a na początku każdego dnia dopisywany jest osobny wiersz z datą w formacie `--- RRRR-MM-DD ---`.
+3. Plik `log_wazne.txt` zachowuje format wpisów `ZDARZENIE|Godzina:Minuta`, a na początku każdego dnia dopisywany jest osobny wiersz z datą w formacie `--- RRRR-MM-DD (czas lokalny) ---`. Ten log jest prowadzony w czasie lokalnym systemu, ponieważ czyta go użytkownik, i wiersz daty mówi o tym wprost.
 4. Materiały muzyczne zapisane jako notacja pozostają w pełnym zakresie projektu. Dotyczy to nut i tabulatur w postaci PDF oraz obrazów, plików MIDI, MusicXML i formatów Guitar Pro. Poza zakresem są natomiast utwory muzyczne w postaci nagrań dźwiękowych, czyli pliki MP3, WAV i podobne zawierające muzykę zamiast mowy. Użytkownik takich nagrań nie będzie dodawał. Moduł audio obsługuje wyłącznie nagrania mowy, a wykrycie materiału muzycznego kończy się kontrolowanym pominięciem z czytelnym komunikatem, nigdy transkrypcją.
 5. Kondensacja treści przez zewnętrzne modele AI pozostaje domyślnie wyłączona. Buduj ją jako opcjonalny, wyraźnie odseparowany moduł, ale nie wcześniej niż po ukończeniu etapu dwunastego.
 6. Docelowo aplikacja ma dać się uruchomić także na serwerze, nie tylko lokalnie na Windows. Konsekwencje architektoniczne opisuje sekcja szósta.
@@ -312,8 +312,10 @@ Cache: lokalny, oparty na SQLite. Klucz opiera się na kanonicznym URL lub check
 
 Logi, dwa pliki na projekt:
 
-1. `log_wazne.txt` w formacie `ZDARZENIE|Godzina:Minuta`. Format wpisów jest zatwierdzony i nie wolno go zmieniać. Ponieważ nie zawiera daty, na początku każdego dnia dopisuj osobny wiersz w postaci `--- RRRR-MM-DD ---`. Wiersz z datą pojawia się także przy pierwszym wpisie po uruchomieniu aplikacji.
+1. `log_wazne.txt` w formacie `ZDARZENIE|Godzina:Minuta`. Format wpisów jest zatwierdzony i nie wolno go zmieniać. Ponieważ nie zawiera daty, na początku każdego dnia dopisuj osobny wiersz w postaci `--- RRRR-MM-DD (czas lokalny) ---`. Wiersz z datą pojawia się także przy pierwszym wpisie po uruchomieniu aplikacji.
 2. `log_szczegolowy.txt` zawierający czas, poziom, moduł, identyfikator źródła, komunikat oraz informację o wyjątku.
+
+Podstawa czasu jest rozdzielona świadomie. Plik `log_wazne.txt` prowadź w czasie lokalnym systemu, bo czyta go użytkownik i porównuje z zegarem na ścianie. Plik `log_szczegolowy.txt`, manifest i checkpoint prowadź w czasie UTC, bo to są dane techniczne, które muszą być niezależne od strefy czasowej maszyny. Oznaczenie w wierszu daty istnieje po to, żeby przy zestawianiu obu logów nie było wątpliwości, w jakiej strefie zapisano godzinę.
 
 Manifest: `manifest.json` jest źródłem prawdy, `manifest.txt` jest generowanym z niego czytelnym widokiem dla użytkownika. Dla każdego źródła zapisuj identyfikator, typ, URL lub nazwę pliku, checksum, status, informację o duplikacie, OCR, transkrypcji, konwersji, kondensacji oraz plik wynikowy. Dla każdego wyniku zapisuj ścieżkę, typ, rozmiar, liczbę słów, liczbę znaków, liczbę źródeł, checksum i status.
 

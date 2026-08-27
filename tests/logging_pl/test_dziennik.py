@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
 from gnb.logging_pl.dziennik import DziennikSzczegolowy, DziennikWazny
+
+# Strefa użyta w testach odpowiada polskiemu czasowi letniemu, żeby sprawdzić
+# zapis czasu lokalnego, a nie czasu UTC.
+_STREFA_LOKALNA = timezone(timedelta(hours=2))
 
 
 class _ZegarKrokowy:
@@ -23,28 +27,41 @@ class _ZegarKrokowy:
 
 
 def test_log_wazny_ma_zatwierdzony_format_i_wiersz_daty(tmp_path: Path) -> None:
-    zegar = _ZegarKrokowy(datetime(2026, 8, 26, 9, 5, tzinfo=UTC), timedelta(minutes=1))
+    zegar = _ZegarKrokowy(
+        datetime(2026, 8, 26, 9, 5, tzinfo=_STREFA_LOKALNA), timedelta(minutes=1)
+    )
     dziennik = DziennikWazny(tmp_path / "log_wazne.txt", zegar)
 
     dziennik.zapisz("Projekt utworzony")
     dziennik.zapisz("Źródło przyjęte")
 
     wiersze = (tmp_path / "log_wazne.txt").read_text(encoding="utf-8").splitlines()
-    assert wiersze[0] == "--- 2026-08-26 ---"
+    assert wiersze[0] == "--- 2026-08-26 (czas lokalny) ---"
     assert wiersze[1] == "Projekt utworzony|09:05"
     assert wiersze[2] == "Źródło przyjęte|09:06"
 
 
 def test_wiersz_daty_pojawia_sie_przy_zmianie_dnia(tmp_path: Path) -> None:
-    zegar = _ZegarKrokowy(datetime(2026, 8, 26, 23, 59, tzinfo=UTC), timedelta(minutes=5))
+    zegar = _ZegarKrokowy(
+        datetime(2026, 8, 26, 23, 59, tzinfo=_STREFA_LOKALNA), timedelta(minutes=5)
+    )
     dziennik = DziennikWazny(tmp_path / "log_wazne.txt", zegar)
 
     dziennik.zapisz("Przed północą")
     dziennik.zapisz("Po północy")
 
     tekst = (tmp_path / "log_wazne.txt").read_text(encoding="utf-8")
-    assert tekst.count("--- 2026-08-26 ---") == 1
-    assert tekst.count("--- 2026-08-27 ---") == 1
+    assert tekst.count("--- 2026-08-26 (czas lokalny) ---") == 1
+    assert tekst.count("--- 2026-08-27 (czas lokalny) ---") == 1
+
+
+def test_domyslny_zegar_dziennika_waznego_uzywa_czasu_lokalnego(tmp_path: Path) -> None:
+    dziennik = DziennikWazny(tmp_path / "log_wazne.txt")
+    dziennik.zapisz("Projekt utworzony")
+
+    oczekiwana_data = datetime.now().astimezone().strftime("%Y-%m-%d")
+    tekst = (tmp_path / "log_wazne.txt").read_text(encoding="utf-8")
+    assert tekst.startswith(f"--- {oczekiwana_data} (czas lokalny) ---")
 
 
 def test_zdarzenie_z_pionowa_kreska_jest_odrzucane(tmp_path: Path) -> None:

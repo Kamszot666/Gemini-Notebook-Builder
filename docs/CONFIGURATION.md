@@ -1,7 +1,7 @@
-# Konfiguracja — stan po etapie drugim
+# Konfiguracja — stan po etapie trzecim
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
-obsługuje po etapie drugim. Pełna lista pól z sekcji jedenastej a pliku `CLAUDE.md`, w tym progi
+obsługuje po etapie trzecim. Pełna lista pól z sekcji jedenastej a pliku `CLAUDE.md`, w tym progi
 deduplikacji, ustawienia OCR, transkrypcji, generowania PDF oraz treść instrukcji
 systemowej notatnika, powstanie w kolejnych etapach razem z funkcjami, których
 dotyczy.
@@ -117,6 +117,24 @@ Nazwa pola w pliku TOML, odpowiadająca zmienna środowiskowa oraz znaczenie:
     wbudowanej. W pliku TOML lista, w zmiennej środowiskowej wartości rozdzielone
     przecinkiem.
 
+## Pola napisów filmów
+
+1. `jezyki_napisow`, zmienna `GNB_JEZYKI_NAPISOW`. Języki napisów w kolejności
+   preferencji. Domyślnie polski i angielski. W pliku TOML lista, na przykład
+   `["pl", "en"]`, a w zmiennej środowiskowej wartości rozdzielone przecinkiem.
+2. `napisy_automatyczne`, zmienna `GNB_NAPISY_AUTOMATYCZNE`. Zgoda na użycie
+   napisów tworzonych automatycznie, gdy nie ma napisów tworzonych ręcznie.
+   Domyślnie włączona. Napisy automatyczne bywają mniej dokładne, zwłaszcza przy
+   nazwach własnych.
+3. `napisy_tlumaczone`, zmienna `GNB_NAPISY_TLUMACZONE`. Zgoda na użycie napisów
+   przetłumaczonych automatycznie na pierwszy język z listy preferencji, gdy nie
+   ma żadnych innych. Domyślnie wyłączona, ponieważ tłumaczenie maszynowe napisów
+   automatycznych zwielokrotnia liczbę pomyłek.
+4. `znaczniki_czasu`, zmienna `GNB_ZNACZNIKI_CZASU`. Dopisywanie znacznika czasu
+   na początku każdego akapitu transkrypcji. Domyślnie wyłączone. Znaczniki
+   ułatwiają odnalezienie fragmentu w filmie, ale przy odsłuchu czytnikiem
+   ekranu przeszkadzają, dlatego nie są domyślne.
+
 ## Pamięć podręczna pobranych stron
 
 Pamięć podręczna jest wspólna dla wszystkich projektów i leży w katalogu danych
@@ -185,6 +203,11 @@ wyjatek_robots_dla_zrodel_jawnych = true
 maksymalny_rozmiar_pobrania_mb = 20
 sciezka_certyfikatow = ""
 dodatkowe_parametry_sledzace = []
+
+jezyki_napisow = ["pl", "en"]
+napisy_automatyczne = true
+napisy_tlumaczone = false
+znaczniki_czasu = false
 
 uzywaj_cache = true
 maksymalny_wiek_cache_dni = 30

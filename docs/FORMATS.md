@@ -1,18 +1,19 @@
-# Obsługiwane formaty — stan po etapie drugim
+# Obsługiwane formaty — stan po etapie trzecim
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
-Kolejne formaty, czyli YouTube, PDF, DOCX, EPUB, ODT, PPTX, CSV, SRT, VTT, obrazy
-oraz materiały nutowe, dojdą w etapach opisanych w sekcji osiemnastej pliku
+Kolejne formaty, czyli PDF, DOCX, EPUB, ODT, PPTX, CSV, SRT, VTT, obrazy oraz
+materiały nutowe, dojdą w etapach opisanych w sekcji osiemnastej pliku
 `CLAUDE.md`.
 
 ## Wejście
 
-Obsługiwane są cztery rodzaje wejścia:
+Obsługiwane jest pięć rodzajów wejścia:
 
 1. Tekst wklejony bezpośrednio przez użytkownika, traktowany jako tekst płaski.
 2. Tekst wklejony zadeklarowany przez użytkownika jako Markdown.
 3. Plik lokalny w formacie TXT lub MD.
 4. Adres strony internetowej, podany pojedynczo albo listą.
+5. Adres filmu z serwisu YouTube, dla którego pobierane są napisy.
 
 Plik w innym formacie kończy się kontrolowanym błędem `FormatNieobslugiwany`.
 Nie zatrzymuje to przetwarzania pozostałych źródeł.
@@ -195,6 +196,66 @@ Dzięki temu z pliku TXT nigdy nie powstaje wersja MD.
 
 Decyzja o wygenerowaniu wersji MD wraz z listą spełnionych warunków jest
 zapisywana w manifeście.
+
+## Filmy z serwisu YouTube
+
+Pobierane są wyłącznie napisy, nigdy sam film. Adres można podać w dowolnej
+postaci: `youtube.com/watch?v=IDENTYFIKATOR`, `youtu.be/IDENTYFIKATOR`,
+`youtube.com/shorts/IDENTYFIKATOR`, `youtube.com/live/IDENTYFIKATOR` oraz
+`youtube.com/embed/IDENTYFIKATOR`. Wszystkie sprowadzają się do jednego adresu
+kanonicznego zbudowanego z identyfikatora filmu, więc ten sam film podany
+dwukrotnie w różnej postaci jest jednym źródłem.
+
+Adres filmu z dopisanym numerem playlisty, czyli `watch?v=FILM&list=LISTA`, jest
+zwykłym pojedynczym filmem. Parametr listy jest pomijany.
+
+### Playlisty i kanały
+
+Playlisty i kanały nie są obsługiwane. Rozwinięcie playlisty na listę filmów
+łamałoby przewidywalność limitu źródeł notatnika i uruchamiało masowe pobieranie
+bez wyraźnego polecenia. Taki adres dostaje status „pominiete”, a komunikat mówi
+wprost, że trzeba podać adresy poszczególnych filmów. Pozostałe źródła są
+przetwarzane normalnie.
+
+### Wybór napisów
+
+Kolejność jest deterministyczna. Najpierw napisy tworzone ręcznie, w kolejnych
+językach z listy preferencji. Potem napisy automatyczne, w tej samej kolejności
+języków. Na końcu, o ile konfiguracja na to pozwala, napisy przetłumaczone
+automatycznie. Wybrany język i typ napisów trafiają do manifestu, więc zawsze
+wiadomo, skąd wzięła się treść.
+
+Napisy pobierają dwie wzajemnie zapasowe warstwy: `youtube-transcript-api` oraz
+`yt-dlp`. Obie potrafią przestać działać po zmianach po stronie serwisu, więc
+awaria pierwszej przenosi pracę na drugą. Metadane filmu, czyli tytuł, kanał,
+długość i data publikacji, pochodzą z `yt-dlp`.
+
+### Postać transkrypcji
+
+Segmenty napisów są sklejane w zdania, a zdania w akapity. Usuwane są oznaczenia
+dźwięków w rodzaju „[muzyka]” oraz powtórzenia typowe dla napisów automatycznych,
+w których kolejny segment powtarza końcówkę poprzedniego.
+
+Znaczniki czasu są domyślnie wyłączone. Po włączeniu ustawieniem
+`znaczniki_czasu` pojawiają się wyłącznie na początku akapitu, w postaci
+`[mm:ss]` dla materiałów krótszych niż godzina i `[h:mm:ss]` dla dłuższych.
+Format jest jednolity w obrębie całego pliku, a podział na akapity jest taki sam
+niezależnie od tego, czy znaczniki są włączone.
+
+Transkrypcja nie ma struktury dokumentu, więc dla filmu nigdy nie powstaje wersja
+MD. Plik TXT zawiera sam tekst transkrypcji; nagłówek metadanych w pliku
+wynikowym powstanie wspólnie dla wszystkich typów źródeł w etapie czwartym A.
+
+### Przypadki, w których film nie zostaje przetworzony
+
+Statusem „pominiete” kończą się: brak napisów w wybranych językach, napisy
+złożone wyłącznie z oznaczeń dźwięków, playlista, kanał oraz adres YouTube bez
+identyfikatora filmu. Przy braku napisów komunikat odsyła do etapu dziewiątego,
+w którym powstanie transkrypcja mowy z samego dźwięku.
+
+Statusem „blad” kończą się: film prywatny, usunięty, niedostępny w regionie,
+ograniczony wiekiem oraz niepoprawny identyfikator filmu. Zablokowanie żądania
+przez serwis i błąd sieci są traktowane jako błędy przejściowe i ponawiane.
 
 ## Czym różni się wersja TXT od wersji MD
 

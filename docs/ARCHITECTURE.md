@@ -1,18 +1,19 @@
-# Architektura — stan po etapie drugim
+# Architektura — stan po etapie trzecim
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
-zakończeniu etapu drugiego. Pełny docelowy podział na pakiety opisuje sekcja
+zakończeniu etapu trzeciego. Pełny docelowy podział na pakiety opisuje sekcja
 szósta `CLAUDE.md`.
 
 ## Potok przetwarzania
 
 Punkt wejścia to funkcja `przetworz_projekt` w `gnb/potok.py`. Uruchamia ona
 etapy w stałej kolejności z sekcji ósmej `CLAUDE.md`, w części obsługiwanej przez
-etapy pierwszy i drugi:
+etapy pierwszy, drugi i trzeci:
 
 1. Wejście i walidacja — `gnb/ingestion/wejscie.py`, `gnb/ingestion/lista_url.py`.
-2. Pobranie stron oraz import treści i wykrycie kodowania —
-   `gnb/ingestion/pobieranie.py`, `gnb/normalization/kodowanie.py`.
+2. Pobranie stron i napisów oraz import treści i wykrycie kodowania —
+   `gnb/ingestion/pobieranie.py`, `gnb/ingestion/youtube.py`,
+   `gnb/normalization/kodowanie.py`.
 3. Ekstrakcja — `gnb/extractors/`.
 4. Normalizacja i liczenie słów — `gnb/normalization/normalizacja.py`,
    `gnb/core/liczenie_slow.py`.
@@ -25,6 +26,10 @@ etapy pierwszy i drugi:
 Etapy deduplikacji, kondensacji i grupowania są pominięte, ale ich miejsce
 w kolejności jest zachowane. Jedno uszkodzone wejście nie zatrzymuje pozostałych;
 kończy się kontrolowanym błędem zapisanym w logu, manifeście i raporcie.
+
+Pobranie adresów oraz pobranie napisów są osobnymi fazami, wykonywanymi przed
+pętlą po źródłach. Strony pobierają się równolegle, a filmy po kolei, ponieważ
+biblioteki napisów pracują synchronicznie i same wykonują swoje żądania.
 
 Pobranie adresów jest osobną fazą, wykonywaną przed pętlą po źródłach. Dzięki
 temu strony pobierają się równolegle, z zachowaniem limitu połączeń na domenę
@@ -46,6 +51,8 @@ identyfikator wynika z kanonicznej postaci adresu, a nie z treści.
   sumy kontrolnej pochodzenia.
 - `gnb/core/url.py` — walidacja adresu oraz jego dwie postacie: kanoniczna jako
   klucz tożsamości i pobierania jako to, co trafia do serwera.
+- `gnb/core/youtube.py` — rozpoznanie adresu filmu, sprowadzenie wszystkich jego
+  postaci do jednego adresu kanonicznego oraz odrzucanie playlist i kanałów.
 - `gnb/core/nazwy.py` — sanityzacja nazw projektów i plików do postaci
   bezpiecznej dla Windows oraz budowa nazwy pliku wynikowego z trzonu tytułu
   i skrótu identyfikatora źródła. Zasadę opisuje `docs/FORMATS.md`.
@@ -60,6 +67,8 @@ identyfikator wynika z kanonicznej postaci adresu, a nie z treści.
 - `gnb/ingestion/pobieranie.py` — asynchroniczny klient HTTP z limitem czasu,
   ponowieniami, rosnącym odstępem, limitem połączeń na domenę i obsługą pamięci
   podręcznej.
+- `gnb/ingestion/youtube.py` — pobieranie napisów dwiema wzajemnie zapasowymi
+  warstwami oraz metadanych filmu, wraz z zapisem wyniku do pamięci podręcznej.
 - `gnb/ingestion/robots.py` — odczyt pliku `robots.txt` i decyzja o zgodzie na
   pobranie adresu, zgodnie z RFC 9309: 2xx oznacza reguły, 4xx zgodę, a 5xx
   i błąd sieci zakaz po wyczerpaniu ponowień.
@@ -73,6 +82,8 @@ identyfikator wynika z kanonicznej postaci adresu, a nie z treści.
   struktury, brak bloków.
 - `gnb/extractors/markdown.py` — Markdown przez `markdown-it-py` z regułą tabel,
   wysoki poziom pewności, rozpoznane bloki strukturalne.
+- `gnb/extractors/youtube.py` — sklejanie segmentów napisów w akapity, usuwanie
+  oznaczeń dźwięków i powtórzeń oraz opcjonalne znaczniki czasu.
 - `gnb/extractors/strona_www.py` — treść artykułu przez `trafilatura`, średni
   poziom pewności, z mechanizmem zapasowym na `lxml` o niskim poziomie pewności.
   Zbiera też odnośniki zewnętrzne i dopisuje na końcu treści ich ponumerowany
@@ -133,6 +144,11 @@ importowalne pakiety z docstringiem. Logika powstanie w kolejnych etapach.
 Testy jednostkowe i integracyjne pokrywają każdy moduł etapów pierwszego
 i drugiego. Test `tests/test_potok_e2e.py` przeprowadza pełny przebieg dla pliku
 strukturalnego MD, pliku TXT, pliku w kodowaniu Windows-1250 i tekstu wklejonego.
+Test `tests/test_potok_youtube_e2e.py` przeprowadza pełny przebieg dla filmów,
+w tym pominięcie playlisty i kanału, brak napisów, film prywatny, znaczniki
+czasu, wznowienie bez ponownego pobrania oraz oszczędność dzięki pamięci
+podręcznej. Warstwy pobierania napisów są w nim podstawione danymi sztucznymi.
+
 Test `tests/test_potok_url_e2e.py` przeprowadza pełny przebieg dla adresów stron,
 w tym pominięcie zakazane przez `robots.txt`, błąd 404, zasób innego typu,
 wznowienie bez ponownego pobrania oraz oszczędność pobrania dzięki pamięci

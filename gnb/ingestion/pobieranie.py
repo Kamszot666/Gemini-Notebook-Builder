@@ -285,6 +285,18 @@ class Pobieracz:
         )
         return False
 
+    async def sprawdz_reguly_witryny(self, zadanie: Zadanie) -> PominietePobranie | None:
+        """Sprawdza reguły witryny dla zadania, z uwzględnieniem wyjątku dla źródeł jawnych.
+
+        Metoda jest przeznaczona dla źródeł pobieranych poza tym modułem, na
+        przykład dla filmów, których napisy pobierają biblioteki zewnętrzne.
+        Dzięki temu zasada z sekcji piętnastej CLAUDE.md obowiązuje tak samo
+        niezależnie od tego, kto wykonuje właściwe żądanie.
+        """
+        if not self._czy_sprawdzac_robots(zadanie):
+            return None
+        return await self._sprawdz_robots(zadanie.adres_pobierania)
+
     async def _pobierz_bez_wyjatku(self, zadanie: Zadanie) -> WynikPobrania | BladGnb:
         """Zwraca wynik pobrania albo błąd projektu jako wartość."""
         try:

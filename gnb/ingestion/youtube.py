@@ -228,6 +228,91 @@ class PobieraczYouTube:
         return None
 
 
+def klucz_pamieci_podrecznej(identyfikator_filmu: str, preferencje: PreferencjeNapisow) -> str:
+    """Buduje klucz pamięci podręcznej dla napisów jednego filmu.
+
+    Klucz zawiera preferencje, ponieważ zmiana kolejności języków albo zgody na
+    napisy automatyczne może dać inne napisy tego samego filmu.
+    """
+    jezyki = ",".join(preferencje.jezyki)
+    automatyczne = "auto" if preferencje.dopuszczaj_automatyczne else "bezauto"
+    tlumaczone = "tlum" if preferencje.dopuszczaj_tlumaczone else "beztlum"
+    return f"youtube:{identyfikator_filmu}:{jezyki}:{automatyczne}:{tlumaczone}"
+
+
+def do_json(wynik: WynikYouTube) -> bytes:
+    """Zapisuje wynik pobrania filmu w postaci nadającej się do pamięci podręcznej."""
+    dane = {
+        "identyfikator": wynik.identyfikator,
+        "adres_kanoniczny": wynik.adres_kanoniczny,
+        "metadane": {
+            "tytul": wynik.metadane.tytul,
+            "kanal": wynik.metadane.kanal,
+            "dlugosc_sekundy": wynik.metadane.dlugosc_sekundy,
+            "data_publikacji": wynik.metadane.data_publikacji,
+        },
+        "napisy": {
+            "jezyk": wynik.napisy.jezyk,
+            "typ": wynik.napisy.typ,
+            "metoda": wynik.napisy.metoda,
+            "segmenty": [
+                {"poczatek": segment.poczatek_sekundy, "tekst": segment.tekst}
+                for segment in wynik.napisy.segmenty
+            ],
+        },
+    }
+    return json.dumps(dane, ensure_ascii=False).encode("utf-8")
+
+
+def z_json(dane: bytes) -> WynikYouTube | None:
+    """Odtwarza wynik pobrania filmu z pamięci podręcznej.
+
+    Wartość pusta oznacza wpis, którego nie da się odczytać. Zawartość pamięci
+    podręcznej jest odtwarzalna, więc taki wpis jest po prostu pomijany, a film
+    pobierany ponownie.
+    """
+    try:
+        odczytane = json.loads(dane.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(odczytane, dict):
+        return None
+
+    metadane = odczytane.get("metadane") or {}
+    napisy = odczytane.get("napisy") or {}
+    segmenty = tuple(
+        SegmentNapisow(
+            poczatek_sekundy=float(segment.get("poczatek", 0.0)),
+            tekst=str(segment.get("tekst", "")),
+        )
+        for segment in napisy.get("segmenty") or []
+        if isinstance(segment, dict)
+    )
+    identyfikator = str(odczytane.get("identyfikator", ""))
+    if not identyfikator or not segmenty:
+        return None
+
+    return WynikYouTube(
+        identyfikator=identyfikator,
+        adres_kanoniczny=str(
+            odczytane.get("adres_kanoniczny") or adres_kanoniczny_filmu(identyfikator)
+        ),
+        metadane=MetadaneFilmu(
+            identyfikator=identyfikator,
+            tytul=_napis_albo_nic(metadane.get("tytul")),
+            kanal=_napis_albo_nic(metadane.get("kanal")),
+            dlugosc_sekundy=_liczba_albo_nic(metadane.get("dlugosc_sekundy")),
+            data_publikacji=_napis_albo_nic(metadane.get("data_publikacji")),
+        ),
+        napisy=Napisy(
+            jezyk=str(napisy.get("jezyk", "")),
+            typ=str(napisy.get("typ", "")),
+            segmenty=segmenty,
+            metoda=str(napisy.get("metoda", "")),
+        ),
+    )
+
+
 class WarstwaTranscriptApi:
     """Warstwa pierwsza: napisy przez bibliotekę ``youtube-transcript-api``."""
 

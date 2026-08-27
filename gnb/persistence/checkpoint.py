@@ -21,7 +21,7 @@ from typing import Any
 
 from gnb.core.wyjatki import BladTrwaly
 
-WERSJA_SCHEMATU = 2
+WERSJA_SCHEMATU = 3
 _SUFIKS_TYMCZASOWY = ".tmp"
 _SUFIKS_KOPII = ".bak"
 
@@ -73,6 +73,7 @@ class StanZrodla:
     uzasadnienie_md: list[str] = field(default_factory=list)
     komunikat_bledu: str | None = None
     pobranie: StanPobrania | None = None
+    metadane: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -169,6 +170,7 @@ def _stan_do_slownika(stan: StanZrodla) -> dict[str, Any]:
         "uzasadnienie_md": list(stan.uzasadnienie_md),
         "komunikat_bledu": stan.komunikat_bledu,
         "pobranie": _pobranie_do_slownika(stan.pobranie),
+        "metadane": dict(stan.metadane),
     }
 
 
@@ -234,7 +236,15 @@ def _stan_ze_slownika(dane: Any) -> StanZrodla:
         uzasadnienie_md=[str(element) for element in dane.get("uzasadnienie_md", [])],
         komunikat_bledu=_opcjonalny_tekst(dane.get("komunikat_bledu")),
         pobranie=_pobranie_ze_slownika(dane.get("pobranie")),
+        metadane=_metadane_ze_slownika(dane.get("metadane")),
     )
+
+
+def _metadane_ze_slownika(dane: Any) -> dict[str, str]:
+    """Odczytuje metadane źródła. Ich brak jest poprawny dla źródeł bez metadanych."""
+    if not isinstance(dane, dict):
+        return {}
+    return {str(klucz): str(wartosc) for klucz, wartosc in dane.items()}
 
 
 def _pobranie_ze_slownika(dane: Any) -> StanPobrania | None:

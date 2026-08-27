@@ -13,11 +13,11 @@ uruchomieniu.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-WERSJA_SCHEMATU = 2
+WERSJA_SCHEMATU = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +47,7 @@ class WpisZrodla:
     pliki_wynikowe: tuple[str, ...]
     komunikat_bledu: str | None
     pobranie: WpisPobrania | None = None
+    metadane: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +103,7 @@ def _do_slownika(manifest: Manifest) -> dict[str, Any]:
                 "pliki_wynikowe": list(wpis.pliki_wynikowe),
                 "komunikat_bledu": wpis.komunikat_bledu,
                 "pobranie": _pobranie_do_slownika(wpis.pobranie),
+                "metadane": dict(wpis.metadane),
             }
             for wpis in manifest.zrodla
         ],
@@ -162,6 +164,11 @@ def zbuduj_widok_tekstowy(manifest: Manifest) -> str:
             wiersze.extend(f"    - {plik}" for plik in wpis_zrodla.pliki_wynikowe)
         if wpis_zrodla.pobranie is not None:
             wiersze.extend(_wiersze_pobrania(wpis_zrodla.pobranie))
+        if wpis_zrodla.metadane:
+            wiersze.append("  Metadane źródła:")
+            wiersze.extend(
+                f"    {nazwa}: {wartosc}" for nazwa, wartosc in sorted(wpis_zrodla.metadane.items())
+            )
         if wpis_zrodla.komunikat_bledu:
             wiersze.append(f"  Komunikat błędu: {wpis_zrodla.komunikat_bledu}")
         wiersze.append("")

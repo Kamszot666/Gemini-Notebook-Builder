@@ -99,13 +99,20 @@ def ustal_uklad(
     )
 
 
-def utworz_katalogi(uklad: UkladProjektu) -> None:
-    """Tworzy katalog projektu i jego podkatalogi, jeżeli jeszcze nie istnieją."""
-    for katalog in (
+def utworz_katalogi(uklad: UkladProjektu, *, z_materialami_zrodlowymi: bool = True) -> None:
+    """Tworzy katalog projektu i jego podkatalogi, jeżeli jeszcze nie istnieją.
+
+    Podkatalog materiałów źródłowych powstaje tylko wtedy, gdy konfiguracja każe
+    zachowywać oryginały źródeł. Przy wyłączonym zachowywaniu oryginałów pusty
+    katalog byłby mylący dla użytkownika przeglądającego wyniki.
+    """
+    katalogi = [
         uklad.katalog_projektu,
-        uklad.materialy_zrodlowe,
         uklad.wyniki_posrednie,
         uklad.pliki_wynikowe,
         uklad.logi,
-    ):
+    ]
+    if z_materialami_zrodlowymi:
+        katalogi.insert(1, uklad.materialy_zrodlowe)
+    for katalog in katalogi:
         katalog.mkdir(parents=True, exist_ok=True)

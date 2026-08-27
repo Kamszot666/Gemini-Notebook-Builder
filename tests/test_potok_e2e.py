@@ -258,3 +258,24 @@ def test_plik_ponad_bezpieczny_limit_rozmiaru_jest_pominiety(tmp_path: Path) -> 
 
     manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
     assert [zrodlo["status"] for zrodlo in manifest["zrodla"]] == ["pominiete"]
+
+
+def test_wylaczone_zachowywanie_oryginalow_nie_tworzy_podkatalogu(tmp_path: Path) -> None:
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path, zachowuj_oryginaly=False)
+    wynik = przetworz_projekt(
+        _pozycje(), konfiguracja, nazwa_projektu="Test bez oryginałów", zegar=_zegar_krokowy()
+    )
+
+    assert wynik.liczba_przetworzonych == 4
+    assert not (wynik.katalog_projektu / "materialy_zrodlowe").exists()
+    assert list((wynik.katalog_projektu / "pliki_wynikowe").iterdir())
+
+
+def test_wlaczone_zachowywanie_oryginalow_zapisuje_materialy_zrodlowe(tmp_path: Path) -> None:
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path)
+    wynik = przetworz_projekt(
+        _pozycje(), konfiguracja, nazwa_projektu="Test z oryginałami", zegar=_zegar_krokowy()
+    )
+
+    materialy = wynik.katalog_projektu / "materialy_zrodlowe"
+    assert len(list(materialy.iterdir())) == 4

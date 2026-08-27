@@ -110,7 +110,7 @@ def przetworz_projekt(
     uklad = ustal_uklad(
         konfiguracja.katalog_wynikow, nazwa, wlasny_katalog_projektu=wlasny_katalog_projektu
     )
-    utworz_katalogi(uklad)
+    utworz_katalogi(uklad, z_materialami_zrodlowymi=konfiguracja.zachowuj_oryginaly)
 
     istniejacy_checkpoint = wczytaj(uklad.checkpoint)
     wznowiono = istniejacy_checkpoint is not None
@@ -300,7 +300,13 @@ class _Wykonanie:
         return znormalizuj(zamien_markdown_na_tekst(tekst))
 
     def _zachowaj_oryginal(self, pozycja: PozycjaWejsciowa, zrodlo: Zrodlo, tekst: str) -> None:
-        """Zachowuje oryginał źródła w podkatalogu materiałów źródłowych."""
+        """Zachowuje oryginał źródła w podkatalogu materiałów źródłowych.
+
+        Przy wyłączonym ustawieniu `zachowuj_oryginaly` nie powstaje ani plik,
+        ani sam podkatalog materiałów źródłowych.
+        """
+        if not self._konfiguracja.zachowuj_oryginaly:
+            return
         self._uklad.materialy_zrodlowe.mkdir(parents=True, exist_ok=True)
         rozszerzenie = pozycja.format_zrodla or _ROZSZERZENIE_ORYGINALU_TEKSTU
         cel = self._uklad.materialy_zrodlowe / f"{zrodlo.identyfikator_zrodla}.{rozszerzenie}"
@@ -421,6 +427,7 @@ def _nowy_checkpoint(
             "bezpieczny_limit_slow": str(konfiguracja.bezpieczny_limit_slow),
             "bezpieczny_limit_mb": str(konfiguracja.bezpieczny_limit_mb),
             "formaty_wynikowe": ",".join(konfiguracja.formaty_wynikowe),
+            "zachowuj_oryginaly": "tak" if konfiguracja.zachowuj_oryginaly else "nie",
         },
         czas_ostatniej_zmiany=moment.isoformat(),
     )

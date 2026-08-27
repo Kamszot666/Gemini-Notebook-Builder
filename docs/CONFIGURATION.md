@@ -53,6 +53,13 @@ Nazwa pola w pliku TOML, odpowiadająca zmienna środowiskowa oraz znaczenie:
    samego `txt` wyłącza generowanie wersji MD niezależnie od struktury dokumentu.
    W pliku TOML podaje się to jako listę, na przykład `["txt", "md"]`. W zmiennej
    środowiskowej jako wartości rozdzielone przecinkiem, na przykład `txt,md`.
+6. `zachowuj_oryginaly`, zmienna `GNB_ZACHOWUJ_ORYGINALY`. Decyduje, czy w
+   katalogu projektu ma powstawać podkatalog `materialy_zrodlowe` z kopią
+   każdego przetworzonego źródła. Domyślnie włączone. Po wyłączeniu ten
+   podkatalog w ogóle nie powstaje, a przetwarzanie przebiega tak samo.
+   W pliku TOML podaje się wartość logiczną, na przykład `zachowuj_oryginaly =
+   false`. W zmiennej środowiskowej przyjmowane są napisy `tak` i `nie`, `true`
+   i `false` oraz `1` i `0`, niezależnie od wielkości liter.
 
 ## Przykładowy plik konfiguracji
 
@@ -64,6 +71,7 @@ limit_zrodel = 100
 bezpieczny_limit_slow = 480000
 bezpieczny_limit_mb = 190
 formaty_wynikowe = ["txt", "md"]
+zachowuj_oryginaly = true
 ```
 
 Koniec przykładowego pliku konfiguracji.
@@ -71,6 +79,6 @@ Koniec przykładowego pliku konfiguracji.
 ## Błędy konfiguracji
 
 Uszkodzony plik TOML oraz niepoprawna wartość, na przykład litery w miejscu
-liczby albo nieznany format wynikowy, kończą się błędem trwałym z komunikatem po
-polsku. Aplikacja nie uruchamia wtedy przetwarzania, żeby nie pracować na
+liczby, nieznany format wynikowy albo napis, którego nie da się odczytać jako
+„tak” lub „nie”, kończą się błędem trwałym z komunikatem po polsku. Aplikacja nie uruchamia wtedy przetwarzania, żeby nie pracować na
 niepewnych ustawieniach.

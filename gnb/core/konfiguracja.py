@@ -6,9 +6,9 @@ z prefiksem ``GNB_``. Brak pliku konfiguracji nie jest błędem — obowiązują
 wtedy wartości domyślne.
 
 Obsługiwane są wyłącznie pola potrzebne w etapie pierwszym: katalog nadrzędny
-wyników, limit liczby źródeł, bezpieczny limit słów, bezpieczny limit megabajtów
-oraz lista formatów wynikowych. Pozostałe pola wymienione w sekcji jedenastej a
-pliku CLAUDE.md dojdą w kolejnych etapach.
+wyników, limit liczby źródeł, bezpieczny limit słów, bezpieczny limit megabajtów,
+lista formatów wynikowych oraz zachowywanie oryginałów źródeł. Pozostałe pola
+wymienione w sekcji jedenastej a pliku CLAUDE.md dojdą w kolejnych etapach.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ DOMYSLNY_LIMIT_ZRODEL = 100
 DOMYSLNY_BEZPIECZNY_LIMIT_SLOW = 480_000
 DOMYSLNY_BEZPIECZNY_LIMIT_MB = 190
 DOMYSLNE_FORMATY_WYNIKOWE: tuple[str, ...] = ("txt", "md")
+DOMYSLNE_ZACHOWYWANIE_ORYGINALOW = True
 
 NAZWA_KATALOGU_APLIKACJI_WINDOWS = "Gemini Notebook Builder"
 NAZWA_KATALOGU_APLIKACJI_XDG = "gemini-notebook-builder"
@@ -34,6 +35,11 @@ PREFIKS_ZMIENNYCH = "GNB_"
 
 _DOZWOLONE_FORMATY = ("txt", "md")
 
+# Napisy uznawane za prawdę i za fałsz w pliku konfiguracji oraz w zmiennych
+# środowiskowych. W pliku TOML można też podać wprost wartość logiczną.
+_WARTOSCI_PRAWDY = frozenset({"1", "tak", "true", "prawda", "on"})
+_WARTOSCI_FALSZU = frozenset({"0", "nie", "false", "falsz", "fałsz", "off"})
+
 # Mapowanie nazwy zmiennej środowiskowej na nazwę pola konfiguracji.
 _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
     PREFIKS_ZMIENNYCH + "KATALOG_WYNIKOW": "katalog_wynikow",
@@ -41,6 +47,7 @@ _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
     PREFIKS_ZMIENNYCH + "BEZPIECZNY_LIMIT_SLOW": "bezpieczny_limit_slow",
     PREFIKS_ZMIENNYCH + "BEZPIECZNY_LIMIT_MB": "bezpieczny_limit_mb",
     PREFIKS_ZMIENNYCH + "FORMATY_WYNIKOWE": "formaty_wynikowe",
+    PREFIKS_ZMIENNYCH + "ZACHOWUJ_ORYGINALY": "zachowuj_oryginaly",
 }
 _ZNANE_POLA = frozenset(_ZMIENNE_SRODOWISKOWE.values())
 
@@ -66,6 +73,7 @@ class Konfiguracja:
     bezpieczny_limit_slow: int = DOMYSLNY_BEZPIECZNY_LIMIT_SLOW
     bezpieczny_limit_mb: int = DOMYSLNY_BEZPIECZNY_LIMIT_MB
     formaty_wynikowe: tuple[str, ...] = DOMYSLNE_FORMATY_WYNIKOWE
+    zachowuj_oryginaly: bool = DOMYSLNE_ZACHOWYWANIE_ORYGINALOW
 
 
 def sciezka_pliku_konfiguracji(srodowisko: Mapping[str, str] | None = None) -> Path:
@@ -117,6 +125,9 @@ def wczytaj_konfiguracje(
             scalone, "bezpieczny_limit_mb", domyslna.bezpieczny_limit_mb
         ),
         formaty_wynikowe=_jako_formaty(scalone, domyslna.formaty_wynikowe),
+        zachowuj_oryginaly=_jako_prawda_falsz(
+            scalone, "zachowuj_oryginaly", domyslna.zachowuj_oryginaly
+        ),
     )
 
 
@@ -158,6 +169,30 @@ def _jako_liczba(scalone: Mapping[str, object], pole: str, domyslna: int) -> int
     if liczba <= 0:
         raise BladTrwaly(f"Ustawienie „{pole}” musi być liczbą dodatnią, a jest {liczba}.")
     return liczba
+
+
+def _jako_prawda_falsz(scalone: Mapping[str, object], pole: str, domyslna: bool) -> bool:
+    """Zamienia wartość pola na wartość logiczną albo zgłasza błąd trwały.
+
+    W pliku TOML przyjmowana jest wprost wartość logiczna. W zmiennej
+    środowiskowej oraz w polu tekstowym przyjmowane są napisy „tak” i „nie”,
+    „true” i „false”, „1” i „0” oraz kilka ich odpowiedników, niezależnie od
+    wielkości liter.
+    """
+    if pole not in scalone:
+        return domyslna
+    surowa = scalone[pole]
+    if isinstance(surowa, bool):
+        return surowa
+    napis = str(surowa).strip().lower()
+    if napis in _WARTOSCI_PRAWDY:
+        return True
+    if napis in _WARTOSCI_FALSZU:
+        return False
+    raise BladTrwaly(
+        f"Ustawienie „{pole}” musi być wartością logiczną, na przykład „tak” albo „nie”, "
+        f"a jest „{surowa}”."
+    )
 
 
 def _jako_formaty(scalone: Mapping[str, object], domyslne: tuple[str, ...]) -> tuple[str, ...]:

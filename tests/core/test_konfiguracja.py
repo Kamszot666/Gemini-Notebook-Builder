@@ -68,3 +68,22 @@ def test_nieznany_format_wynikowy_daje_blad_trwaly(tmp_path: Path) -> None:
         wczytaj_konfiguracje(
             tmp_path / "nie_ma.toml", srodowisko={"GNB_FORMATY_WYNIKOWE": "txt,pdf"}
         )
+
+
+def test_zachowuj_oryginaly_jest_domyslnie_wlaczone_i_da_sie_wylaczyc(tmp_path: Path) -> None:
+    plik = tmp_path / "konfiguracja.toml"
+    plik.write_text("limit_zrodel = 50\n", encoding="utf-8")
+
+    assert wczytaj_konfiguracje(plik, {}).zachowuj_oryginaly is True
+
+    plik.write_text("zachowuj_oryginaly = false\n", encoding="utf-8")
+    assert wczytaj_konfiguracje(plik, {}).zachowuj_oryginaly is False
+
+    assert wczytaj_konfiguracje(plik, {"GNB_ZACHOWUJ_ORYGINALY": "tak"}).zachowuj_oryginaly is True
+
+
+def test_niepoprawna_wartosc_logiczna_konczy_sie_bledem(tmp_path: Path) -> None:
+    plik = tmp_path / "konfiguracja.toml"
+    plik.write_text('zachowuj_oryginaly = "moze"\n', encoding="utf-8")
+    with pytest.raises(BladTrwaly, match="wartością logiczną"):
+        wczytaj_konfiguracje(plik, {})

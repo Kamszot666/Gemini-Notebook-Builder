@@ -5,6 +5,10 @@ i znaków sterujących, nazw zarezerwowanych systemu Windows oraz kropek i spacj
 na końcu nazwy, a także ograniczenie długości wobec granicy dwustu sześćdziesięciu
 znaków całej ścieżki.
 
+Polskie znaki diakrytyczne są zachowywane, a nie zamieniane na odpowiedniki bez
+ogonków. Nazwy plików wynikowych stają się nazwami źródeł w notatniku i są
+odsłuchiwane czytnikiem ekranu, więc transliteracja pogorszyłaby ich odczyt.
+
 Funkcje w tym module nie tworzą katalogów ani nie dotykają dysku. Wyłącznie
 przetwarzają napisy.
 """
@@ -27,7 +31,11 @@ _NAZWY_ZAREZERWOWANE = frozenset(
 
 MAKSYMALNA_DLUGOSC_NAZWY = 100
 MAKSYMALNA_LICZBA_SLOW_W_NAZWIE = 8
+MAKSYMALNA_DLUGOSC_TRZONU_NAZWY_PLIKU = 60
+DLUGOSC_SKROTU_W_NAZWIE_PLIKU = 8
+ROZDZIELACZ_SKROTU_W_NAZWIE_PLIKU = "__"
 _NAZWA_AWARYJNA_PROJEKTU = "projekt"
+_NAZWA_AWARYJNA_ZRODLA = "zrodlo"
 
 
 def _oczysc(nazwa: str) -> str:
@@ -90,3 +98,55 @@ def bezpieczna_nazwa_pliku(propozycja: str, *, nazwa_awaryjna: str) -> str:
     if not oczyszczona or oczyszczona.upper() in _NAZWY_ZAREZERWOWANE:
         return nazwa_awaryjna
     return oczyszczona
+
+
+def nazwa_pliku_wynikowego(tytul: str | None, identyfikator_zrodla: str) -> str:
+    """Buduje nazwę pliku wynikowego bez rozszerzenia: trzon tytułu i skrót źródła.
+
+    Nazwa ma postać trzonu tytułu, dwóch podkreśleń i pierwszych ośmiu znaków
+    skrótu z identyfikatora źródła, na przykład
+    ``baza_wiedzy_dla_asystenta_ai__3f2a9c1d``. Skrót zapewnia unikalność nazwy
+    bez licznika kolizji i pozwala powiązać plik z wpisem w manifeście bez
+    otwierania go. Nazwa jest stabilna między uruchomieniami, bo identyfikator
+    źródła jest wyprowadzany deterministycznie z jego treści, a nie z kolejności
+    podania źródeł.
+    """
+    trzon = bezpieczna_nazwa_pliku(
+        _trzon_z_tytulu(tytul or ""),
+        nazwa_awaryjna=_czlon_typu_z_identyfikatora(identyfikator_zrodla),
+    )
+    skrot = _skrot_z_identyfikatora(identyfikator_zrodla)
+    return f"{trzon}{ROZDZIELACZ_SKROTU_W_NAZWIE_PLIKU}{skrot}"
+
+
+def _trzon_z_tytulu(tytul: str) -> str:
+    """Zamienia tytuł na trzon nazwy pliku: małe litery, słowa łączone podkreśleniem.
+
+    Trzon jest przycinany do sześćdziesięciu znaków zawsze na granicy słowa, więc
+    ostatnie słowo, które się nie mieści, jest pomijane w całości. Jedynym
+    wyjątkiem jest tytuł, którego już pierwsze słowo przekracza tę długość —
+    wtedy to słowo jest obcinane, bo inaczej trzon byłby pusty.
+    """
+    slowa = _SLOWA.findall(tytul.lower())
+    trzon = ""
+    for slowo in slowa:
+        kandydat = f"{trzon}_{slowo}" if trzon else slowo
+        if len(kandydat) > MAKSYMALNA_DLUGOSC_TRZONU_NAZWY_PLIKU:
+            break
+        trzon = kandydat
+    if not trzon and slowa:
+        trzon = slowa[0][:MAKSYMALNA_DLUGOSC_TRZONU_NAZWY_PLIKU]
+    return _WIELE_PODKRESLEN.sub("_", trzon).strip("_")
+
+
+def _czlon_typu_z_identyfikatora(identyfikator_zrodla: str) -> str:
+    """Zwraca człon typu źródła z identyfikatora, używany gdy tytuł jest pusty."""
+    czlon = identyfikator_zrodla.rsplit("-", 1)[0].strip()
+    return czlon if czlon else _NAZWA_AWARYJNA_ZRODLA
+
+
+def _skrot_z_identyfikatora(identyfikator_zrodla: str) -> str:
+    """Zwraca początek skrótu z identyfikatora źródła, czyli człon po ostatnim myślniku."""
+    czlon = identyfikator_zrodla.rsplit("-", 1)[-1].strip()
+    skrot = (czlon if czlon else identyfikator_zrodla.strip())[:DLUGOSC_SKROTU_W_NAZWIE_PLIKU]
+    return skrot if skrot else _NAZWA_AWARYJNA_ZRODLA

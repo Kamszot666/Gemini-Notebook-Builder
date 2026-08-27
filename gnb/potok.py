@@ -23,7 +23,7 @@ from pathlib import Path
 
 from gnb.core.konfiguracja import Konfiguracja
 from gnb.core.model import Zrodlo
-from gnb.core.nazwy import bezpieczna_nazwa_pliku, wygeneruj_nazwe_projektu
+from gnb.core.nazwy import nazwa_pliku_wynikowego, wygeneruj_nazwe_projektu
 from gnb.core.stale import StatusZrodla, TypWejscia
 from gnb.core.wyjatki import BladGnb, PrzekroczonoLimit
 from gnb.extractors.bazowy import RejestrEkstraktorow, domyslny_rejestr
@@ -176,11 +176,6 @@ class _Wykonanie:
         self._log = log
         self._rejestr = rejestr
         self._zegar = zegar
-        self._uzyte_nazwy: set[str] = {
-            stan.nazwa_bazowa_wyniku
-            for stan in checkpoint.zrodla.values()
-            if stan.nazwa_bazowa_wyniku is not None
-        }
 
     def przetworz(self, pozycja: PozycjaWejsciowa) -> None:
         """Przetwarza jedno wejście, aktualizując checkpoint i logi."""
@@ -229,7 +224,7 @@ class _Wykonanie:
             )
 
         decyzja = regula_md.ocen(dokument)
-        nazwa_bazowa = self._nazwa_bazowa(dokument.tytul, identyfikator)
+        nazwa_bazowa = nazwa_pliku_wynikowego(dokument.tytul, identyfikator)
         pliki = zapisz_wyniki(
             self._uklad.pliki_wynikowe,
             nazwa_bazowa,
@@ -289,18 +284,6 @@ class _Wykonanie:
                 return
         with cel.open("w", encoding="utf-8", newline="\n") as plik:
             plik.write(tekst)
-
-    def _nazwa_bazowa(self, tytul: str | None, identyfikator: str) -> str:
-        propozycja = bezpieczna_nazwa_pliku(
-            tytul if tytul else identyfikator, nazwa_awaryjna=identyfikator
-        )
-        nazwa = propozycja
-        licznik = 2
-        while nazwa in self._uzyte_nazwy:
-            nazwa = f"{propozycja}-{licznik}"
-            licznik += 1
-        self._uzyte_nazwy.add(nazwa)
-        return nazwa
 
     def _liczba_aktywnych(self) -> int:
         return sum(

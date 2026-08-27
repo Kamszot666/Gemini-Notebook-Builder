@@ -51,6 +51,29 @@ Dzięki temu z pliku TXT nigdy nie powstaje wersja MD.
 Decyzja o wygenerowaniu wersji MD wraz z listą spełnionych warunków jest
 zapisywana w manifeście.
 
+## Nazwy plików wynikowych
+
+Nazwa pliku wynikowego składa się z trzonu tytułu, dwóch podkreśleń i pierwszych
+ośmiu znaków skrótu z identyfikatora źródła, na przykład
+`baza_wiedzy_dla_asystenta_ai__3f2a9c1d.txt`.
+
+Trzon powstaje z tytułu dokumentu: małe litery, słowa łączone podkreśleniem,
+długość najwyżej sześćdziesiąt znaków, przycięcie zawsze na granicy słowa.
+Jedynym wyjątkiem jest tytuł, w którym już pierwsze słowo przekracza tę długość —
+wtedy to słowo zostaje obcięte, bo inaczej trzon byłby pusty. Gdy dokument nie ma
+tytułu albo tytuł po oczyszczeniu jest pusty lub zarezerwowany w systemie
+Windows, trzonem staje się typ źródła, na przykład `tekst_wklejony__8d1b80c0`.
+
+Polskie znaki diakrytyczne są zachowywane. Nazwa pliku staje się nazwą źródła
+w notatniku i jest odsłuchiwana czytnikiem ekranu, więc zamiana liter na
+odpowiedniki bez ogonków pogorszyłaby jej odczyt.
+
+Skrót na końcu nazwy pełni dwie role. Wiąże plik z wpisem w manifeście bez
+otwierania pliku oraz zapewnia unikalność nazwy, dzięki czemu dwa różne źródła
+o identycznym tytule nie kolidują i nie jest potrzebny żaden licznik. Nazwa jest
+stabilna między uruchomieniami, ponieważ identyfikator źródła jest wyprowadzany
+z treści źródła, a nie z kolejności jego podania.
+
 ## Parser Markdown
 
 Struktura plików Markdown jest rozpoznawana biblioteką `markdown-it-py`

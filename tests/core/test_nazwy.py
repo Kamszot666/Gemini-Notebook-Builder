@@ -6,6 +6,7 @@ import pytest
 
 from gnb.core.nazwy import (
     bezpieczna_nazwa_pliku,
+    nazwa_pliku_wynikowego,
     sanityzuj_nazwe_projektu,
     wygeneruj_nazwe_projektu,
 )
@@ -50,3 +51,46 @@ def test_bezpieczna_nazwa_pliku_zachowuje_poprawny_tytul() -> None:
     assert (
         bezpieczna_nazwa_pliku("Notatka o kodowaniu", nazwa_awaryjna="x") == "Notatka o kodowaniu"
     )
+
+
+def test_nazwa_pliku_wynikowego_laczy_trzon_tytulu_ze_skrotem_zrodla() -> None:
+    nazwa = nazwa_pliku_wynikowego(
+        "Baza wiedzy dla asystenta AI", "plik_tekstowy-3f2a9c1d0e8b7a65"
+    )
+    assert nazwa == "baza_wiedzy_dla_asystenta_ai__3f2a9c1d"
+
+
+def test_nazwa_pliku_wynikowego_zachowuje_polskie_znaki() -> None:
+    nazwa = nazwa_pliku_wynikowego("Zażółć gęślą jaźń", "plik_tekstowy-abcdef0123456789")
+    assert nazwa == "zażółć_gęślą_jaźń__abcdef01"
+
+
+def test_nazwa_pliku_wynikowego_tnie_trzon_na_granicy_slowa() -> None:
+    tytul = (
+        "Baza wiedzy dla asystenta AI jest tym lepsza, im mniej zawiera powtórzeń "
+        "i im dokładniej wiadomo, skąd pochodzi każdy fragment"
+    )
+    nazwa = nazwa_pliku_wynikowego(tytul, "plik_tekstowy-7be0e41de03fb311")
+
+    trzon = nazwa.rsplit("__", 1)[0]
+    assert len(trzon) <= 60
+    assert trzon == "baza_wiedzy_dla_asystenta_ai_jest_tym_lepsza_im_mniej"
+    assert nazwa.endswith("__7be0e41d")
+
+
+def test_nazwa_pliku_wynikowego_uzywa_typu_zrodla_gdy_brak_tytulu() -> None:
+    assert (
+        nazwa_pliku_wynikowego(None, "tekst_wklejony-8d1b80c0b30c0cd4")
+        == "tekst_wklejony__8d1b80c0"
+    )
+
+
+def test_nazwa_pliku_wynikowego_nie_powtarza_sie_dla_roznych_zrodel() -> None:
+    pierwsza = nazwa_pliku_wynikowego("Ten sam tytuł", "plik_tekstowy-1111111111111111")
+    druga = nazwa_pliku_wynikowego("Ten sam tytuł", "plik_tekstowy-2222222222222222")
+    assert pierwsza != druga
+
+
+def test_nazwa_pliku_wynikowego_odrzuca_nazwe_zarezerwowana_windows() -> None:
+    nazwa = nazwa_pliku_wynikowego("CON", "plik_tekstowy-99887766aabbccdd")
+    assert nazwa == "plik_tekstowy__99887766"

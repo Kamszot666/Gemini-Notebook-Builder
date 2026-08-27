@@ -38,7 +38,8 @@ kończy się kontrolowanym błędem zapisanym w logu, manifeście i raporcie.
   identyfikator źródła w postaci prefiksu typu i pierwszych szesnastu znaków
   sumy kontrolnej pochodzenia.
 - `gnb/core/nazwy.py` — sanityzacja nazw projektów i plików do postaci
-  bezpiecznej dla Windows.
+  bezpiecznej dla Windows oraz budowa nazwy pliku wynikowego z trzonu tytułu
+  i skrótu identyfikatora źródła. Zasadę opisuje `docs/FORMATS.md`.
 
 ## Pakiet gnb.ingestion
 

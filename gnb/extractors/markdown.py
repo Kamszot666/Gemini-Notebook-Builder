@@ -24,8 +24,13 @@ _MAKSYMALNA_DLUGOSC_TYTULU = 80
 _TYPY_ZRODLA_MARKDOWN = (TypZrodla.PLIK_TEKSTOWY, TypZrodla.TEKST_WKLEJONY)
 
 
-def _utworz_parser() -> MarkdownIt:
-    """Buduje parser CommonMark z włączoną regułą tabel GFM."""
+def utworz_parser() -> MarkdownIt:
+    """Buduje parser CommonMark z włączoną regułą tabel GFM.
+
+    Funkcja jest publiczna, ponieważ tej samej konfiguracji parsera używa moduł
+    `gnb.output.tekst_bez_znacznikow`. Obie ścieżki muszą widzieć identyczną
+    strukturę dokumentu, w tym tabele, których CommonMark sam nie obejmuje.
+    """
     return MarkdownIt("commonmark").enable("table")
 
 
@@ -33,9 +38,10 @@ class EkstraktorMarkdown:
     """Ekstraktor Markdown dla plików MD i tekstu wklejonego zadeklarowanego jako Markdown."""
 
     metoda = "markdown"
+    tekst_zawiera_znaczniki = True
 
     def __init__(self) -> None:
-        self._parser = _utworz_parser()
+        self._parser = utworz_parser()
 
     def obsluguje(self, typ_zrodla: TypZrodla, format_zrodla: str) -> bool:
         return typ_zrodla in _TYPY_ZRODLA_MARKDOWN and format_zrodla in _FORMATY_MARKDOWN

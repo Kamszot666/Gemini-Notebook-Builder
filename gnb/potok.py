@@ -23,10 +23,10 @@ from pathlib import Path
 
 from gnb.core.konfiguracja import Konfiguracja
 from gnb.core.model import Zrodlo
-from gnb.core.nazwy import bezpieczna_nazwa_pliku, wygeneruj_nazwe_projektu
+from gnb.core.nazwy import nazwa_pliku_wynikowego, wygeneruj_nazwe_projektu
 from gnb.core.stale import StatusZrodla, TypWejscia
 from gnb.core.wyjatki import BladGnb, PrzekroczonoLimit
-from gnb.extractors.bazowy import RejestrEkstraktorow, domyslny_rejestr
+from gnb.extractors.bazowy import Ekstraktor, RejestrEkstraktorow, domyslny_rejestr
 from gnb.ingestion.wejscie import (
     PozycjaWejsciowa,
     identyfikator_awaryjny,
@@ -47,12 +47,14 @@ from gnb.logging_pl.dziennik import (
     ZDARZENIE_ZRODLO_PRZYJETE,
     DziennikSzczegolowy,
     DziennikWazny,
+    teraz_lokalny,
 )
-from gnb.normalization.normalizacja import zbuduj_dokument_znormalizowany
+from gnb.normalization.normalizacja import zbuduj_dokument_znormalizowany, znormalizuj
 from gnb.output import regula_md
 from gnb.output.manifest import WERSJA_SCHEMATU as WERSJA_SCHEMATU_MANIFESTU
 from gnb.output.manifest import Manifest, WpisWyniku, WpisZrodla, zapisz_manifest
 from gnb.output.raport import PodsumowanieProjektu, zapisz_raport, zbuduj_raport
+from gnb.output.tekst_bez_znacznikow import zamien_markdown_na_tekst
 from gnb.output.zapis import zapisz_wyniki
 from gnb.persistence.checkpoint import WERSJA_SCHEMATU as WERSJA_SCHEMATU_CHECKPOINTU
 from gnb.persistence.checkpoint import Checkpoint, StanWyniku, StanZrodla, wczytaj, zapisz
@@ -91,9 +93,16 @@ def przetworz_projekt(
     nazwa_projektu: str | None = None,
     wlasny_katalog_projektu: Path | None = None,
     zegar: Callable[[], datetime] = _teraz_utc,
+    zegar_lokalny: Callable[[], datetime] = teraz_lokalny,
     rejestr: RejestrEkstraktorow | None = None,
 ) -> WynikPrzetwarzania:
-    """Przetwarza listę wejść w ramach jednego projektu i zwraca podsumowanie."""
+    """Przetwarza listę wejść w ramach jednego projektu i zwraca podsumowanie.
+
+    Argument `zegar` podaje czas UTC używany w checkpoincie, manifeście i logu
+    szczegółowym. Argument `zegar_lokalny` podaje czas lokalny systemu, którym
+    prowadzony jest przeznaczony dla użytkownika plik ``log_wazne.txt``. Oba
+    zegary można podmienić w testach.
+    """
     rejestr = rejestr if rejestr is not None else domyslny_rejestr()
     czas_startu = zegar()
 
@@ -101,13 +110,13 @@ def przetworz_projekt(
     uklad = ustal_uklad(
         konfiguracja.katalog_wynikow, nazwa, wlasny_katalog_projektu=wlasny_katalog_projektu
     )
-    utworz_katalogi(uklad)
+    utworz_katalogi(uklad, z_materialami_zrodlowymi=konfiguracja.zachowuj_oryginaly)
 
     istniejacy_checkpoint = wczytaj(uklad.checkpoint)
     wznowiono = istniejacy_checkpoint is not None
     checkpoint = istniejacy_checkpoint or _nowy_checkpoint(uklad, konfiguracja, zegar())
 
-    dziennik_wazny = DziennikWazny(uklad.logi / NAZWA_LOGU_WAZNEGO, zegar)
+    dziennik_wazny = DziennikWazny(uklad.logi / NAZWA_LOGU_WAZNEGO, zegar_lokalny)
     with DziennikSzczegolowy(
         uklad.logi / NAZWA_LOGU_SZCZEGOLOWEGO, uklad.identyfikator_projektu
     ) as log:
@@ -176,11 +185,6 @@ class _Wykonanie:
         self._log = log
         self._rejestr = rejestr
         self._zegar = zegar
-        self._uzyte_nazwy: set[str] = {
-            stan.nazwa_bazowa_wyniku
-            for stan in checkpoint.zrodla.values()
-            if stan.nazwa_bazowa_wyniku is not None
-        }
 
     def przetworz(self, pozycja: PozycjaWejsciowa) -> None:
         """Przetwarza jedno wejście, aktualizując checkpoint i logi."""
@@ -206,6 +210,12 @@ class _Wykonanie:
 
         try:
             self._przetworz_zrodlo(pozycja, zrodlo)
+        except PrzekroczonoLimit as blad:
+            # Przekroczenie limitu nie jest awarią, tylko przypadkiem jeszcze
+            # nieobsłużonym: podział zbyt dużego źródła to zadanie etapu
+            # szóstego. Taki sam status dostaje przekroczenie limitu liczby
+            # źródeł, więc obie sytuacje są opisane w ten sam sposób.
+            self._pomin(zrodlo, pozycja, blad.komunikat)
         except BladGnb as blad:
             self._zapisz_blad_zrodla(zrodlo, pozycja, blad)
 
@@ -229,7 +239,7 @@ class _Wykonanie:
             )
 
         decyzja = regula_md.ocen(dokument)
-        nazwa_bazowa = self._nazwa_bazowa(dokument.tytul, identyfikator)
+        nazwa_bazowa = nazwa_pliku_wynikowego(dokument.tytul, identyfikator)
         pliki = zapisz_wyniki(
             self._uklad.pliki_wynikowe,
             nazwa_bazowa,
@@ -237,6 +247,7 @@ class _Wykonanie:
             znormalizowany,
             decyzja,
             formaty_wlaczone=self._konfiguracja.formaty_wynikowe,
+            tekst_txt=self._tekst_dla_wersji_txt(ekstraktor, znormalizowany.tekst),
         )
 
         wyniki_stanu = [
@@ -275,8 +286,27 @@ class _Wykonanie:
             f"{'tak' if decyzja.generuj_md else 'nie'}.",
         )
 
+    def _tekst_dla_wersji_txt(self, ekstraktor: Ekstraktor, tekst: str) -> str | None:
+        """Zwraca treść wersji TXT, gdy ma się różnić od treści wersji MD.
+
+        Dla ekstraktora zwracającego tekst ze znacznikami wersja TXT powstaje
+        przez przepisanie dokumentu bez znaczników, a jej treść jest ponownie
+        normalizowana, żeby oba pliki wynikowe przechodziły te same reguły.
+        Dla tekstu już czystego zwracana jest wartość pusta, co oznacza „użyj
+        tekstu znormalizowanego bez zmian”.
+        """
+        if not ekstraktor.tekst_zawiera_znaczniki:
+            return None
+        return znormalizuj(zamien_markdown_na_tekst(tekst))
+
     def _zachowaj_oryginal(self, pozycja: PozycjaWejsciowa, zrodlo: Zrodlo, tekst: str) -> None:
-        """Zachowuje oryginał źródła w podkatalogu materiałów źródłowych."""
+        """Zachowuje oryginał źródła w podkatalogu materiałów źródłowych.
+
+        Przy wyłączonym ustawieniu `zachowuj_oryginaly` nie powstaje ani plik,
+        ani sam podkatalog materiałów źródłowych.
+        """
+        if not self._konfiguracja.zachowuj_oryginaly:
+            return
         self._uklad.materialy_zrodlowe.mkdir(parents=True, exist_ok=True)
         rozszerzenie = pozycja.format_zrodla or _ROZSZERZENIE_ORYGINALU_TEKSTU
         cel = self._uklad.materialy_zrodlowe / f"{zrodlo.identyfikator_zrodla}.{rozszerzenie}"
@@ -289,18 +319,6 @@ class _Wykonanie:
                 return
         with cel.open("w", encoding="utf-8", newline="\n") as plik:
             plik.write(tekst)
-
-    def _nazwa_bazowa(self, tytul: str | None, identyfikator: str) -> str:
-        propozycja = bezpieczna_nazwa_pliku(
-            tytul if tytul else identyfikator, nazwa_awaryjna=identyfikator
-        )
-        nazwa = propozycja
-        licznik = 2
-        while nazwa in self._uzyte_nazwy:
-            nazwa = f"{propozycja}-{licznik}"
-            licznik += 1
-        self._uzyte_nazwy.add(nazwa)
-        return nazwa
 
     def _liczba_aktywnych(self) -> int:
         return sum(
@@ -344,23 +362,35 @@ class _Wykonanie:
         )
 
     def _zapisz_blad_wejscia(self, pozycja: PozycjaWejsciowa, blad: BladGnb) -> None:
+        """Zapisuje wejście, którego nie dało się zwalidować, jako błąd albo pominięcie.
+
+        Wejście przekraczające limit dostaje status „pominiete”, tak samo jak
+        źródło przekraczające limit słów. Pozostałe błędy walidacji, na przykład
+        brak pliku albo nieobsługiwany format, pozostają statusem „blad”.
+        """
         identyfikator = identyfikator_awaryjny(pozycja)
         pochodzenie = (
             Path(pozycja.wejscie.wartosc).name
             if pozycja.wejscie.typ_wejscia is TypWejscia.PLIK
             else "tekst wklejony"
         )
+        pominiecie = isinstance(blad, PrzekroczonoLimit)
         self._checkpoint.zrodla[identyfikator] = StanZrodla(
             identyfikator=identyfikator,
             typ=pozycja.wejscie.typ_wejscia.value,
             pochodzenie=pochodzenie,
             checksum="",
             format_zrodla=pozycja.format_zrodla,
-            status=StatusZrodla.BLAD.value,
+            status=(StatusZrodla.POMINIETE if pominiecie else StatusZrodla.BLAD).value,
             komunikat_bledu=blad.komunikat,
         )
         self._zapisz_checkpoint()
-        self._dziennik_wazny.zapisz(ZDARZENIE_ZRODLO_BLAD)
+        self._dziennik_wazny.zapisz(
+            ZDARZENIE_ZRODLO_POMINIETE if pominiecie else ZDARZENIE_ZRODLO_BLAD
+        )
+        if pominiecie:
+            self._loguj(logging.WARNING, identyfikator, f"Pominięto wejście: {blad.komunikat}")
+            return
         self._loguj(logging.ERROR, identyfikator, f"Błąd wejścia: {blad.komunikat}")
 
     def _zapisz_checkpoint(self) -> None:
@@ -397,6 +427,7 @@ def _nowy_checkpoint(
             "bezpieczny_limit_slow": str(konfiguracja.bezpieczny_limit_slow),
             "bezpieczny_limit_mb": str(konfiguracja.bezpieczny_limit_mb),
             "formaty_wynikowe": ",".join(konfiguracja.formaty_wynikowe),
+            "zachowuj_oryginaly": "tak" if konfiguracja.zachowuj_oryginaly else "nie",
         },
         czas_ostatniej_zmiany=moment.isoformat(),
     )

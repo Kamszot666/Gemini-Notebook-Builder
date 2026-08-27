@@ -137,7 +137,7 @@ def _zrodlo_z_pliku(
     if rozmiar > limit_bajtow:
         raise PrzekroczonoLimit(
             f"Plik {sciezka.name} ma {rozmiar} bajtów, ponad bezpieczny limit "
-            f"{limit_bajtow} bajtów."
+            f"{limit_bajtow} bajtów. Podział zbyt dużego źródła to zadanie etapu szóstego."
         )
     suma = suma_kontrolna_pliku(sciezka)
     return Zrodlo(

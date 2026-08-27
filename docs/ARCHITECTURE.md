@@ -38,7 +38,8 @@ kończy się kontrolowanym błędem zapisanym w logu, manifeście i raporcie.
   identyfikator źródła w postaci prefiksu typu i pierwszych szesnastu znaków
   sumy kontrolnej pochodzenia.
 - `gnb/core/nazwy.py` — sanityzacja nazw projektów i plików do postaci
-  bezpiecznej dla Windows.
+  bezpiecznej dla Windows oraz budowa nazwy pliku wynikowego z trzonu tytułu
+  i skrótu identyfikatora źródła. Zasadę opisuje `docs/FORMATS.md`.
 
 ## Pakiet gnb.ingestion
 
@@ -66,6 +67,8 @@ kończy się kontrolowanym błędem zapisanym w logu, manifeście i raporcie.
 
 - `gnb/output/regula_md.py` — deterministyczna reguła wyboru między TXT a MD.
 - `gnb/output/zapis.py` — zapis TXT zawsze, MD warunkowo, w UTF-8 bez BOM z LF.
+- `gnb/output/tekst_bez_znacznikow.py` — przepisanie Markdown na czysty tekst
+  z zachowaną strukturą, używane do wersji TXT źródeł markdownowych.
 - `gnb/output/manifest.py` — `manifest.json` jako źródło prawdy i `manifest.txt`
   jako czytelny widok.
 - `gnb/output/raport.py` — raport końcowy jako zwykły tekst.
@@ -81,8 +84,11 @@ kończy się kontrolowanym błędem zapisanym w logu, manifeście i raporcie.
 ## Pakiet gnb.logging_pl
 
 - `gnb/logging_pl/dziennik.py` — `log_wazne.txt` w formacie
-  `ZDARZENIE|Godzina:Minuta` z wierszem daty `--- RRRR-MM-DD ---` na początku
-  dnia i po uruchomieniu, oraz `log_szczegolowy.txt` na module `logging`.
+  `ZDARZENIE|Godzina:Minuta` z wierszem daty `--- RRRR-MM-DD (czas lokalny) ---`
+  na początku dnia i po uruchomieniu, oraz `log_szczegolowy.txt` na module
+  `logging`. Log ważny jest prowadzony w czasie lokalnym systemu, ponieważ czyta
+  go użytkownik. Log szczegółowy, manifest i checkpoint są prowadzone w czasie
+  UTC jako dane techniczne.
 
 ## Wiersz poleceń
 

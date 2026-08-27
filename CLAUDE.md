@@ -92,14 +92,19 @@ python -m gnb.cli przetworz --projekt NAZWA --plik SCIEZKA --tekst TRESC --tekst
 python -m gnb.cli przetworz --lista-url SCIEZKA --sprawdz-liste
 python -m gnb.cli pamiec
 python -m gnb.cli pamiec --wyczysc
-pytest -q
-pytest -q -m "not siec and not wolne"
-ruff check .
-ruff format .
-mypy gnb
+python -m pytest -q
+python -m pytest -q -m "not siec and not wolne"
+python -m pytest -m siec
+python -m ruff check .
+python -m ruff format .
+python -m mypy gnb
 ```
 
 Koniec bloku komend uruchamiania i testów.
+
+Narzędzia deweloperskie uruchamiaj przez `python -m`, a nie przez ich własne pliki wykonywalne z katalogu `Scripts`. Nie jest to ozdobnik i nie skracaj tego zapisu. Pliki takie jak `pytest.exe` nie są programami, tylko nakładkami generowanymi lokalnie przez `pip` w momencie instalacji. Nie mają podpisu cyfrowego ani reputacji w chmurze Microsoftu, ponieważ powstają na jednym komputerze, więc kontrola aplikacji Windows potrafi je zablokować. Zdarzyło się to w tym projekcie dwa razy: przy bibliotece DLL wymaganej przez nowszą wersję mypy oraz przy `pytest.exe`, którego nakładka została przepisana podczas instalacji zależności etapu trzeciego. Wywołanie `python -m` uruchamia podpisany `python.exe` i ładuje narzędzie jako moduł, więc kod wykonuje się identycznie.
+
+Nie jest to obchodzenie zabezpieczenia w rozumieniu sekcji trzeciej. Ta zasada dotyczy paywalli, logowania i zabezpieczeń treści, a nie sposobu uruchamiania własnego narzędzia deweloperskiego.
 
 Zasady dotyczące komend:
 
@@ -444,7 +449,7 @@ Kolejność jest wiążąca.
 
 1. Na początku etapu utwórz gałąź funkcjonalną z aktualnego `main`, o nazwie w postaci `etap-NN-krotki-opis`, na przykład `etap-01-pipeline-tekstowy`. Nie pracuj bezpośrednio na `main`.
 2. W trakcie etapu rób małe, tematyczne commity z wiadomościami po polsku w trybie rozkazującym.
-3. Przed wysłaniem uruchom komplet kontroli: `ruff check .`, `ruff format --check .`, `mypy gnb` oraz `pytest -q -m "not siec and not wolne"`. Wszystkie muszą przejść.
+3. Przed wysłaniem uruchom komplet kontroli: `python -m ruff check .`, `python -m ruff format --check .`, `python -m mypy gnb` oraz `python -m pytest -q -m "not siec and not wolne"`. Wszystkie muszą przejść. Postać `python -m` jest obowiązkowa z powodu opisanego w sekcji piątej.
 4. Jeżeli którakolwiek kontrola nie przechodzi, nie wysyłaj niczego. Napraw problem i powtórz krok trzeci. Wysłanie kodu z czerwonymi testami jest złamaniem tej procedury.
 5. Sprawdź, czy do commitów nie trafiło nic, co nie powinno być publiczne: sekrety, tokeny, bezwzględne ścieżki z nazwą konta użytkownika, prywatne materiały źródłowe, katalog wyników.
 6. Wyślij gałąź poleceniem `git push -u origin nazwa-galezi`.

@@ -21,6 +21,7 @@ class EkstraktorTekstu:
     """Ekstraktor tekstu płaskiego dla tekstu wklejonego i plików TXT."""
 
     metoda = "tekst_plaski"
+    tekst_zawiera_znaczniki = False
 
     def obsluguje(self, typ_zrodla: TypZrodla, format_zrodla: str) -> bool:
         if typ_zrodla is TypZrodla.PLIK_TEKSTOWY:

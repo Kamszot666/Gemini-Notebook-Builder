@@ -2,7 +2,8 @@
 
 Ekstraktor zamienia rozkodowany, jeszcze nieznormalizowany tekst źródła na
 `DokumentWyekstrahowany`: tekst, opcjonalny tytuł, listę bloków strukturalnych
-oraz poziom pewności rozpoznania struktury. Nowy format dodaje się jako nową
+oraz poziom pewności rozpoznania struktury. Deklaruje też, czy zwracany tekst
+zawiera znaczniki formatowania. Nowy format dodaje się jako nową
 implementację protokołu `Ekstraktor` i wpis w rejestrze, bez zmian w pozostałych
 modułach potoku.
 
@@ -23,6 +24,11 @@ class Ekstraktor(Protocol):
     """Kontrakt pojedynczego adaptera ekstrakcji."""
 
     metoda: str
+
+    # Prawda oznacza, że zwracany tekst zachowuje znaczniki formatowania, jak
+    # w Markdown. Potok buduje wtedy dodatkowo wersję TXT bez znaczników, żeby
+    # plik TXT nie był kopią pliku MD. Fałsz oznacza tekst już czysty.
+    tekst_zawiera_znaczniki: bool
 
     def obsluguje(self, typ_zrodla: TypZrodla, format_zrodla: str) -> bool:
         """Zwraca prawdę, jeżeli ten ekstraktor potrafi przetworzyć dane źródło.

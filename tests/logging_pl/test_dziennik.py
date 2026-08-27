@@ -27,9 +27,7 @@ class _ZegarKrokowy:
 
 
 def test_log_wazny_ma_zatwierdzony_format_i_wiersz_daty(tmp_path: Path) -> None:
-    zegar = _ZegarKrokowy(
-        datetime(2026, 8, 26, 9, 5, tzinfo=_STREFA_LOKALNA), timedelta(minutes=1)
-    )
+    zegar = _ZegarKrokowy(datetime(2026, 8, 26, 9, 5, tzinfo=_STREFA_LOKALNA), timedelta(minutes=1))
     dziennik = DziennikWazny(tmp_path / "log_wazne.txt", zegar)
 
     dziennik.zapisz("Projekt utworzony")

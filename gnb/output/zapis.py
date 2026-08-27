@@ -4,6 +4,12 @@ Pliki są zapisywane w UTF-8 bez znaku kolejności bajtów, z końcami wierszy L
 i zawsze kończą się pojedynczym znakiem nowej linii. W etapie pierwszym każde
 źródło daje własny plik i nie ma łączenia źródeł — to zadanie etapu szóstego.
 
+Wersja TXT i wersja MD mogą mieć różną treść. Dla źródła Markdown plik MD
+zachowuje znaczniki, a plik TXT dostaje tę samą treść przepisaną bez znaczników,
+przygotowaną przez `gnb.output.tekst_bez_znacznikow`. Dzięki temu dwa pliki
+wynikowe tego samego źródła nie są swoimi kopiami i nie zajmują dwóch slotów
+notatnika na identyczną treść.
+
 Moduł zwraca opis `PlikWynikowy` dla każdego zapisanego pliku, z policzonymi
 słowami i znakami, rozmiarem w bajtach oraz sumą kontrolną.
 """
@@ -29,24 +35,29 @@ def zapisz_wyniki(
     decyzja: DecyzjaFormatu,
     *,
     formaty_wlaczone: tuple[str, ...] = ("txt", "md"),
+    tekst_txt: str | None = None,
 ) -> list[PlikWynikowy]:
     """Zapisuje plik TXT zawsze, a plik MD tylko gdy pozwala reguła i konfiguracja.
 
-    Plik MD powstaje, gdy `decyzja.generuj_md` jest prawdą oraz format ``md`` jest
-    obecny w `formaty_wlaczone`. Treść pliku MD jest w etapie pierwszym taka sama
-    jak treść pliku TXT, czyli znormalizowany tekst źródła.
+    Plik MD powstaje, gdy `decyzja.generuj_md` jest prawdą oraz format ``md``
+    jest obecny w `formaty_wlaczone`. Treścią pliku MD jest znormalizowany tekst
+    dokumentu. Treścią pliku TXT jest `tekst_txt`, jeżeli został podany, a w
+    przeciwnym razie ten sam znormalizowany tekst. Wywołujący podaje `tekst_txt`
+    wtedy, gdy tekst źródła zawiera znaczniki formatowania i wersja TXT ma być
+    ich pozbawiona.
     """
     katalog_wynikow.mkdir(parents=True, exist_ok=True)
-    tresc = _z_koncowym_znakiem_nowej_linii(dokument.tekst)
+    tresc_md = _z_koncowym_znakiem_nowej_linii(dokument.tekst)
+    tresc_txt = _z_koncowym_znakiem_nowej_linii(dokument.tekst if tekst_txt is None else tekst_txt)
 
     wyniki: list[PlikWynikowy] = []
     sciezka_txt = katalog_wynikow / f"{nazwa_bazowa}.txt"
-    _zapisz_tekst(sciezka_txt, tresc)
+    _zapisz_tekst(sciezka_txt, tresc_txt)
     wyniki.append(_opis_pliku(sciezka_txt, FormatWynikowy.TXT, identyfikator_zrodla))
 
     if decyzja.generuj_md and FORMAT_MD in formaty_wlaczone:
         sciezka_md = katalog_wynikow / f"{nazwa_bazowa}.md"
-        _zapisz_tekst(sciezka_md, tresc)
+        _zapisz_tekst(sciezka_md, tresc_md)
         wyniki.append(_opis_pliku(sciezka_md, FormatWynikowy.MD, identyfikator_zrodla))
 
     return wyniki

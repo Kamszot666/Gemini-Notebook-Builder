@@ -26,7 +26,7 @@ from gnb.core.model import Zrodlo
 from gnb.core.nazwy import nazwa_pliku_wynikowego, wygeneruj_nazwe_projektu
 from gnb.core.stale import StatusZrodla, TypWejscia
 from gnb.core.wyjatki import BladGnb, PrzekroczonoLimit
-from gnb.extractors.bazowy import RejestrEkstraktorow, domyslny_rejestr
+from gnb.extractors.bazowy import Ekstraktor, RejestrEkstraktorow, domyslny_rejestr
 from gnb.ingestion.wejscie import (
     PozycjaWejsciowa,
     identyfikator_awaryjny,
@@ -49,11 +49,12 @@ from gnb.logging_pl.dziennik import (
     DziennikWazny,
     teraz_lokalny,
 )
-from gnb.normalization.normalizacja import zbuduj_dokument_znormalizowany
+from gnb.normalization.normalizacja import zbuduj_dokument_znormalizowany, znormalizuj
 from gnb.output import regula_md
 from gnb.output.manifest import WERSJA_SCHEMATU as WERSJA_SCHEMATU_MANIFESTU
 from gnb.output.manifest import Manifest, WpisWyniku, WpisZrodla, zapisz_manifest
 from gnb.output.raport import PodsumowanieProjektu, zapisz_raport, zbuduj_raport
+from gnb.output.tekst_bez_znacznikow import zamien_markdown_na_tekst
 from gnb.output.zapis import zapisz_wyniki
 from gnb.persistence.checkpoint import WERSJA_SCHEMATU as WERSJA_SCHEMATU_CHECKPOINTU
 from gnb.persistence.checkpoint import Checkpoint, StanWyniku, StanZrodla, wczytaj, zapisz
@@ -240,6 +241,7 @@ class _Wykonanie:
             znormalizowany,
             decyzja,
             formaty_wlaczone=self._konfiguracja.formaty_wynikowe,
+            tekst_txt=self._tekst_dla_wersji_txt(ekstraktor, znormalizowany.tekst),
         )
 
         wyniki_stanu = [
@@ -277,6 +279,19 @@ class _Wykonanie:
             f"Zapisano {len(pliki)} plików wynikowych, wersja MD: "
             f"{'tak' if decyzja.generuj_md else 'nie'}.",
         )
+
+    def _tekst_dla_wersji_txt(self, ekstraktor: Ekstraktor, tekst: str) -> str | None:
+        """Zwraca treść wersji TXT, gdy ma się różnić od treści wersji MD.
+
+        Dla ekstraktora zwracającego tekst ze znacznikami wersja TXT powstaje
+        przez przepisanie dokumentu bez znaczników, a jej treść jest ponownie
+        normalizowana, żeby oba pliki wynikowe przechodziły te same reguły.
+        Dla tekstu już czystego zwracana jest wartość pusta, co oznacza „użyj
+        tekstu znormalizowanego bez zmian”.
+        """
+        if not ekstraktor.tekst_zawiera_znaczniki:
+            return None
+        return znormalizuj(zamien_markdown_na_tekst(tekst))
 
     def _zachowaj_oryginal(self, pozycja: PozycjaWejsciowa, zrodlo: Zrodlo, tekst: str) -> None:
         """Zachowuje oryginał źródła w podkatalogu materiałów źródłowych."""

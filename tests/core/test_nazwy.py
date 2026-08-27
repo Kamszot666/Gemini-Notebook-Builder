@@ -54,9 +54,7 @@ def test_bezpieczna_nazwa_pliku_zachowuje_poprawny_tytul() -> None:
 
 
 def test_nazwa_pliku_wynikowego_laczy_trzon_tytulu_ze_skrotem_zrodla() -> None:
-    nazwa = nazwa_pliku_wynikowego(
-        "Baza wiedzy dla asystenta AI", "plik_tekstowy-3f2a9c1d0e8b7a65"
-    )
+    nazwa = nazwa_pliku_wynikowego("Baza wiedzy dla asystenta AI", "plik_tekstowy-3f2a9c1d0e8b7a65")
     assert nazwa == "baza_wiedzy_dla_asystenta_ai__3f2a9c1d"
 
 

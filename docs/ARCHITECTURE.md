@@ -67,6 +67,8 @@ kończy się kontrolowanym błędem zapisanym w logu, manifeście i raporcie.
 
 - `gnb/output/regula_md.py` — deterministyczna reguła wyboru między TXT a MD.
 - `gnb/output/zapis.py` — zapis TXT zawsze, MD warunkowo, w UTF-8 bez BOM z LF.
+- `gnb/output/tekst_bez_znacznikow.py` — przepisanie Markdown na czysty tekst
+  z zachowaną strukturą, używane do wersji TXT źródeł markdownowych.
 - `gnb/output/manifest.py` — `manifest.json` jako źródło prawdy i `manifest.txt`
   jako czytelny widok.
 - `gnb/output/raport.py` — raport końcowy jako zwykły tekst.

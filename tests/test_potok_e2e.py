@@ -70,6 +70,28 @@ def test_potok_przetwarza_rozne_zrodla_i_stosuje_regule_md(tmp_path: Path) -> No
     assert liczba_md == 1, "wersję MD dostaje tylko dokument_strukturalny.md"
 
 
+def test_wersja_txt_zrodla_markdown_nie_jest_kopia_wersji_md(tmp_path: Path) -> None:
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path)
+    wynik = przetworz_projekt(
+        _pozycje(), konfiguracja, nazwa_projektu="Test wersji TXT", zegar=_zegar_krokowy()
+    )
+
+    katalog_wynikow = wynik.katalog_projektu / "pliki_wynikowe"
+    trzon = "jak_przygotować_bazę_wiedzy_dla_asystenta_ai"
+    (plik_txt,) = katalog_wynikow.glob(f"{trzon}__*.txt")
+    (plik_md,) = katalog_wynikow.glob(f"{trzon}__*.md")
+
+    tresc_txt = plik_txt.read_text(encoding="utf-8")
+    tresc_md = plik_md.read_text(encoding="utf-8")
+
+    assert tresc_txt != tresc_md
+    assert tresc_md.startswith("# Jak przygotować bazę wiedzy dla asystenta AI")
+    assert tresc_txt.startswith("Jak przygotować bazę wiedzy dla asystenta AI")
+    assert "#" not in tresc_txt
+    assert "|" not in tresc_txt
+    assert "Metoda: MinHash" in tresc_txt
+
+
 def test_nazwa_pliku_wynikowego_wiaze_plik_ze_zrodlem_z_manifestu(tmp_path: Path) -> None:
     konfiguracja = Konfiguracja(katalog_wynikow=tmp_path)
     wynik = przetworz_projekt(
@@ -92,9 +114,7 @@ def test_plik_windows1250_jest_odczytany_bez_utraty_polskich_znakow(tmp_path: Pa
         _pozycje(), konfiguracja, nazwa_projektu="Test kodowania", zegar=_zegar_krokowy()
     )
 
-    pasujace = list(
-        (wynik.katalog_projektu / "pliki_wynikowe").glob("zażółć_gęślą_jaźń__*.txt")
-    )
+    pasujace = list((wynik.katalog_projektu / "pliki_wynikowe").glob("zażółć_gęślą_jaźń__*.txt"))
     assert len(pasujace) == 1, "polskie znaki mają zostać zachowane także w nazwie pliku"
     assert "Zażółć gęślą jaźń." in pasujace[0].read_text(encoding="utf-8")
 

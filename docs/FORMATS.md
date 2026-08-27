@@ -51,6 +51,32 @@ Dzięki temu z pliku TXT nigdy nie powstaje wersja MD.
 Decyzja o wygenerowaniu wersji MD wraz z listą spełnionych warunków jest
 zapisywana w manifeście.
 
+## Czym różni się wersja TXT od wersji MD
+
+Gdy źródłem jest Markdown, obie wersje mają inną treść. Wersja MD zachowuje
+pełny zapis Markdown. Wersja TXT dostaje ten sam dokument przepisany bez znaków
+składni, ale z zachowaną strukturą:
+
+1. Nagłówek jest osobnym wierszem tekstu, bez krat.
+2. Element listy jest wierszem zaczynającym się myślnikiem i spacją, także
+   w liście numerowanej. Zagnieżdżenie jest oddane wcięciem dwóch spacji.
+3. Tabela jest rozpisana wierszami w postaci nazwa kolumny, dwukropek, wartość,
+   po jednym wierszu na komórkę i z pustym wierszem między rekordami.
+4. Blok kodu traci ogrodzenie, ale zachowuje wcięcia i łamanie wierszy.
+5. Cytat blokowy staje się zwykłymi wierszami tekstu.
+6. Gwiazdki, podkreślenia i pojedyncze grawisy znikają, zostaje sam tekst.
+   Adres odnośnika jest dopisywany w nawiasie po jego treści, żeby informacja
+   o pochodzeniu nie przepadła.
+
+Powód takiego rozdziału jest praktyczny. Wcześniej oba pliki miały identyczną
+treść i zajmowały dwa sloty notatnika na to samo. Teraz wersja TXT jest czytelna
+liniowo czytnikiem ekranu, a wersja MD zachowuje formatowanie.
+
+Przepisanie nie może gubić treści. Sprawdza to test
+`tests/output/test_tekst_bez_znacznikow.py`, który porównuje obie wersje pliku
+`tests/dane/dokument_strukturalny.md` i wymaga, żeby w wersji TXT znalazł się
+każdy wiersz treści i każda komórka tabeli.
+
 ## Nazwy plików wynikowych
 
 Nazwa pliku wynikowego składa się z trzonu tytułu, dwóch podkreśleń i pierwszych

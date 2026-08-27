@@ -11,6 +11,8 @@ import pytest
 
 from gnb.core.wyjatki import BladPrzejsciowy, BladTrwaly
 from gnb.persistence.cache import (
+    KOMPRESJA_BRAK,
+    KOMPRESJA_ZLIB,
     WERSJA_SCHEMATU,
     PamiecPodreczna,
     WpisCache,
@@ -172,3 +174,104 @@ def test_uszkodzony_plik_jest_bledem_trwalym(tmp_path: Path) -> None:
 
     with pytest.raises(BladTrwaly):
         PamiecPodreczna(sciezka)
+
+
+def _kolumna(sciezka: Path, nazwa: str, klucz: str = "https://przyklad.pl/a") -> object:
+    """Odczytuje jedną kolumnę wprost z bazy, z pominięciem warstwy aplikacji."""
+    polaczenie = sqlite3.connect(sciezka)
+    try:
+        wiersz = polaczenie.execute(
+            f"SELECT {nazwa} FROM zasoby WHERE klucz = ?", (klucz,)
+        ).fetchone()
+    finally:
+        polaczenie.close()
+    return wiersz[0]
+
+
+def test_dluga_tresc_jest_zapisywana_w_postaci_skompresowanej(tmp_path: Path) -> None:
+    sciezka = tmp_path / "cache.sqlite3"
+    dluga = ("<p>Powtarzalna treść artykułu.</p>" * 200).encode("utf-8")
+    with otworz(sciezka) as pamiec:
+        pamiec.zapisz(replace(_wpis(), tresc=dluga))
+
+    zapisane = _kolumna(sciezka, "tresc")
+    assert isinstance(zapisane, bytes)
+    assert _kolumna(sciezka, "kompresja") == KOMPRESJA_ZLIB
+    assert len(zapisane) < len(dluga)
+
+    with otworz(sciezka) as pamiec:
+        odczytany = pamiec.odczytaj("https://przyklad.pl/a")
+    assert odczytany is not None
+    assert odczytany.tresc == dluga
+
+
+def test_tresc_ktorej_nie_oplaca_sie_kompresowac_zostaje_bez_zmian(tmp_path: Path) -> None:
+    sciezka = tmp_path / "cache.sqlite3"
+    krotka = b"x"
+    with otworz(sciezka) as pamiec:
+        pamiec.zapisz(replace(_wpis(), tresc=krotka))
+
+    assert _kolumna(sciezka, "kompresja") == KOMPRESJA_BRAK
+    assert _kolumna(sciezka, "tresc") == krotka
+
+
+def test_wpisy_z_pierwszej_wersji_schematu_sa_migrowane_bez_utraty(tmp_path: Path) -> None:
+    """Baza z wersji pierwszej trzyma treść nieskompresowaną i ma zostać zachowana."""
+    sciezka = tmp_path / "cache.sqlite3"
+    polaczenie = sqlite3.connect(sciezka)
+    try:
+        polaczenie.execute("CREATE TABLE wersja_schematu (numer INTEGER NOT NULL)")
+        polaczenie.execute("INSERT INTO wersja_schematu (numer) VALUES (1)")
+        polaczenie.execute(
+            "CREATE TABLE zasoby ("
+            "klucz TEXT PRIMARY KEY, adres_koncowy TEXT NOT NULL, "
+            "kod_odpowiedzi INTEGER NOT NULL, typ_zawartosci TEXT NOT NULL, "
+            "deklarowane_kodowanie TEXT NOT NULL, etag TEXT, last_modified TEXT, "
+            "tresc BLOB NOT NULL, pobrano TEXT NOT NULL)"
+        )
+        polaczenie.execute(
+            "INSERT INTO zasoby VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "https://przyklad.pl/stary",
+                "https://przyklad.pl/stary",
+                200,
+                "text/html",
+                "utf-8",
+                None,
+                None,
+                b"<html>stara tresc</html>",
+                _MOMENT.isoformat(),
+            ),
+        )
+        polaczenie.commit()
+    finally:
+        polaczenie.close()
+
+    with otworz(sciezka) as pamiec:
+        wpis = pamiec.odczytaj("https://przyklad.pl/stary")
+        assert wpis is not None
+        assert wpis.tresc == b"<html>stara tresc</html>"
+        assert pamiec.liczba_wpisow() == 1
+
+    polaczenie = sqlite3.connect(sciezka)
+    try:
+        numer = polaczenie.execute("SELECT numer FROM wersja_schematu").fetchone()[0]
+    finally:
+        polaczenie.close()
+    assert numer == WERSJA_SCHEMATU
+
+
+def test_nieznana_metoda_kompresji_jest_bledem_trwalym(tmp_path: Path) -> None:
+    sciezka = tmp_path / "cache.sqlite3"
+    with otworz(sciezka) as pamiec:
+        pamiec.zapisz(_wpis())
+
+    polaczenie = sqlite3.connect(sciezka)
+    try:
+        polaczenie.execute("UPDATE zasoby SET kompresja = ?", ("metoda_z_przyszlosci",))
+        polaczenie.commit()
+    finally:
+        polaczenie.close()
+
+    with otworz(sciezka) as pamiec, pytest.raises(BladTrwaly, match="nieznaną metodą"):
+        pamiec.odczytaj("https://przyklad.pl/a")

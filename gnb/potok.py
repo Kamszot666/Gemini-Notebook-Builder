@@ -35,9 +35,10 @@ from gnb.core.identyfikatory import suma_kontrolna_bajtow
 from gnb.core.konfiguracja import Konfiguracja
 from gnb.core.model import Zrodlo
 from gnb.core.nazwy import nazwa_pliku_wynikowego, wygeneruj_nazwe_projektu
-from gnb.core.stale import StatusZrodla, TypWejscia
+from gnb.core.stale import StatusZrodla, TypWejscia, TypZrodla
 from gnb.core.wyjatki import BladGnb, BladTrwaly, PrzekroczonoLimit
 from gnb.extractors.bazowy import Ekstraktor, RejestrEkstraktorow, domyslny_rejestr
+from gnb.extractors.strona_www import KOMUNIKAT_WYMAGA_SKRYPTOW, czy_wymaga_skryptow
 from gnb.ingestion.pobieranie import (
     OdpowiedzPobrania,
     Pobieracz,
@@ -79,7 +80,12 @@ from gnb.output.manifest import (
     WpisZrodla,
     zapisz_manifest,
 )
-from gnb.output.raport import PodsumowanieProjektu, zapisz_raport, zbuduj_raport
+from gnb.output.raport import (
+    PodsumowanieProjektu,
+    ZrodloNieprzetworzone,
+    zapisz_raport,
+    zbuduj_raport,
+)
 from gnb.output.tekst_bez_znacznikow import zamien_markdown_na_tekst
 from gnb.output.zapis import zapisz_wyniki
 from gnb.persistence.cache import PamiecPodreczna, otworz, teraz_utc
@@ -278,6 +284,11 @@ class _Wykonanie:
 
         ekstraktor = self._rejestr.dobierz(zrodlo.typ_zrodla, pozycja.format_zrodla)
         dokument = ekstraktor.wyekstrahuj(identyfikator, tekst)
+
+        if zrodlo.typ_zrodla is TypZrodla.STRONA_WWW and czy_wymaga_skryptow(tekst, dokument.tekst):
+            self._pomin(zrodlo, pozycja, KOMUNIKAT_WYMAGA_SKRYPTOW)
+            return
+
         znormalizowany = zbuduj_dokument_znormalizowany(identyfikator, dokument.tekst)
 
         if znormalizowany.liczba_slow > self._konfiguracja.bezpieczny_limit_slow:
@@ -729,6 +740,22 @@ def _zbuduj_podsumowanie(
         najwiekszy_plik_bajtow=najwiekszy.rozmiar_bajtow if najwiekszy is not None else 0,
         laczna_liczba_slow=laczna_liczba_slow,
         czas_pracy_sekundy=czas_pracy_sekundy,
+        zrodla_nieprzetworzone=_zrodla_nieprzetworzone(checkpoint),
+    )
+
+
+def _zrodla_nieprzetworzone(checkpoint: Checkpoint) -> tuple[ZrodloNieprzetworzone, ...]:
+    """Zbiera źródła pominięte i błędne wraz z powodem, do wykazu w raporcie."""
+    statusy_nieprzetworzone = (StatusZrodla.POMINIETE.value, StatusZrodla.BLAD.value)
+    return tuple(
+        ZrodloNieprzetworzone(
+            identyfikator=stan.identyfikator,
+            pochodzenie=stan.pochodzenie,
+            status=stan.status,
+            powod=stan.komunikat_bledu or "Powód nie został zapisany.",
+        )
+        for stan in checkpoint.zrodla.values()
+        if stan.status in statusy_nieprzetworzone
     )
 
 

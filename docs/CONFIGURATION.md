@@ -84,7 +84,19 @@ Nazwa pola w pliku TOML, odpowiadająca zmienna środowiskowa oraz znaczenie:
 9. `maksymalny_rozmiar_pobrania_mb`, zmienna
    `GNB_MAKSYMALNY_ROZMIAR_POBRANIA_MB`. Bezpieczny limit rozmiaru pobieranego
    zasobu. Domyślnie 20. Zasób większy jest pomijany, a nie obcinany.
-10. `dodatkowe_parametry_sledzace`, zmienna `GNB_DODATKOWE_PARAMETRY_SLEDZACE`.
+10. `sciezka_certyfikatow`, zmienna `GNB_SCIEZKA_CERTYFIKATOW`. Ścieżka pliku PEM
+    z certyfikatami zaufanych wystawców. Domyślnie pusta, co oznacza magazyn
+    wbudowany w bibliotekę HTTP. Ustaw to pole, jeżeli ruch przechodzi przez
+    firmowy serwer pośredniczący albo przez program antywirusowy podstawiający
+    własny certyfikat — bez tego każde pobieranie kończy się błędem weryfikacji
+    certyfikatu. Plik PEM otrzymasz od administratora sieci, a na Windows możesz
+    go też wyeksportować z magazynu zaufanych głównych urzędów certyfikacji przez
+    przystawkę certmgr, wybierając eksport w formacie Base64 i zapisując
+    z rozszerzeniem `pem`. Wskazanie nieistniejącego pliku kończy się błędem,
+    a nie cichym pominięciem ustawienia. Nie ma i nie będzie ustawienia
+    wyłączającego weryfikację certyfikatu, ponieważ byłoby to obejście
+    zabezpieczenia, zakazane w sekcji trzeciej `CLAUDE.md`.
+11. `dodatkowe_parametry_sledzace`, zmienna `GNB_DODATKOWE_PARAMETRY_SLEDZACE`.
     Dodatkowe nazwy parametrów adresu uznawanych za śledzące, usuwane obok listy
     wbudowanej. W pliku TOML lista, w zmiennej środowiskowej wartości rozdzielone
     przecinkiem.
@@ -119,11 +131,18 @@ python -m gnb.cli pamiec --wyczysc
 
 Koniec polecenia czyszczącego pamięć podręczną.
 
+Treść stron jest zapisywana w postaci skompresowanej biblioteką zlib, a nazwa
+użytej metody kompresji trafia do rekordu. Dzięki temu metodę da się później
+zmienić bez unieważniania całej bazy, a wpisy zapisane wcześniej bez kompresji
+nadal dają się odczytać. Gdy kompresja nie zmniejsza rozmiaru, zapisywana jest
+postać pierwotna.
+
 Plik ma włączony tryb WAL oraz limit czasu oczekiwania na blokadę, ponieważ dwa
 uruchomienia aplikacji mogą sięgnąć do niego naraz. Zajętość bazy jest traktowana
 jako błąd przejściowy, a nie jako awaria przetwarzania. W bazie zapisany jest
-numer wersji schematu. Zawartość zapisana w innej wersji jest świadomie
-odrzucana, ponieważ zawsze można ją odtworzyć, pobierając zasób ponownie.
+numer wersji schematu. Znane starsze wersje są migrowane z zachowaniem
+zawartości, a wersja nieznana jest świadomie odrzucana, ponieważ zawartość zawsze
+można odtworzyć, pobierając zasób ponownie.
 
 ## Przykładowy plik konfiguracji
 
@@ -146,6 +165,7 @@ odstep_miedzy_zadaniami_sekundy = 1
 polaczenia_na_domene = 3
 respektuj_robots = true
 maksymalny_rozmiar_pobrania_mb = 20
+sciezka_certyfikatow = ""
 dodatkowe_parametry_sledzace = []
 
 uzywaj_cache = true

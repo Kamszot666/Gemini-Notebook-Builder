@@ -44,6 +44,14 @@ DOMYSLNE_POLACZENIA_NA_DOMENE = 3
 DOMYSLNE_RESPEKTOWANIE_ROBOTS = True
 DOMYSLNY_MAKSYMALNY_ROZMIAR_POBRANIA_MB = 20
 
+# Pusta wartość oznacza magazyn zaufanych certyfikatów wbudowany w bibliotekę
+# HTTP. Własny plik PEM jest potrzebny tam, gdzie ruch przechodzi przez firmowy
+# serwer pośredniczący albo program antywirusowy podstawiający własny
+# certyfikat. Nie ma i nie będzie opcji wyłączającej weryfikację certyfikatu,
+# ponieważ byłoby to obejście zabezpieczenia, zakazane w sekcji trzeciej
+# CLAUDE.md.
+DOMYSLNA_SCIEZKA_CERTYFIKATOW = ""
+
 # Ustawienia pamięci podręcznej. Jest wspólna dla wszystkich projektów, żeby to
 # samo źródło użyte w dwóch notatnikach pobierało się tylko raz.
 DOMYSLNE_UZYWANIE_CACHE = True
@@ -80,6 +88,7 @@ _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
     PREFIKS_ZMIENNYCH + "POLACZENIA_NA_DOMENE": "polaczenia_na_domene",
     PREFIKS_ZMIENNYCH + "RESPEKTUJ_ROBOTS": "respektuj_robots",
     PREFIKS_ZMIENNYCH + "MAKSYMALNY_ROZMIAR_POBRANIA_MB": "maksymalny_rozmiar_pobrania_mb",
+    PREFIKS_ZMIENNYCH + "SCIEZKA_CERTYFIKATOW": "sciezka_certyfikatow",
     PREFIKS_ZMIENNYCH + "UZYWAJ_CACHE": "uzywaj_cache",
     PREFIKS_ZMIENNYCH + "MAKSYMALNY_WIEK_CACHE_DNI": "maksymalny_wiek_cache_dni",
     PREFIKS_ZMIENNYCH + "SCIEZKA_CACHE": "sciezka_cache",
@@ -129,6 +138,7 @@ class Konfiguracja:
     polaczenia_na_domene: int = DOMYSLNE_POLACZENIA_NA_DOMENE
     respektuj_robots: bool = DOMYSLNE_RESPEKTOWANIE_ROBOTS
     maksymalny_rozmiar_pobrania_mb: int = DOMYSLNY_MAKSYMALNY_ROZMIAR_POBRANIA_MB
+    sciezka_certyfikatow: str = DOMYSLNA_SCIEZKA_CERTYFIKATOW
     uzywaj_cache: bool = DOMYSLNE_UZYWANIE_CACHE
     maksymalny_wiek_cache_dni: int = DOMYSLNY_MAKSYMALNY_WIEK_CACHE_DNI
     sciezka_cache: Path = field(default_factory=_domyslna_sciezka_cache)
@@ -212,6 +222,9 @@ def wczytaj_konfiguracje(
         respektuj_robots=_jako_prawda_falsz(scalone, "respektuj_robots", domyslna.respektuj_robots),
         maksymalny_rozmiar_pobrania_mb=_jako_liczba(
             scalone, "maksymalny_rozmiar_pobrania_mb", domyslna.maksymalny_rozmiar_pobrania_mb
+        ),
+        sciezka_certyfikatow=_jako_sciezka_pliku(
+            scalone, "sciezka_certyfikatow", domyslna.sciezka_certyfikatow
         ),
         uzywaj_cache=_jako_prawda_falsz(scalone, "uzywaj_cache", domyslna.uzywaj_cache),
         maksymalny_wiek_cache_dni=_jako_liczba(
@@ -321,6 +334,27 @@ def _jako_liczba_rzeczywista(
     if liczba < 0 or (liczba == 0 and not dopusc_zero):
         raise BladTrwaly(f"Ustawienie „{pole}” musi być liczbą dodatnią, a jest {liczba}.")
     return liczba
+
+
+def _jako_sciezka_pliku(scalone: Mapping[str, object], pole: str, domyslna: str) -> str:
+    """Zwraca ścieżkę pliku podaną w konfiguracji, sprawdzając, czy plik istnieje.
+
+    Wartość pusta jest poprawna i oznacza użycie ustawienia domyślnego.
+    Wskazanie nieistniejącego pliku jest błędem trwałym, ponieważ cicha praca
+    z pominięciem takiego ustawienia kończyłaby się niezrozumiałymi błędami
+    połączenia przy każdym adresie.
+    """
+    if pole not in scalone:
+        return domyslna
+    napis = str(scalone[pole]).strip()
+    if not napis:
+        return ""
+    if not Path(napis).is_file():
+        raise BladTrwaly(
+            f"Ustawienie „{pole}” wskazuje plik, którego nie ma: {napis}. "
+            "Podaj poprawną ścieżkę albo usuń to ustawienie."
+        )
+    return napis
 
 
 def _jako_lista_napisow(

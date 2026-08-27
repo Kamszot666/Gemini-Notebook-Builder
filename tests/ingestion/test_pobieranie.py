@@ -272,15 +272,89 @@ def test_brak_pliku_robots_oznacza_zgode() -> None:
     assert isinstance(wynik, OdpowiedzPobrania)
 
 
-def test_odmowa_dostepu_do_robots_oznacza_zakaz() -> None:
+@pytest.mark.parametrize("kod", [401, 403, 404, 410])
+def test_niedostepny_plik_robots_z_rodziny_4xx_oznacza_zgode(kod: int) -> None:
+    """Zgodnie z RFC 9309, sekcja 2.3.1, kody 4xx oznaczają brak reguł, czyli zgodę.
+
+    Ma to też znaczenie praktyczne: witryny za zaporą aplikacyjną często zwracają
+    kod 403 na sam plik robots.txt, mimo że artykuł jest publicznie dostępny.
+    """
+
     def obsluga(zadanie: httpx.Request) -> httpx.Response:
         if zadanie.url.path == "/robots.txt":
-            return httpx.Response(403)
+            return httpx.Response(kod)
         return httpx.Response(200, content=_STRONA, headers={"content-type": "text/html"})
 
     wynik = asyncio.run(_pobierz(_ustawienia(respektuj_robots=True), _transport(obsluga)))
 
+    assert isinstance(wynik, OdpowiedzPobrania)
+
+
+def test_nieosiagalny_plik_robots_jest_ponawiany_a_potem_konczy_pominieciem() -> None:
+    zapytania_o_reguly: list[int] = []
+
+    def obsluga(zadanie: httpx.Request) -> httpx.Response:
+        if zadanie.url.path == "/robots.txt":
+            zapytania_o_reguly.append(1)
+            return httpx.Response(503)
+        return httpx.Response(200, content=_STRONA, headers={"content-type": "text/html"})
+
+    wynik = asyncio.run(
+        _pobierz(_ustawienia(respektuj_robots=True, liczba_ponowien=2), _transport(obsluga))
+    )
+
     assert isinstance(wynik, PominietePobranie)
+    assert "RFC 9309" in wynik.powod
+    assert len(zapytania_o_reguly) == 3
+
+
+def test_blad_sieci_przy_pliku_robots_takze_konczy_pominieciem() -> None:
+    def obsluga(zadanie: httpx.Request) -> httpx.Response:
+        if zadanie.url.path == "/robots.txt":
+            raise httpx.ConnectError("brak połączenia", request=zadanie)
+        return httpx.Response(200, content=_STRONA, headers={"content-type": "text/html"})
+
+    wynik = asyncio.run(
+        _pobierz(_ustawienia(respektuj_robots=True, liczba_ponowien=0), _transport(obsluga))
+    )
+
+    assert isinstance(wynik, PominietePobranie)
+    assert "nieokreślone" in wynik.powod
+
+
+def test_niedostepnosc_regul_jest_zapamietana_dla_calej_witryny() -> None:
+    zapytania_o_reguly: list[int] = []
+
+    def obsluga(zadanie: httpx.Request) -> httpx.Response:
+        if zadanie.url.path == "/robots.txt":
+            zapytania_o_reguly.append(1)
+            return httpx.Response(500)
+        return httpx.Response(200, content=_STRONA, headers={"content-type": "text/html"})
+
+    async def uruchom() -> list[object]:
+        zegar = _Zegar()
+        async with Pobieracz(
+            _ustawienia(respektuj_robots=True, liczba_ponowien=1),
+            transport=_transport(obsluga),
+            usypiacz=zegar.uspij,
+            zegar_monotoniczny=zegar,
+            zegar_utc=lambda: _MOMENT,
+        ) as pobieracz:
+            return list(
+                await pobieracz.pobierz_wiele(
+                    [
+                        Zadanie("https://przyklad.pl/pierwszy", "https://przyklad.pl/pierwszy"),
+                        Zadanie("https://przyklad.pl/drugi", "https://przyklad.pl/drugi"),
+                    ]
+                )
+            )
+
+    wyniki = asyncio.run(uruchom())
+
+    assert all(isinstance(wynik, PominietePobranie) for wynik in wyniki)
+    # Dwie próby dla pierwszego adresu, a dla drugiego już żadnej, bo wynik jest
+    # zapamiętany dla całej witryny.
+    assert len(zapytania_o_reguly) == 2
 
 
 def test_swiezy_wpis_pamieci_podrecznej_oszczedza_zadanie_sieciowe(tmp_path: Path) -> None:

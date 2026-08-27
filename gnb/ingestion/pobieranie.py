@@ -17,14 +17,21 @@ wydłuża pracę. Komunikat podpowiada realne przyczyny: podsłuchiwanie ruchu p
 program antywirusowy albo serwer pośredniczący, przeterminowany certyfikat
 serwisu oraz błędnie ustawiony zegar systemowy.
 
-Trzy sytuacje nie są błędami, tylko świadomym pominięciem źródła i są zwracane
-jako `PominietePobranie`: zakaz w pliku ``robots.txt``, zasób, który nie jest
-stroną HTML, oraz zasób przekraczający bezpieczny limit rozmiaru.
+Cztery sytuacje nie są błędami, tylko świadomym pominięciem źródła i są
+zwracane jako `PominietePobranie`: zakaz w pliku ``robots.txt``, nieosiągalny
+plik ``robots.txt`` po wyczerpaniu ponowień, zasób, który nie jest stroną HTML,
+oraz zasób przekraczający bezpieczny limit rozmiaru.
 
 Pamięć podręczna jest opcjonalna. Gdy jest podana, świeży wpis jest używany bez
 sięgania do sieci, a wpis nieświeży służy do zapytania warunkowego z nagłówkami
 ``If-None-Match`` oraz ``If-Modified-Since``. Odpowiedź 304 oznacza, że zapisana
 treść jest nadal aktualna.
+
+Weryfikacja certyfikatu serwera jest zawsze włączona. Ustawienie
+`sciezka_certyfikatow` pozwala wskazać własny plik PEM z certyfikatami zaufanych
+wystawców, co jest potrzebne za firmowym serwerem pośredniczącym albo przy
+programie antywirusowym podstawiającym własny certyfikat. Nie ma opcji
+wyłączającej weryfikację, ponieważ byłoby to obejście zabezpieczenia.
 
 Treść pobranej strony jest danymi, nigdy instrukcją. Moduł nie interpretuje
 zawartości i nie wykonuje niczego, co w niej znajdzie.
@@ -40,6 +47,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from types import TracebackType
+from typing import TypeVar
 from urllib.parse import urlsplit
 
 import httpx
@@ -47,7 +55,12 @@ import httpx
 from gnb.core.konfiguracja import Konfiguracja
 from gnb.core.url import bez_danych_logowania
 from gnb.core.wyjatki import BladGnb, BladPrzejsciowy, BladTrwaly
-from gnb.ingestion.robots import KontrolerRobots
+from gnb.ingestion.robots import (
+    KOMUNIKAT_REGULY_NIEDOSTEPNE,
+    KOMUNIKAT_ZAKAZ_REGUL,
+    DecyzjaRobots,
+    KontrolerRobots,
+)
 from gnb.persistence.cache import PamiecPodreczna, WpisCache, teraz_utc
 
 TYPY_ZAWARTOSCI_HTML = ("text/html", "application/xhtml+xml")
@@ -55,6 +68,8 @@ BAJTOW_W_MEGABAJCIE = 1024 * 1024
 _ROZMIAR_FRAGMENTU = 65536
 _KOD_NIEZMIENIONE = 304
 _KOD_ZA_DUZO_ZADAN = 429
+
+_Wynik = TypeVar("_Wynik")
 
 
 class BladZaDuzoZadan(BladPrzejsciowy):
@@ -92,6 +107,7 @@ class UstawieniaPobierania:
     maksymalny_rozmiar_pobrania_mb: int
     uzywaj_cache: bool
     maksymalny_wiek_cache_dni: int
+    sciezka_certyfikatow: str = ""
 
     @classmethod
     def z_konfiguracji(cls, konfiguracja: Konfiguracja) -> UstawieniaPobierania:
@@ -108,6 +124,7 @@ class UstawieniaPobierania:
             maksymalny_rozmiar_pobrania_mb=konfiguracja.maksymalny_rozmiar_pobrania_mb,
             uzywaj_cache=konfiguracja.uzywaj_cache,
             maksymalny_wiek_cache_dni=konfiguracja.maksymalny_wiek_cache_dni,
+            sciezka_certyfikatow=konfiguracja.sciezka_certyfikatow,
         )
 
 
@@ -191,6 +208,7 @@ class Pobieracz:
             timeout=self._ustawienia.limit_czasu_sekundy,
             follow_redirects=True,
             transport=self._transport,
+            verify=self._ustawienia.sciezka_certyfikatow or True,
         )
         self._robots = KontrolerRobots(self._klient, self._ustawienia.nazwa_klienta)
         return self
@@ -238,26 +256,41 @@ class Pobieracz:
             return blad
 
     async def _sprawdz_robots(self, adres: str) -> PominietePobranie | None:
-        """Zwraca pominięcie, gdy reguły witryny zabraniają pobrania adresu."""
+        """Zwraca pominięcie, gdy reguły witryny zabraniają pobrania adresu.
+
+        Nieosiągalny plik reguł, czyli odpowiedź z rodziny 5xx albo błąd sieci,
+        jest najpierw ponawiany. Dopiero po wyczerpaniu prób źródło zostaje
+        pominięte, zgodnie z RFC 9309, który każe wtedy przyjąć pełny zakaz.
+        """
         robots = self._wymagany_kontroler_robots()
-        if await robots.czy_wolno(adres):
+        try:
+            decyzja = await self._z_ponowieniami(lambda: robots.decyzja(adres))
+        except BladPrzejsciowy:
+            robots.oznacz_niedostepne(adres)
+            decyzja = DecyzjaRobots.NIEDOSTEPNE
+
+        if decyzja is DecyzjaRobots.DOZWOLONE:
             return None
-        return PominietePobranie(
-            adres=adres,
-            powod=(
-                "Plik robots.txt tej witryny nie pozwala pobrać tego adresu. "
-                "Źródło zostało pominięte, ponieważ nie omijamy zabezpieczeń."
-            ),
-        )
+        if decyzja is DecyzjaRobots.ZABRONIONE:
+            return PominietePobranie(adres=adres, powod=KOMUNIKAT_ZAKAZ_REGUL)
+        return PominietePobranie(adres=adres, powod=KOMUNIKAT_REGULY_NIEDOSTEPNE)
 
     async def _pobierz_z_ponowieniami(
         self, zadanie: Zadanie, wpis: WpisCache | None
     ) -> WynikPobrania:
         """Wykonuje żądanie, ponawiając je przy błędach przejściowych."""
+        return await self._z_ponowieniami(lambda: self._jedno_zadanie(zadanie, wpis))
+
+    async def _z_ponowieniami(self, operacja: Callable[[], Awaitable[_Wynik]]) -> _Wynik:
+        """Powtarza operację przy błędach przejściowych, z rosnącym odstępem.
+
+        Ta sama polityka obowiązuje pobranie strony i pobranie pliku reguł
+        witryny, żeby jedno źródło nie było traktowane łagodniej niż drugie.
+        """
         ostatni_blad: BladPrzejsciowy | None = None
         for numer_proby in range(self._ustawienia.liczba_ponowien + 1):
             try:
-                return await self._jedno_zadanie(zadanie, wpis)
+                return await operacja()
             except BladPrzejsciowy as blad:
                 ostatni_blad = blad
                 if numer_proby == self._ustawienia.liczba_ponowien:
@@ -267,7 +300,7 @@ class Pobieracz:
         raise (
             ostatni_blad
             if ostatni_blad is not None
-            else BladPrzejsciowy(f"Nie udało się pobrać adresu {zadanie.adres_pobierania}.")
+            else BladPrzejsciowy("Nie udało się wykonać operacji sieciowej.")
         )
 
     async def _jedno_zadanie(self, zadanie: Zadanie, wpis: WpisCache | None) -> WynikPobrania:

@@ -1,20 +1,98 @@
-# Obsługiwane formaty — stan po etapie pierwszym
+# Obsługiwane formaty — stan po etapie drugim
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
-Kolejne formaty, czyli strony WWW, YouTube, PDF, DOCX, EPUB, ODT, PPTX, CSV, SRT,
-VTT, obrazy oraz materiały nutowe, dojdą w etapach opisanych w sekcji osiemnastej
-pliku `CLAUDE.md`.
+Kolejne formaty, czyli YouTube, PDF, DOCX, EPUB, ODT, PPTX, CSV, SRT, VTT, obrazy
+oraz materiały nutowe, dojdą w etapach opisanych w sekcji osiemnastej pliku
+`CLAUDE.md`.
 
 ## Wejście
 
-W etapie pierwszym obsługiwane są trzy rodzaje wejścia:
+Obsługiwane są cztery rodzaje wejścia:
 
 1. Tekst wklejony bezpośrednio przez użytkownika, traktowany jako tekst płaski.
 2. Tekst wklejony zadeklarowany przez użytkownika jako Markdown.
 3. Plik lokalny w formacie TXT lub MD.
+4. Adres strony internetowej, podany pojedynczo albo listą.
 
 Plik w innym formacie kończy się kontrolowanym błędem `FormatNieobslugiwany`.
 Nie zatrzymuje to przetwarzania pozostałych źródeł.
+
+## Adresy stron internetowych
+
+Adres można podać na trzy sposoby: pojedynczo, kilka adresów rozdzielonych
+spacjami oraz kilka adresów w osobnych wierszach. To samo dotyczy importowanego
+pliku TXT z listą adresów. Wiersz zaczynający się od krzyżyka jest komentarzem.
+
+Zanim cokolwiek zostanie pobrane, aplikacja pokazuje podsumowanie: ile adresów
+wykryto, ile jest poprawnych, ile pominięto jako duplikat i ile wpisów odrzucono
+wraz z powodem. To jest najtańszy moment na wychwycenie pomyłki.
+
+### Dwie postacie adresu
+
+Adres jest przechowywany w dwóch postaciach. Postać kanoniczna jest kluczem
+tożsamości źródła oraz kluczem pamięci podręcznej: schemat i nazwa hosta małymi
+literami, bez domyślnego portu, bez fragmentu, z posortowanymi parametrami.
+Postać pobierania jest tym, co trafia do serwera, i zachowuje oryginalną
+kolejność parametrów, ponieważ część serwisów zwraca przy innej kolejności inną
+treść.
+
+Z obu postaci usuwane są wyłącznie znane parametry śledzące, czyli rodzina
+`utm_` oraz nazwy takie jak `fbclid`, `gclid`, `msclkid` czy `igshid`. Listę można
+rozszerzyć ustawieniem `dodatkowe_parametry_sledzace`. Pozostałe parametry
+zostają, nawet gdy wyglądają na zbędne, ponieważ parametr bywa jedynym wskazaniem
+konkretnego artykułu.
+
+Przedrostek `www` nie jest usuwany, bo bywają serwisy, w których wersja z nim
+i bez niego to dwie różne witryny. Fragment po znaku krzyżyka jest usuwany,
+z jednym wyjątkiem: fragment zaczynający się od wykrzyknika albo ukośnika
+zostaje, ponieważ w starszych aplikacjach jednostronicowych to on wskazuje
+konkretną treść.
+
+### Pobieranie
+
+Każde żądanie ma limit czasu, ograniczoną liczbę ponowień i rosnący odstęp między
+próbami. Do jednej domeny idą najwyżej trzy równoległe połączenia, z odstępem
+między żądaniami. Klient przedstawia się nazwą wskazującą projekt i domyślnie
+respektuje plik `robots.txt`.
+
+Sytuacje kończące się statusem „pominiete”, czyli świadomym pominięciem, a nie
+błędem: zakaz w pliku `robots.txt`, zasób, który nie jest stroną HTML, oraz zasób
+przekraczający bezpieczny limit pobrania.
+
+Sytuacje kończące się statusem „blad”: odpowiedzi 401, 403, 404 i 410 oraz
+wyczerpanie ponowień przy błędach przejściowych, czyli przekroczeniu limitu
+czasu, zerwaniu połączenia, odpowiedziach z rodziny 5xx i odpowiedzi 429.
+
+Osobnym przypadkiem jest błąd certyfikatu TLS. Nie jest ponawiany, ponieważ
+niezaufany certyfikat nie naprawi się przy kolejnej próbie. Komunikat wskazuje
+trzy realne przyczyny: przechwytywanie ruchu przez program antywirusowy albo
+serwer pośredniczący, przeterminowany certyfikat witryny oraz źle ustawiony
+zegar systemowy.
+
+### Ekstrakcja treści artykułu
+
+Treść artykułu jest wydobywana biblioteką `trafilatura`, która odrzuca menu,
+banery zgody na pliki cookie, reklamy, ramki boczne i stopkę. Rozpoznane
+nagłówki, listy, tabele, cytaty i bloki kodu trafiają do struktury dokumentu,
+więc dobrze zbudowany artykuł może dostać także wersję MD.
+
+Gdy trafilatura nic nie zwróci, wchodzi mechanizm zapasowy oparty na `lxml`,
+który odzyskuje same akapity. Zgłasza on niski poziom pewności struktury, więc
+z materiału odzyskanego awaryjnie wersja MD nigdy nie powstanie.
+
+Odnośniki wewnątrz zdań nie są zachowywane, ponieważ adres w środku zdania
+utrudnia odsłuchanie tekstu czytnikiem ekranu. Pochodzenie całego artykułu jest
+zapisane w manifeście: adres kanoniczny, adres końcowy po przekierowaniach, kod
+odpowiedzi HTTP, deklarowane kodowanie oraz nagłówki `ETag` i `Last-Modified`.
+
+### Pamięć podręczna
+
+Pobrane strony trafiają do wspólnej pamięci podręcznej, dzięki czemu ten sam
+artykuł użyty w dwóch notatnikach pobiera się tylko raz. Wpis starszy niż
+ustawiony maksymalny wiek jest odświeżany zapytaniem warunkowym z nagłówkami
+`If-None-Match` oraz `If-Modified-Since`. Odpowiedź 304 oznacza, że zapisana
+treść jest nadal aktualna. Ścieżkę pliku i sposób czyszczenia opisuje
+`docs/CONFIGURATION.md`.
 
 ## Kodowanie tekstu
 

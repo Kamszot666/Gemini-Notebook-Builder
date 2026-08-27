@@ -1,17 +1,18 @@
-# Architektura — stan po etapie pierwszym
+# Architektura — stan po etapie drugim
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
-zakończeniu etapu pierwszego. Pełny docelowy podział na pakiety opisuje sekcja
+zakończeniu etapu drugiego. Pełny docelowy podział na pakiety opisuje sekcja
 szósta `CLAUDE.md`.
 
 ## Potok przetwarzania
 
 Punkt wejścia to funkcja `przetworz_projekt` w `gnb/potok.py`. Uruchamia ona
 etapy w stałej kolejności z sekcji ósmej `CLAUDE.md`, w części obsługiwanej przez
-etap pierwszy:
+etapy pierwszy i drugi:
 
-1. Wejście i walidacja — `gnb/ingestion/wejscie.py`.
-2. Import treści i wykrycie kodowania — `gnb/normalization/kodowanie.py`.
+1. Wejście i walidacja — `gnb/ingestion/wejscie.py`, `gnb/ingestion/lista_url.py`.
+2. Pobranie stron oraz import treści i wykrycie kodowania —
+   `gnb/ingestion/pobieranie.py`, `gnb/normalization/kodowanie.py`.
 3. Ekstrakcja — `gnb/extractors/`.
 4. Normalizacja i liczenie słów — `gnb/normalization/normalizacja.py`,
    `gnb/core/liczenie_slow.py`.
@@ -25,6 +26,12 @@ Etapy deduplikacji, kondensacji i grupowania są pominięte, ale ich miejsce
 w kolejności jest zachowane. Jedno uszkodzone wejście nie zatrzymuje pozostałych;
 kończy się kontrolowanym błędem zapisanym w logu, manifeście i raporcie.
 
+Pobranie adresów jest osobną fazą, wykonywaną przed pętlą po źródłach. Dzięki
+temu strony pobierają się równolegle, z zachowaniem limitu połączeń na domenę
+i odstępu między żądaniami, a reszta potoku pozostaje synchroniczna. Adres, który
+w checkpoincie ma już status końcowy, nie jest pobierany ponownie, ponieważ jego
+identyfikator wynika z kanonicznej postaci adresu, a nie z treści.
+
 ## Pakiet gnb.core
 
 - `gnb/core/model.py` — siedem kontraktów danych z sekcji siódmej `CLAUDE.md`.
@@ -37,15 +44,24 @@ kończy się kontrolowanym błędem zapisanym w logu, manifeście i raporcie.
 - `gnb/core/identyfikatory.py` — sumy kontrolne SHA-256 oraz stabilny
   identyfikator źródła w postaci prefiksu typu i pierwszych szesnastu znaków
   sumy kontrolnej pochodzenia.
+- `gnb/core/url.py` — walidacja adresu oraz jego dwie postacie: kanoniczna jako
+  klucz tożsamości i pobierania jako to, co trafia do serwera.
 - `gnb/core/nazwy.py` — sanityzacja nazw projektów i plików do postaci
   bezpiecznej dla Windows oraz budowa nazwy pliku wynikowego z trzonu tytułu
   i skrótu identyfikatora źródła. Zasadę opisuje `docs/FORMATS.md`.
 
 ## Pakiet gnb.ingestion
 
-- `gnb/ingestion/wejscie.py` — przyjmowanie tekstu wklejonego oraz plików,
+- `gnb/ingestion/wejscie.py` — przyjmowanie tekstu wklejonego, plików i adresów,
   walidacja i utworzenie `Zrodlo`. Wskazówka formatu jest przenoszona w osobnej
   strukturze `PozycjaWejsciowa`, poza kontraktem `WejscieSurowe`.
+- `gnb/ingestion/lista_url.py` — przyjmowanie list adresów, wykrywanie duplikatów
+  po postaci kanonicznej i podsumowanie pokazywane przed pobraniem.
+- `gnb/ingestion/pobieranie.py` — asynchroniczny klient HTTP z limitem czasu,
+  ponowieniami, rosnącym odstępem, limitem połączeń na domenę i obsługą pamięci
+  podręcznej.
+- `gnb/ingestion/robots.py` — odczyt pliku `robots.txt` i decyzja o zgodzie na
+  pobranie adresu.
 
 ## Pakiet gnb.extractors
 
@@ -56,6 +72,8 @@ kończy się kontrolowanym błędem zapisanym w logu, manifeście i raporcie.
   struktury, brak bloków.
 - `gnb/extractors/markdown.py` — Markdown przez `markdown-it-py` z regułą tabel,
   wysoki poziom pewności, rozpoznane bloki strukturalne.
+- `gnb/extractors/strona_www.py` — treść artykułu przez `trafilatura`, średni
+  poziom pewności, z mechanizmem zapasowym na `lxml` o niskim poziomie pewności.
 
 ## Pakiet gnb.normalization
 
@@ -77,6 +95,8 @@ kończy się kontrolowanym błędem zapisanym w logu, manifeście i raporcie.
 
 - `gnb/persistence/projekt.py` — układ katalogów projektu: materiały źródłowe,
   wyniki pośrednie, pliki wynikowe, logi, manifest, checkpoint.
+- `gnb/persistence/cache.py` — wspólna dla projektów pamięć podręczna pobranych
+  zasobów, oparta na SQLite, z trybem WAL i numerem wersji schematu.
 - `gnb/persistence/checkpoint.py` — `checkpoint.json` z zapisem atomowym przez
   plik tymczasowy i `os.replace`, z jedną kopią zapasową. Po restarcie źródła
   ze statusem końcowym nie są przetwarzane ponownie.
@@ -92,9 +112,11 @@ kończy się kontrolowanym błędem zapisanym w logu, manifeście i raporcie.
 
 ## Wiersz poleceń
 
-`gnb/cli.py` udostępnia dwa polecenia. `diagnostyka` sprawdza narzędzia
-zewnętrzne. `przetworz` uruchamia potok dla tekstu wklejonego oraz plików TXT
-i MD, z opcjami `--projekt`, `--plik`, `--tekst`, `--tekst-md`, `--katalog`.
+`gnb/cli.py` udostępnia trzy polecenia. `diagnostyka` sprawdza narzędzia
+zewnętrzne. `przetworz` uruchamia potok dla tekstu wklejonego, plików TXT i MD
+oraz adresów stron, z opcjami `--projekt`, `--plik`, `--tekst`, `--tekst-md`,
+`--url`, `--lista-url`, `--sprawdz-liste` i `--katalog`. `pamiec` pokazuje stan
+wspólnej pamięci podręcznej i pozwala ją wyczyścić.
 
 ## Pozostałe pakiety
 
@@ -104,8 +126,15 @@ importowalne pakiety z docstringiem. Logika powstanie w kolejnych etapach.
 
 ## Testy
 
-Testy jednostkowe i integracyjne pokrywają każdy moduł etapu pierwszego. Test
-`tests/test_potok_e2e.py` przeprowadza pełny przebieg dla pliku strukturalnego
-MD, pliku TXT, pliku w kodowaniu Windows-1250 i tekstu wklejonego, sprawdza
-regułę wyboru formatu oraz to, że wznowienie z checkpointu nie duplikuje ani nie
-gubi źródeł. Żaden test etapu pierwszego nie korzysta z sieci.
+Testy jednostkowe i integracyjne pokrywają każdy moduł etapów pierwszego
+i drugiego. Test `tests/test_potok_e2e.py` przeprowadza pełny przebieg dla pliku
+strukturalnego MD, pliku TXT, pliku w kodowaniu Windows-1250 i tekstu wklejonego.
+Test `tests/test_potok_url_e2e.py` przeprowadza pełny przebieg dla adresów stron,
+w tym pominięcie zakazane przez `robots.txt`, błąd 404, zasób innego typu,
+wznowienie bez ponownego pobrania oraz oszczędność pobrania dzięki pamięci
+podręcznej.
+
+Żaden test nie korzysta z sieci. Pobieranie jest sprawdzane na sztucznym
+transporcie `httpx.MockTransport`, a odstępy i ponowienia na podstawionym
+usypiaczu, więc testy są deterministyczne i nie czekają naprawdę. Ewentualne
+testy sieciowe mają dostać marker `siec`, domyślnie wyłączony.

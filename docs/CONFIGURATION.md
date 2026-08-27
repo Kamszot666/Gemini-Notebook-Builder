@@ -1,7 +1,7 @@
-# Konfiguracja — stan po etapie pierwszym
+# Konfiguracja — stan po etapie drugim
 
-Ten dokument opisuje wyłącznie pola konfiguracji, które etap pierwszy faktycznie
-obsługuje. Pełna lista pól z sekcji jedenastej a pliku `CLAUDE.md`, w tym progi
+Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
+obsługuje po etapie drugim. Pełna lista pól z sekcji jedenastej a pliku `CLAUDE.md`, w tym progi
 deduplikacji, ustawienia OCR, transkrypcji, generowania PDF oraz treść instrukcji
 systemowej notatnika, powstanie w kolejnych etapach razem z funkcjami, których
 dotyczy.
@@ -61,6 +61,70 @@ Nazwa pola w pliku TOML, odpowiadająca zmienna środowiskowa oraz znaczenie:
    false`. W zmiennej środowiskowej przyjmowane są napisy `tak` i `nie`, `true`
    i `false` oraz `1` i `0`, niezależnie od wielkości liter.
 
+## Pola pobierania stron internetowych
+
+1. `nazwa_klienta`, zmienna `GNB_NAZWA_KLIENTA`. Nazwa, którą aplikacja
+   przedstawia się serwerom. Domyślnie wskazuje projekt i jego repozytorium.
+2. `limit_czasu_sekundy`, zmienna `GNB_LIMIT_CZASU_SEKUNDY`. Limit czasu jednego
+   żądania. Domyślnie 20.
+3. `liczba_ponowien`, zmienna `GNB_LICZBA_PONOWIEN`. Liczba dodatkowych prób po
+   błędzie przejściowym. Domyślnie 3. Zero oznacza pracę bez ponawiania.
+4. `podstawa_odstepu_sekundy`, zmienna `GNB_PODSTAWA_ODSTEPU_SEKUNDY`. Pierwszy
+   odstęp przed ponowieniem, podwajany przy każdej kolejnej próbie. Domyślnie 1.
+5. `maksymalny_odstep_sekundy`, zmienna `GNB_MAKSYMALNY_ODSTEP_SEKUNDY`. Sufit
+   odstępu, obowiązujący także wtedy, gdy serwer poprosi o dłuższą przerwę
+   nagłówkiem `Retry-After`. Domyślnie 30.
+6. `odstep_miedzy_zadaniami_sekundy`, zmienna
+   `GNB_ODSTEP_MIEDZY_ZADANIAMI_SEKUNDY`. Odstęp między kolejnymi żądaniami do
+   tej samej domeny. Domyślnie 1. Zero jest dozwolone.
+7. `polaczenia_na_domene`, zmienna `GNB_POLACZENIA_NA_DOMENE`. Maksymalna liczba
+   równoczesnych połączeń do jednej domeny. Domyślnie 3.
+8. `respektuj_robots`, zmienna `GNB_RESPEKTUJ_ROBOTS`. Respektowanie pliku
+   `robots.txt`. Domyślnie włączone.
+9. `maksymalny_rozmiar_pobrania_mb`, zmienna
+   `GNB_MAKSYMALNY_ROZMIAR_POBRANIA_MB`. Bezpieczny limit rozmiaru pobieranego
+   zasobu. Domyślnie 20. Zasób większy jest pomijany, a nie obcinany.
+10. `dodatkowe_parametry_sledzace`, zmienna `GNB_DODATKOWE_PARAMETRY_SLEDZACE`.
+    Dodatkowe nazwy parametrów adresu uznawanych za śledzące, usuwane obok listy
+    wbudowanej. W pliku TOML lista, w zmiennej środowiskowej wartości rozdzielone
+    przecinkiem.
+
+## Pamięć podręczna pobranych stron
+
+Pamięć podręczna jest wspólna dla wszystkich projektów i leży w katalogu danych
+aplikacji, obok pliku konfiguracji, a nie wewnątrz katalogu projektu. Dzięki temu
+ten sam artykuł użyty w dwóch notatnikach pobiera się tylko raz.
+
+1. `uzywaj_cache`, zmienna `GNB_UZYWAJ_CACHE`. Włączenie pamięci podręcznej.
+   Domyślnie włączona.
+2. `maksymalny_wiek_cache_dni`, zmienna `GNB_MAKSYMALNY_WIEK_CACHE_DNI`. Wiek,
+   po którym wpis jest usuwany przy kolejnym uruchomieniu. Domyślnie 30 dni.
+   Ustawienie istnieje po to, żeby plik nie rósł bez końca.
+3. `sciezka_cache`, zmienna `GNB_SCIEZKA_CACHE`. Ścieżka pliku SQLite. Domyślnie
+   plik `cache.sqlite3` w katalogu danych aplikacji.
+
+Ścieżkę pliku, stan i liczbę zapamiętanych zasobów pokazuje polecenie:
+
+```powershell
+python -m gnb.cli pamiec
+```
+
+Koniec polecenia pokazującego stan pamięci podręcznej.
+
+Całą zawartość usuwa polecenie:
+
+```powershell
+python -m gnb.cli pamiec --wyczysc
+```
+
+Koniec polecenia czyszczącego pamięć podręczną.
+
+Plik ma włączony tryb WAL oraz limit czasu oczekiwania na blokadę, ponieważ dwa
+uruchomienia aplikacji mogą sięgnąć do niego naraz. Zajętość bazy jest traktowana
+jako błąd przejściowy, a nie jako awaria przetwarzania. W bazie zapisany jest
+numer wersji schematu. Zawartość zapisana w innej wersji jest świadomie
+odrzucana, ponieważ zawsze można ją odtworzyć, pobierając zasób ponownie.
+
 ## Przykładowy plik konfiguracji
 
 Poniższy blok to zawartość przykładowego pliku `konfiguracja.toml`.
@@ -72,6 +136,20 @@ bezpieczny_limit_slow = 480000
 bezpieczny_limit_mb = 190
 formaty_wynikowe = ["txt", "md"]
 zachowuj_oryginaly = true
+
+nazwa_klienta = "GeminiNotebookBuilder/0.1 (+https://github.com/Kamszot666/Gemini-Notebook-Builder)"
+limit_czasu_sekundy = 20
+liczba_ponowien = 3
+podstawa_odstepu_sekundy = 1
+maksymalny_odstep_sekundy = 30
+odstep_miedzy_zadaniami_sekundy = 1
+polaczenia_na_domene = 3
+respektuj_robots = true
+maksymalny_rozmiar_pobrania_mb = 20
+dodatkowe_parametry_sledzace = []
+
+uzywaj_cache = true
+maksymalny_wiek_cache_dni = 30
 ```
 
 Koniec przykładowego pliku konfiguracji.

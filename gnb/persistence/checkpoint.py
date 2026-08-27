@@ -21,7 +21,7 @@ from typing import Any
 
 from gnb.core.wyjatki import BladTrwaly
 
-WERSJA_SCHEMATU = 1
+WERSJA_SCHEMATU = 2
 _SUFIKS_TYMCZASOWY = ".tmp"
 _SUFIKS_KOPII = ".bak"
 
@@ -36,6 +36,23 @@ class StanWyniku:
     liczba_znakow: int
     rozmiar_bajtow: int
     checksum: str
+
+
+@dataclass
+class StanPobrania:
+    """Dane odpowiedzi HTTP zapamiętane dla źródła pobranego ze strony internetowej.
+
+    Deklarowane kodowanie jest zapisywane celowo. Bez niego ponowna ekstrakcja
+    z zachowanego pliku HTML dałaby nieczytelne znaki wszędzie tam, gdzie strona
+    nie była w UTF-8.
+    """
+
+    adres_koncowy: str
+    kod_odpowiedzi: int
+    deklarowane_kodowanie: str
+    etag: str | None = None
+    last_modified: str | None = None
+    z_pamieci_podrecznej: bool = False
 
 
 @dataclass
@@ -55,6 +72,7 @@ class StanZrodla:
     decyzja_md: bool | None = None
     uzasadnienie_md: list[str] = field(default_factory=list)
     komunikat_bledu: str | None = None
+    pobranie: StanPobrania | None = None
 
 
 @dataclass
@@ -150,6 +168,20 @@ def _stan_do_slownika(stan: StanZrodla) -> dict[str, Any]:
         "decyzja_md": stan.decyzja_md,
         "uzasadnienie_md": list(stan.uzasadnienie_md),
         "komunikat_bledu": stan.komunikat_bledu,
+        "pobranie": _pobranie_do_slownika(stan.pobranie),
+    }
+
+
+def _pobranie_do_slownika(pobranie: StanPobrania | None) -> dict[str, Any] | None:
+    if pobranie is None:
+        return None
+    return {
+        "adres_koncowy": pobranie.adres_koncowy,
+        "kod_odpowiedzi": pobranie.kod_odpowiedzi,
+        "deklarowane_kodowanie": pobranie.deklarowane_kodowanie,
+        "etag": pobranie.etag,
+        "last_modified": pobranie.last_modified,
+        "z_pamieci_podrecznej": pobranie.z_pamieci_podrecznej,
     }
 
 
@@ -201,6 +233,23 @@ def _stan_ze_slownika(dane: Any) -> StanZrodla:
         decyzja_md=_opcjonalna_wartosc_logiczna(dane.get("decyzja_md")),
         uzasadnienie_md=[str(element) for element in dane.get("uzasadnienie_md", [])],
         komunikat_bledu=_opcjonalny_tekst(dane.get("komunikat_bledu")),
+        pobranie=_pobranie_ze_slownika(dane.get("pobranie")),
+    )
+
+
+def _pobranie_ze_slownika(dane: Any) -> StanPobrania | None:
+    """Odczytuje dane pobrania. Ich brak jest poprawny, bo mają je tylko źródła sieciowe."""
+    if dane is None:
+        return None
+    if not isinstance(dane, dict):
+        raise ValueError("Wpis pobrania w checkpoincie nie jest obiektem JSON.")
+    return StanPobrania(
+        adres_koncowy=str(dane["adres_koncowy"]),
+        kod_odpowiedzi=int(dane["kod_odpowiedzi"]),
+        deklarowane_kodowanie=str(dane.get("deklarowane_kodowanie", "")),
+        etag=_opcjonalny_tekst(dane.get("etag")),
+        last_modified=_opcjonalny_tekst(dane.get("last_modified")),
+        z_pamieci_podrecznej=bool(dane.get("z_pamieci_podrecznej", False)),
     )
 
 

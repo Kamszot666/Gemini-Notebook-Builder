@@ -1,9 +1,14 @@
 """Przyjmowanie wejść użytkownika, walidacja i tworzenie źródeł.
 
-W etapie pierwszym obsługiwane są dwa rodzaje wejścia: tekst wklejony
-bezpośrednio oraz plik lokalny w formacie TXT lub MD. Moduł zamienia wejście na
-`PozycjaWejsciowa`, a następnie na zwalidowane `Zrodlo` z deterministycznym
-identyfikatorem i pełną sumą kontrolną.
+Po etapie drugim obsługiwane są trzy rodzaje wejścia: tekst wklejony
+bezpośrednio, plik lokalny w formacie TXT lub MD oraz adres strony internetowej.
+Moduł zamienia wejście na `PozycjaWejsciowa`, a następnie na zwalidowane
+`Zrodlo` z deterministycznym identyfikatorem i pełną sumą kontrolną.
+
+Dla adresu strony identyfikator powstaje z kanonicznej postaci adresu, a nie
+z treści, ponieważ musi być znany przed pobraniem. Dzięki temu wznowienie pracy
+wie, którego adresu nie trzeba pobierać ponownie. Suma kontrolna treści jest
+uzupełniana po pobraniu.
 
 Wskazówka formatu, czyli rozszerzenie pliku albo zadeklarowany format tekstu
 wklejonego, jest przenoszona osobno w `PozycjaWejsciowa`, żeby nie zmieniać
@@ -19,17 +24,20 @@ from pathlib import Path
 
 from gnb.core.identyfikatory import (
     identyfikator_zrodla,
+    suma_kontrolna_bajtow,
     suma_kontrolna_pliku,
     suma_kontrolna_tekstu_wklejonego,
 )
 from gnb.core.konfiguracja import Konfiguracja
 from gnb.core.model import WejscieSurowe, Zrodlo
 from gnb.core.stale import StatusZrodla, TypWejscia, TypZrodla
+from gnb.core.url import adres_kanoniczny, adres_pobierania
 from gnb.core.wyjatki import BladTrwaly, FormatNieobslugiwany, PrzekroczonoLimit
 from gnb.normalization.kodowanie import zdekoduj
 
 FORMATY_PLIKOW = frozenset({"txt", "md"})
 FORMATY_TEKSTU_WKLEJONEGO = frozenset({"txt", "md"})
+FORMAT_STRONY_WWW = "html"
 _ZNAK_BOM = "\ufeff"
 _BAJTOW_W_MEGABAJCIE = 1024 * 1024
 
@@ -39,11 +47,17 @@ class PozycjaWejsciowa:
     """Jedno wejście przygotowane do przetwarzania.
 
     Pole `format_zrodla` to małą literą zapisane rozszerzenie pliku bez kropki
-    albo zadeklarowany format tekstu wklejonego, czyli ``txt`` lub ``md``.
+    albo zadeklarowany format tekstu wklejonego, czyli ``txt`` lub ``md``. Dla
+    strony internetowej jest to ``html``.
+
+    Pole `adres_kanoniczny` jest wypełnione wyłącznie dla adresów stron. Wartość
+    w `wejscie.wartosc` jest wtedy adresem wysyłanym do serwera, czyli może mieć
+    inną kolejność parametrów niż postać kanoniczna.
     """
 
     wejscie: WejscieSurowe
     format_zrodla: str
+    adres_kanoniczny: str | None = None
 
 
 def przyjmij_tekst(
@@ -66,6 +80,39 @@ def przyjmij_tekst(
         moment_dodania=moment_dodania,
     )
     return PozycjaWejsciowa(wejscie=wejscie, format_zrodla=format_znormalizowany)
+
+
+def przyjmij_url(
+    adres: str, moment_dodania: datetime, dodatkowe_parametry_sledzace: tuple[str, ...] = ()
+) -> PozycjaWejsciowa:
+    """Tworzy pozycję wejściową z adresu strony internetowej.
+
+    Adres jest walidowany, a następnie zapisywany w dwóch postaciach: kanonicznej
+    jako klucz tożsamości oraz pobierania jako to, co realnie trafi do serwera.
+    Niepoprawny adres kończy się błędem trwałym.
+    """
+    kanoniczny = adres_kanoniczny(adres, dodatkowe_parametry_sledzace)
+    do_pobrania = adres_pobierania(adres, dodatkowe_parametry_sledzace)
+    wejscie = WejscieSurowe(
+        identyfikator_wejscia=_identyfikator_wejscia(TypWejscia.URL, kanoniczny),
+        typ_wejscia=TypWejscia.URL,
+        wartosc=do_pobrania,
+        moment_dodania=moment_dodania,
+    )
+    return PozycjaWejsciowa(
+        wejscie=wejscie, format_zrodla=FORMAT_STRONY_WWW, adres_kanoniczny=kanoniczny
+    )
+
+
+def identyfikator_strony(adres_kanoniczny_zrodla: str) -> str:
+    """Buduje identyfikator źródła sieciowego z kanonicznej postaci jego adresu.
+
+    Identyfikator jest znany przed pobraniem, dzięki czemu wznowienie pracy
+    rozpoznaje adresy już przetworzone i nie pobiera ich ponownie.
+    """
+    return identyfikator_zrodla(
+        TypZrodla.STRONA_WWW, suma_kontrolna_bajtow(adres_kanoniczny_zrodla.encode("utf-8"))
+    )
 
 
 def przyjmij_plik(sciezka: Path, moment_dodania: datetime) -> PozycjaWejsciowa:
@@ -92,6 +139,8 @@ def waliduj_i_utworz_zrodlo(
     """
     if pozycja.wejscie.typ_wejscia is TypWejscia.PLIK:
         return _zrodlo_z_pliku(pozycja, konfiguracja, moment)
+    if pozycja.wejscie.typ_wejscia is TypWejscia.URL:
+        return _zrodlo_z_url(pozycja, moment)
     return _zrodlo_z_tekstu(pozycja, moment)
 
 
@@ -100,8 +149,13 @@ def wczytaj_tresc_zrodla(pozycja: PozycjaWejsciowa) -> tuple[str, str]:
 
     Dla pliku bajty są wczytywane z dysku i dekodowane z wykryciem kodowania.
     Dla tekstu wklejonego zwracany jest wprost jego tekst, po odcięciu znaku
-    kolejności bajtów, jeżeli występuje.
+    kolejności bajtów, jeżeli występuje. Treść adresu strony nie pochodzi z tej
+    funkcji, tylko z osobnej fazy pobrania w potoku.
     """
+    if pozycja.wejscie.typ_wejscia is TypWejscia.URL:
+        raise BladTrwaly(
+            "Treść strony internetowej pochodzi z fazy pobrania, a nie z odczytu wejścia."
+        )
     if pozycja.wejscie.typ_wejscia is TypWejscia.PLIK:
         dane = Path(pozycja.wejscie.wartosc).read_bytes()
         return zdekoduj(dane)
@@ -145,6 +199,20 @@ def _zrodlo_z_pliku(
         typ_zrodla=TypZrodla.PLIK_TEKSTOWY,
         pochodzenie=sciezka.name,
         checksum=suma,
+        status=StatusZrodla.OCZEKUJE,
+        utworzono=moment,
+        zaktualizowano=moment,
+    )
+
+
+def _zrodlo_z_url(pozycja: PozycjaWejsciowa, moment: datetime) -> Zrodlo:
+    """Buduje źródło dla adresu strony. Suma kontrolna treści dochodzi po pobraniu."""
+    kanoniczny = pozycja.adres_kanoniczny or adres_kanoniczny(pozycja.wejscie.wartosc)
+    return Zrodlo(
+        identyfikator_zrodla=identyfikator_strony(kanoniczny),
+        typ_zrodla=TypZrodla.STRONA_WWW,
+        pochodzenie=kanoniczny,
+        checksum=None,
         status=StatusZrodla.OCZEKUJE,
         utworzono=moment,
         zaktualizowano=moment,

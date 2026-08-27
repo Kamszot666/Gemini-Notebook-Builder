@@ -9,6 +9,7 @@ między żądaniami i zapytania warunkowe są sprawdzane deterministycznie.
 from __future__ import annotations
 
 import asyncio
+import ssl
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -432,3 +433,18 @@ def test_zadania_do_jednej_domeny_zachowuja_odstep() -> None:
     przespane = asyncio.run(uruchom())
 
     assert pytest.approx(2.0) == przespane[-1]
+
+
+def test_blad_certyfikatu_jest_bledem_trwalym_i_nie_jest_ponawiany() -> None:
+    proby: list[int] = []
+
+    def obsluga(zadanie: httpx.Request) -> httpx.Response:
+        proby.append(1)
+        przyczyna = ssl.SSLCertVerificationError("certificate verify failed")
+        blad = httpx.ConnectError("nie udało się nawiązać połączenia", request=zadanie)
+        raise blad from przyczyna
+
+    with pytest.raises(BladTrwaly, match="certyfikat"):
+        asyncio.run(_pobierz(_ustawienia(liczba_ponowien=3), _transport(obsluga)))
+
+    assert len(proby) == 1

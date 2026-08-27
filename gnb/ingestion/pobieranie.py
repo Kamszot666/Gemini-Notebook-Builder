@@ -11,6 +11,12 @@ czasu, zerwane połączenie, odpowiedzi z rodziny 5xx oraz odpowiedź 429 to
 `BladPrzejsciowy` i podlegają ponowieniu. Pozostałe odpowiedzi z rodziny 4xx to
 `BladTrwaly` i nie są ponawiane, bo powtórzenie żądania niczego nie zmieni.
 
+Osobno traktowany jest błąd certyfikatu TLS. Jest to `BladTrwaly`, ponieważ
+niezaufany certyfikat nie naprawi się przy kolejnej próbie, a ponawianie tylko
+wydłuża pracę. Komunikat podpowiada realne przyczyny: podsłuchiwanie ruchu przez
+program antywirusowy albo serwer pośredniczący, przeterminowany certyfikat
+serwisu oraz błędnie ustawiony zegar systemowy.
+
 Trzy sytuacje nie są błędami, tylko świadomym pominięciem źródła i są zwracane
 jako `PominietePobranie`: zakaz w pliku ``robots.txt``, zasób, który nie jest
 stroną HTML, oraz zasób przekraczający bezpieczny limit rozmiaru.
@@ -27,6 +33,7 @@ zawartości i nie wykonuje niczego, co w niej znajdzie.
 from __future__ import annotations
 
 import asyncio
+import ssl
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
@@ -286,6 +293,18 @@ class Pobieracz:
                 raise BladPrzejsciowy(
                     f"Przekroczono limit czasu przy pobieraniu {zadanie.adres_pobierania}."
                 ) from blad
+            except httpx.ConnectError as blad:
+                if _czy_blad_certyfikatu(blad):
+                    raise BladTrwaly(
+                        f"Nie udało się zweryfikować certyfikatu witryny przy adresie "
+                        f"{zadanie.adres_pobierania}. Sprawdź, czy ruch nie jest "
+                        "przechwytywany przez program antywirusowy albo serwer "
+                        "pośredniczący, czy certyfikat witryny nie wygasł oraz czy zegar "
+                        "systemowy jest ustawiony poprawnie."
+                    ) from blad
+                raise BladPrzejsciowy(
+                    f"Błąd połączenia przy pobieraniu {zadanie.adres_pobierania}: {blad}"
+                ) from blad
             except httpx.HTTPError as blad:
                 raise BladPrzejsciowy(
                     f"Błąd połączenia przy pobieraniu {zadanie.adres_pobierania}: {blad}"
@@ -474,6 +493,22 @@ def _typ_zawartosci(odpowiedz: httpx.Response) -> str:
     """Zwraca sam typ zawartości, bez parametrów takich jak kodowanie."""
     naglowek = str(odpowiedz.headers.get("content-type", ""))
     return naglowek.split(";", 1)[0].strip().lower()
+
+
+def _czy_blad_certyfikatu(blad: BaseException) -> bool:
+    """Rozstrzyga, czy błąd połączenia wynika z niezaufanego certyfikatu TLS.
+
+    Biblioteka HTTP opakowuje błąd biblioteki SSL, więc sprawdzany jest cały
+    łańcuch przyczyn, a nie tylko sam wyjątek wierzchni.
+    """
+    biezacy: BaseException | None = blad
+    odwiedzone: set[int] = set()
+    while biezacy is not None and id(biezacy) not in odwiedzone:
+        if isinstance(biezacy, ssl.SSLError):
+            return True
+        odwiedzone.add(id(biezacy))
+        biezacy = biezacy.__cause__ or biezacy.__context__
+    return False
 
 
 def _domena(adres: str) -> str:

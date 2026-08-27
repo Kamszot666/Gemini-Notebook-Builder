@@ -1,7 +1,7 @@
-# Konfiguracja — stan po etapie drugim
+# Konfiguracja — stan po etapie trzecim
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
-obsługuje po etapie drugim. Pełna lista pól z sekcji jedenastej a pliku `CLAUDE.md`, w tym progi
+obsługuje po etapie trzecim. Pełna lista pól z sekcji jedenastej a pliku `CLAUDE.md`, w tym progi
 deduplikacji, ustawienia OCR, transkrypcji, generowania PDF oraz treść instrukcji
 systemowej notatnika, powstanie w kolejnych etapach razem z funkcjami, których
 dotyczy.
@@ -87,10 +87,20 @@ Nazwa pola w pliku TOML, odpowiadająca zmienna środowiskowa oraz znaczenie:
    równoczesnych połączeń do jednej domeny. Domyślnie 3.
 8. `respektuj_robots`, zmienna `GNB_RESPEKTUJ_ROBOTS`. Respektowanie pliku
    `robots.txt`. Domyślnie włączone.
-9. `maksymalny_rozmiar_pobrania_mb`, zmienna
+9. `wyjatek_robots_dla_zrodel_jawnych`, zmienna
+   `GNB_WYJATEK_ROBOTS_DLA_ZRODEL_JAWNYCH`. Wyłącza kontrolę pliku `robots.txt`
+   dla adresów, które podałeś wprost na liście źródeł. Domyślnie włączony.
+   Adres, który program znalazłby sam w treści innego źródła, podlega kontroli
+   bez wyjątku. Każde zastosowanie wyjątku jest zapisywane w
+   `log_szczegolowy.txt` razem z adresem, żeby dało się je sprawdzić. Ustawienie
+   wartości fałsz przywraca kontrolę dla wszystkich adresów; filmy z YouTube są
+   wtedy pomijane, ponieważ serwis zabrania w swoim pliku reguł pobierania
+   ścieżki `/watch`. Uzasadnienie i warunki zakresu opisuje sekcja piętnasta
+   `CLAUDE.md`.
+10. `maksymalny_rozmiar_pobrania_mb`, zmienna
    `GNB_MAKSYMALNY_ROZMIAR_POBRANIA_MB`. Bezpieczny limit rozmiaru pobieranego
    zasobu. Domyślnie 20. Zasób większy jest pomijany, a nie obcinany.
-10. `sciezka_certyfikatow`, zmienna `GNB_SCIEZKA_CERTYFIKATOW`. Ścieżka pliku PEM
+11. `sciezka_certyfikatow`, zmienna `GNB_SCIEZKA_CERTYFIKATOW`. Ścieżka pliku PEM
     z certyfikatami zaufanych wystawców. Domyślnie pusta, co oznacza magazyn
     wbudowany w bibliotekę HTTP. Ustaw to pole, jeżeli ruch przechodzi przez
     firmowy serwer pośredniczący albo przez program antywirusowy podstawiający
@@ -102,10 +112,28 @@ Nazwa pola w pliku TOML, odpowiadająca zmienna środowiskowa oraz znaczenie:
     a nie cichym pominięciem ustawienia. Nie ma i nie będzie ustawienia
     wyłączającego weryfikację certyfikatu, ponieważ byłoby to obejście
     zabezpieczenia, zakazane w sekcji trzeciej `CLAUDE.md`.
-11. `dodatkowe_parametry_sledzace`, zmienna `GNB_DODATKOWE_PARAMETRY_SLEDZACE`.
+12. `dodatkowe_parametry_sledzace`, zmienna `GNB_DODATKOWE_PARAMETRY_SLEDZACE`.
     Dodatkowe nazwy parametrów adresu uznawanych za śledzące, usuwane obok listy
     wbudowanej. W pliku TOML lista, w zmiennej środowiskowej wartości rozdzielone
     przecinkiem.
+
+## Pola napisów filmów
+
+1. `jezyki_napisow`, zmienna `GNB_JEZYKI_NAPISOW`. Języki napisów w kolejności
+   preferencji. Domyślnie polski i angielski. W pliku TOML lista, na przykład
+   `["pl", "en"]`, a w zmiennej środowiskowej wartości rozdzielone przecinkiem.
+2. `napisy_automatyczne`, zmienna `GNB_NAPISY_AUTOMATYCZNE`. Zgoda na użycie
+   napisów tworzonych automatycznie, gdy nie ma napisów tworzonych ręcznie.
+   Domyślnie włączona. Napisy automatyczne bywają mniej dokładne, zwłaszcza przy
+   nazwach własnych.
+3. `napisy_tlumaczone`, zmienna `GNB_NAPISY_TLUMACZONE`. Zgoda na użycie napisów
+   przetłumaczonych automatycznie na pierwszy język z listy preferencji, gdy nie
+   ma żadnych innych. Domyślnie wyłączona, ponieważ tłumaczenie maszynowe napisów
+   automatycznych zwielokrotnia liczbę pomyłek.
+4. `znaczniki_czasu`, zmienna `GNB_ZNACZNIKI_CZASU`. Dopisywanie znacznika czasu
+   na początku każdego akapitu transkrypcji. Domyślnie wyłączone. Znaczniki
+   ułatwiają odnalezienie fragmentu w filmie, ale przy odsłuchu czytnikiem
+   ekranu przeszkadzają, dlatego nie są domyślne.
 
 ## Pamięć podręczna pobranych stron
 
@@ -171,9 +199,15 @@ maksymalny_odstep_sekundy = 30
 odstep_miedzy_zadaniami_sekundy = 1
 polaczenia_na_domene = 3
 respektuj_robots = true
+wyjatek_robots_dla_zrodel_jawnych = true
 maksymalny_rozmiar_pobrania_mb = 20
 sciezka_certyfikatow = ""
 dodatkowe_parametry_sledzace = []
+
+jezyki_napisow = ["pl", "en"]
+napisy_automatyczne = true
+napisy_tlumaczone = false
+znaczniki_czasu = false
 
 uzywaj_cache = true
 maksymalny_wiek_cache_dni = 30

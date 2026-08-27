@@ -104,7 +104,7 @@ Koniec bloku komend uruchamiania i testów.
 Zasady dotyczące komend:
 
 1. `python -m gnb.cli diagnostyka` musi wypisać czytelny tekstowo raport o dostępności narzędzi zewnętrznych: FFmpeg, Tesseract, LibreOffice (`soffice`), MuseScore CLI (`mscore`), Java dla Audiveris. Dla każdego brakującego narzędzia podaj nazwę, do czego służy i co przestanie działać bez niego.
-2. `python -m gnb.cli przetworz` uruchamia potok przetwarzania dla tekstu wklejonego, plików TXT i MD oraz adresów stron internetowych. Opcje `--plik`, `--tekst`, `--tekst-md`, `--url` i `--lista-url` można podawać wielokrotnie, `--projekt` i `--katalog` są opcjonalne. Wyjście jest czytelne liniowo, bez pasków postępu i znaków sterujących, i kończy się jednym zdaniem podsumowania: ile źródeł przetworzono, ile pominięto i w którym katalogu są wyniki. Kod wyjścia zero oznacza wykonany potok, kod dwa brak podanych źródeł. Zakres formatów obsługiwanych przez to polecenie rośnie w kolejnych etapach.
+2. `python -m gnb.cli przetworz` uruchamia potok przetwarzania dla tekstu wklejonego, plików TXT i MD, adresów stron internetowych oraz adresów filmów z serwisu YouTube, dla których pobierane są napisy. Opcje `--plik`, `--tekst`, `--tekst-md`, `--url` i `--lista-url` można podawać wielokrotnie, `--projekt` i `--katalog` są opcjonalne. Wyjście jest czytelne liniowo, bez pasków postępu i znaków sterujących, i kończy się jednym zdaniem podsumowania: ile źródeł przetworzono, ile pominięto i w którym katalogu są wyniki. Kod wyjścia zero oznacza wykonany potok, kod dwa brak podanych źródeł. Zakres formatów obsługiwanych przez to polecenie rośnie w kolejnych etapach.
 3. Zanim cokolwiek zostanie pobrane, polecenie `przetworz` wypisuje podsumowanie listy adresów: liczbę wykrytych, poprawnych, duplikatów oraz odrzuconych wraz z powodem odrzucenia. Opcja `--sprawdz-liste` kończy pracę zaraz po tym podsumowaniu, bez pobierania. Kod wyjścia jest wtedy zerowy także wtedy, gdy część wpisów jest błędna, bo wykrycie błędnych wpisów jest zamierzonym wynikiem sprawdzenia. Kod niezerowy oznacza wyłącznie to, że pliku listy nie dało się odczytać.
 4. `python -m gnb.cli pamiec` pokazuje ścieżkę wspólnej pamięci podręcznej pobranych stron, informację o jej włączeniu, maksymalny wiek wpisu oraz liczbę zapamiętanych zasobów. Opcja `--wyczysc` usuwa całą jej zawartość. Pamięć podręczna jest wspólna dla wszystkich projektów i leży w katalogu danych aplikacji, obok pliku konfiguracji.
 5. Testy domyślnie nie korzystają z sieci. Testy sieciowe oznaczaj markerem `siec`, testy długotrwałe markerem `wolne`. Oba są domyślnie wyłączone.
@@ -328,7 +328,28 @@ Raport końcowy: po zakończeniu projektu pokaż jako zwykły tekst liczbę wej�
 
 ## 15. Uwagi dziedzinowe, które łatwo przeoczyć
 
-Strony WWW: podstawowym ekstraktorem jest trafilatura, z mechanizmem zapasowym. Respektuj `robots.txt`, ustaw rozpoznawalny User-Agent, ogranicz współbieżność do najwyżej trzech połączeń na domenę i stosuj odstęp między żądaniami.
+Strony WWW: podstawowym ekstraktorem jest trafilatura, z mechanizmem zapasowym. Respektuj `robots.txt`, ustaw rozpoznawalny User-Agent, ogranicz współbieżność do najwyżej trzech połączeń na domenę i stosuj odstęp między żądaniami. Politykę wobec odpowiedzi serwera na żądanie pliku `robots.txt` opisuje RFC 9309, sekcja 2.3.1: kod z rodziny 2xx oznacza obowiązujące reguły, kod z rodziny 4xx, w tym 401 i 403, oznacza brak reguł, czyli zgodę, a kod z rodziny 5xx oraz błąd sieci oznaczają reguły nieokreślone, czyli pełny zakaz po wyczerpaniu ponowień.
+
+### Wyjątek dla źródeł wskazanych jawnie
+
+Decyzja: kontrola `robots.txt` nie obowiązuje dla adresów, które użytkownik podał wprost na liście źródeł. Obowiązuje bez zmian dla wszystkich adresów, które program znalazłby sam w treści innego źródła.
+
+Uzasadnienie: protokół Robots Exclusion, opisany w RFC 9309, jest adresowany do klientów automatycznych, które odkrywają adresy samodzielnie i przeszukują serwis. Ten program działa inaczej: wykonuje pojedyncze, jawne polecenie człowieka dotyczące jednego wskazanego zasobu. To jest zachowanie agenta użytkownika, a nie robota przeszukującego. Plik `robots.txt` nie jest ani paywallem, ani logowaniem, ani zabezpieczeniem technicznym, więc zakaz z sekcji trzeciej niniejszej instrukcji go nie obejmuje.
+
+Zakres wyjątku. Cztery warunki, które muszą być spełnione łącznie:
+
+1. Adres pochodzi bezpośrednio z listy źródeł podanej przez użytkownika.
+2. Pobierany jest dokładnie ten jeden zasób, bez przechodzenia po odnośnikach.
+3. Zastosowanie wyjątku jest zapisywane w `log_szczegolowy.txt` przy każdym użyciu, razem z adresem, żeby dało się to zaudytować.
+4. Wyjątek da się wyłączyć w konfiguracji.
+
+Klucz konfiguracji: `wyjatek_robots_dla_zrodel_jawnych`, wartość logiczna, domyślnie prawda, zmienna środowiskowa `GNB_WYJATEK_ROBOTS_DLA_ZRODEL_JAWNYCH`. Przy wartości fałsz kontrola obowiązuje wszystkie adresy bez wyjątku, a film z YouTube zostaje pominięty ze statusem informującym o zakazie w `robots.txt`.
+
+Zastrzeżenie pierwsze: wyjątek nie jest uzasadniony tym, że korzystamy wyłącznie z interfejsu napisów, a nie ze stron serwisu. Byłoby to nieprawdziwe, ponieważ druga warstwa pobierania, czyli `yt-dlp`, sięga po stronę `/watch`. Wyjątek dotyczy obu warstw, a jego jedynym uzasadnieniem jest charakter działania programu opisany wyżej.
+
+Zastrzeżenie drugie: warunki korzystania z serwisu są zagadnieniem odrębnym od `robots.txt` i program ich nie ocenia. Odpowiedzialność za zgodność użycia z warunkami serwisu spoczywa na użytkowniku narzędzia.
+
+Implementacja: wyjątek jest ogólnym mechanizmem opartym na pochodzeniu adresu, a nie warunkiem na domenę `youtube.com`. Żaden serwis nie jest traktowany szczególnie; szczególne jest to, skąd adres pochodzi.
 
 Import listy adresów: pole URL oraz importowany plik TXT muszą przyjmować pojedynczy adres, wiele adresów rozdzielonych spacjami oraz wiele adresów w osobnych wierszach. Przed rozpoczęciem przetwarzania pokaż użytkownikowi podsumowanie: liczbę wykrytych adresów, liczbę poprawnych, liczbę duplikatów oraz liczbę prawdopodobnie błędnych. Duplikaty wykrywaj po kanonicznej postaci adresu, czyli po usunięciu parametrów śledzących i ujednoliceniu zapisu. Użytkownik ma zobaczyć to podsumowanie zanim cokolwiek zostanie pobrane, bo to jest moment, w którym najtaniej wychwycić pomyłkę.
 

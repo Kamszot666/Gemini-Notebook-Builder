@@ -7,11 +7,12 @@ wtedy wartości domyślne.
 
 Obsługiwane są pola potrzebne w etapach pierwszym i drugim: katalog nadrzędny
 wyników, limit liczby źródeł, bezpieczny limit słów, bezpieczny limit megabajtów,
-lista formatów wynikowych, zachowywanie oryginałów źródeł oraz ustawienia
-pobierania stron: nazwa klienta, limit czasu, ponowienia, odstępy, liczba
-połączeń na domenę, respektowanie pliku robots, pamięć podręczna i dodatkowe
-parametry śledzące. Pozostałe pola wymienione w sekcji jedenastej a pliku
-CLAUDE.md dojdą w kolejnych etapach.
+lista formatów wynikowych, zachowywanie oryginałów źródeł, ustawienia pobierania
+stron: nazwa klienta, limit czasu, ponowienia, odstępy, liczba połączeń na
+domenę, respektowanie pliku robots, pamięć podręczna i dodatkowe parametry
+śledzące, a także ustawienia napisów filmów: języki, zgoda na napisy
+automatyczne i tłumaczone oraz znaczniki czasu. Pozostałe pola wymienione
+w sekcji jedenastej a pliku CLAUDE.md dojdą w kolejnych etapach.
 """
 
 from __future__ import annotations
@@ -43,6 +44,11 @@ DOMYSLNY_MAKSYMALNY_ODSTEP_SEKUNDY = 30.0
 DOMYSLNY_ODSTEP_MIEDZY_ZADANIAMI_SEKUNDY = 1.0
 DOMYSLNE_POLACZENIA_NA_DOMENE = 3
 DOMYSLNE_RESPEKTOWANIE_ROBOTS = True
+
+# Wyjątek od kontroli robots.txt dla adresów wskazanych wprost przez użytkownika.
+# Uzasadnienie i cztery warunki zakresu opisuje sekcja piętnasta CLAUDE.md,
+# podsekcja o wyjątku dla źródeł wskazanych jawnie.
+DOMYSLNY_WYJATEK_ROBOTS_DLA_ZRODEL_JAWNYCH = True
 DOMYSLNY_MAKSYMALNY_ROZMIAR_POBRANIA_MB = 20
 
 # Pusta wartość oznacza magazyn zaufanych certyfikatów wbudowany w bibliotekę
@@ -58,6 +64,12 @@ DOMYSLNA_SCIEZKA_CERTYFIKATOW = ""
 DOMYSLNE_UZYWANIE_CACHE = True
 DOMYSLNY_MAKSYMALNY_WIEK_CACHE_DNI = 30
 NAZWA_PLIKU_CACHE = "cache.sqlite3"
+
+# Ustawienia napisów filmów. Kolejność języków jest kolejnością preferencji.
+DOMYSLNE_JEZYKI_NAPISOW: tuple[str, ...] = ("pl", "en")
+DOMYSLNE_NAPISY_AUTOMATYCZNE = True
+DOMYSLNE_NAPISY_TLUMACZONE = False
+DOMYSLNE_ZNACZNIKI_CZASU = False
 
 NAZWA_KATALOGU_APLIKACJI_WINDOWS = "Gemini Notebook Builder"
 NAZWA_KATALOGU_APLIKACJI_XDG = "gemini-notebook-builder"
@@ -89,12 +101,17 @@ _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
     PREFIKS_ZMIENNYCH + "ODSTEP_MIEDZY_ZADANIAMI_SEKUNDY": "odstep_miedzy_zadaniami_sekundy",
     PREFIKS_ZMIENNYCH + "POLACZENIA_NA_DOMENE": "polaczenia_na_domene",
     PREFIKS_ZMIENNYCH + "RESPEKTUJ_ROBOTS": "respektuj_robots",
+    PREFIKS_ZMIENNYCH + "WYJATEK_ROBOTS_DLA_ZRODEL_JAWNYCH": "wyjatek_robots_dla_zrodel_jawnych",
     PREFIKS_ZMIENNYCH + "MAKSYMALNY_ROZMIAR_POBRANIA_MB": "maksymalny_rozmiar_pobrania_mb",
     PREFIKS_ZMIENNYCH + "SCIEZKA_CERTYFIKATOW": "sciezka_certyfikatow",
     PREFIKS_ZMIENNYCH + "UZYWAJ_CACHE": "uzywaj_cache",
     PREFIKS_ZMIENNYCH + "MAKSYMALNY_WIEK_CACHE_DNI": "maksymalny_wiek_cache_dni",
     PREFIKS_ZMIENNYCH + "SCIEZKA_CACHE": "sciezka_cache",
     PREFIKS_ZMIENNYCH + "DODATKOWE_PARAMETRY_SLEDZACE": "dodatkowe_parametry_sledzace",
+    PREFIKS_ZMIENNYCH + "JEZYKI_NAPISOW": "jezyki_napisow",
+    PREFIKS_ZMIENNYCH + "NAPISY_AUTOMATYCZNE": "napisy_automatyczne",
+    PREFIKS_ZMIENNYCH + "NAPISY_TLUMACZONE": "napisy_tlumaczone",
+    PREFIKS_ZMIENNYCH + "ZNACZNIKI_CZASU": "znaczniki_czasu",
 }
 _ZNANE_POLA = frozenset(_ZMIENNE_SRODOWISKOWE.values())
 
@@ -140,12 +157,17 @@ class Konfiguracja:
     odstep_miedzy_zadaniami_sekundy: float = DOMYSLNY_ODSTEP_MIEDZY_ZADANIAMI_SEKUNDY
     polaczenia_na_domene: int = DOMYSLNE_POLACZENIA_NA_DOMENE
     respektuj_robots: bool = DOMYSLNE_RESPEKTOWANIE_ROBOTS
+    wyjatek_robots_dla_zrodel_jawnych: bool = DOMYSLNY_WYJATEK_ROBOTS_DLA_ZRODEL_JAWNYCH
     maksymalny_rozmiar_pobrania_mb: int = DOMYSLNY_MAKSYMALNY_ROZMIAR_POBRANIA_MB
     sciezka_certyfikatow: str = DOMYSLNA_SCIEZKA_CERTYFIKATOW
     uzywaj_cache: bool = DOMYSLNE_UZYWANIE_CACHE
     maksymalny_wiek_cache_dni: int = DOMYSLNY_MAKSYMALNY_WIEK_CACHE_DNI
     sciezka_cache: Path = field(default_factory=_domyslna_sciezka_cache)
     dodatkowe_parametry_sledzace: tuple[str, ...] = ()
+    jezyki_napisow: tuple[str, ...] = DOMYSLNE_JEZYKI_NAPISOW
+    napisy_automatyczne: bool = DOMYSLNE_NAPISY_AUTOMATYCZNE
+    napisy_tlumaczone: bool = DOMYSLNE_NAPISY_TLUMACZONE
+    znaczniki_czasu: bool = DOMYSLNE_ZNACZNIKI_CZASU
 
 
 def sciezka_pliku_konfiguracji(srodowisko: Mapping[str, str] | None = None) -> Path:
@@ -244,6 +266,14 @@ def wczytaj_konfiguracje(
         dodatkowe_parametry_sledzace=_jako_lista_napisow(
             scalone, "dodatkowe_parametry_sledzace", domyslna.dodatkowe_parametry_sledzace
         ),
+        jezyki_napisow=_jako_lista_napisow(scalone, "jezyki_napisow", domyslna.jezyki_napisow),
+        napisy_automatyczne=_jako_prawda_falsz(
+            scalone, "napisy_automatyczne", domyslna.napisy_automatyczne
+        ),
+        napisy_tlumaczone=_jako_prawda_falsz(
+            scalone, "napisy_tlumaczone", domyslna.napisy_tlumaczone
+        ),
+        znaczniki_czasu=_jako_prawda_falsz(scalone, "znaczniki_czasu", domyslna.znaczniki_czasu),
     )
 
 

@@ -3,7 +3,8 @@
 Udostępnia trzy polecenia. Polecenie ``diagnostyka`` sprawdza dostępność
 narzędzi zewnętrznych wymienionych w sekcji piątej CLAUDE.md. Polecenie
 ``przetworz`` uruchamia potok przetwarzania dla tekstu wklejonego, plików TXT
-i MD oraz adresów stron internetowych. Polecenie ``pamiec`` pokazuje stan
+i MD, adresów stron internetowych oraz adresów filmów z serwisu YouTube, dla
+których pobierane są napisy. Polecenie ``pamiec`` pokazuje stan
 wspólnej pamięci podręcznej pobranych stron i pozwala ją wyczyścić.
 
 Przed pobraniem czegokolwiek polecenie ``przetworz`` wypisuje podsumowanie listy
@@ -387,8 +388,8 @@ def main(argumenty: list[str] | None = None) -> int:
         default=[],
         metavar="ADRES",
         help=(
-            "Adres strony internetowej. Opcję można podać wielokrotnie, "
-            "a w jednej wartości zmieścić kilka adresów rozdzielonych spacjami."
+            "Adres strony internetowej albo filmu z serwisu YouTube. Opcję można podać "
+            "wielokrotnie, a w jednej wartości zmieścić kilka adresów rozdzielonych spacjami."
         ),
     )
     parser_przetworz.add_argument(

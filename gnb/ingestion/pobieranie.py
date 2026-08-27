@@ -27,6 +27,12 @@ sięgania do sieci, a wpis nieświeży służy do zapytania warunkowego z nagł�
 ``If-None-Match`` oraz ``If-Modified-Since``. Odpowiedź 304 oznacza, że zapisana
 treść jest nadal aktualna.
 
+Kontrola pliku ``robots.txt`` ma jeden wyjątek: adres wskazany wprost przez
+użytkownika jej nie podlega, o ile wyjątek jest włączony w konfiguracji. Decyduje
+pochodzenie adresu, a nie domena, więc żaden serwis nie jest traktowany
+szczególnie. Każde zastosowanie wyjątku trafia do logu szczegółowego. Pełne
+uzasadnienie i cztery warunki zakresu opisuje sekcja piętnasta CLAUDE.md.
+
 Weryfikacja certyfikatu serwera jest zawsze włączona. Ustawienie
 `sciezka_certyfikatow` pozwala wskazać własny plik PEM z certyfikatami zaufanych
 wystawców, co jest potrzebne za firmowym serwerem pośredniczącym albo przy
@@ -40,6 +46,7 @@ zawartości i nie wykonuje niczego, co w niej znajdzie.
 from __future__ import annotations
 
 import asyncio
+import logging
 import ssl
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
@@ -104,6 +111,7 @@ class UstawieniaPobierania:
     odstep_miedzy_zadaniami_sekundy: float
     polaczenia_na_domene: int
     respektuj_robots: bool
+    wyjatek_robots_dla_zrodel_jawnych: bool
     maksymalny_rozmiar_pobrania_mb: int
     uzywaj_cache: bool
     maksymalny_wiek_cache_dni: int
@@ -121,6 +129,7 @@ class UstawieniaPobierania:
             odstep_miedzy_zadaniami_sekundy=konfiguracja.odstep_miedzy_zadaniami_sekundy,
             polaczenia_na_domene=konfiguracja.polaczenia_na_domene,
             respektuj_robots=konfiguracja.respektuj_robots,
+            wyjatek_robots_dla_zrodel_jawnych=konfiguracja.wyjatek_robots_dla_zrodel_jawnych,
             maksymalny_rozmiar_pobrania_mb=konfiguracja.maksymalny_rozmiar_pobrania_mb,
             uzywaj_cache=konfiguracja.uzywaj_cache,
             maksymalny_wiek_cache_dni=konfiguracja.maksymalny_wiek_cache_dni,
@@ -153,10 +162,17 @@ class PominietePobranie:
 
 @dataclass(frozen=True, slots=True)
 class Zadanie:
-    """Jeden adres do pobrania: postać wysyłana do serwera i klucz tożsamości."""
+    """Jeden adres do pobrania: postać wysyłana do serwera i klucz tożsamości.
+
+    Pole `wskazany_jawnie` mówi, czy adres pochodzi wprost z listy podanej przez
+    użytkownika. Od tego zależy wyjątek od kontroli pliku ``robots.txt`` opisany
+    w sekcji piętnastej CLAUDE.md. Adres znaleziony przez program w treści innego
+    źródła ma tu wartość fałsz i podlega kontroli bez wyjątku.
+    """
 
     adres_pobierania: str
     klucz_kanoniczny: str
+    wskazany_jawnie: bool = True
 
 
 WynikPobrania = OdpowiedzPobrania | PominietePobranie
@@ -191,6 +207,7 @@ class Pobieracz:
         usypiacz: Callable[[float], Awaitable[None]] | None = None,
         zegar_monotoniczny: Callable[[], float] | None = None,
         zegar_utc: Callable[[], datetime] | None = None,
+        log: logging.Logger | None = None,
     ) -> None:
         self._ustawienia = ustawienia
         self._transport = transport
@@ -198,6 +215,7 @@ class Pobieracz:
         self._usypiacz = usypiacz if usypiacz is not None else asyncio.sleep
         self._zegar = zegar_monotoniczny if zegar_monotoniczny is not None else time.monotonic
         self._zegar_utc = zegar_utc if zegar_utc is not None else teraz_utc
+        self._log = log if log is not None else logging.getLogger(__name__)
         self._klient: httpx.AsyncClient | None = None
         self._robots: KontrolerRobots | None = None
         self._domeny: dict[str, _StanDomeny] = {}
@@ -241,12 +259,43 @@ class Pobieracz:
         if wpis is not None and wpis.czy_swiezy(self._ustawienia.maksymalny_wiek_cache_dni, teraz):
             return _z_pamieci(zadanie, wpis)
 
-        if self._ustawienia.respektuj_robots:
+        if self._czy_sprawdzac_robots(zadanie):
             pominiecie = await self._sprawdz_robots(zadanie.adres_pobierania)
             if pominiecie is not None:
                 return pominiecie
 
         return await self._pobierz_z_ponowieniami(zadanie, wpis)
+
+    def _czy_sprawdzac_robots(self, zadanie: Zadanie) -> bool:
+        """Rozstrzyga, czy dla tego zadania obowiązuje kontrola pliku ``robots.txt``.
+
+        Adres wskazany wprost przez użytkownika jest z niej wyłączony, o ile
+        wyjątek jest włączony w konfiguracji. Powód opisuje sekcja piętnasta
+        CLAUDE.md: program wykonuje wtedy jawne polecenie człowieka dotyczące
+        jednego zasobu, a nie przeszukuje serwisu. Każde zastosowanie wyjątku
+        trafia do logu szczegółowego, żeby dało się je zaudytować.
+        """
+        if not self._ustawienia.respektuj_robots:
+            return False
+        if not (self._ustawienia.wyjatek_robots_dla_zrodel_jawnych and zadanie.wskazany_jawnie):
+            return True
+        self._log.info(
+            "Pominięto kontrolę robots.txt dla adresu wskazanego jawnie przez użytkownika: %s",
+            zadanie.adres_pobierania,
+        )
+        return False
+
+    async def sprawdz_reguly_witryny(self, zadanie: Zadanie) -> PominietePobranie | None:
+        """Sprawdza reguły witryny dla zadania, z uwzględnieniem wyjątku dla źródeł jawnych.
+
+        Metoda jest przeznaczona dla źródeł pobieranych poza tym modułem, na
+        przykład dla filmów, których napisy pobierają biblioteki zewnętrzne.
+        Dzięki temu zasada z sekcji piętnastej CLAUDE.md obowiązuje tak samo
+        niezależnie od tego, kto wykonuje właściwe żądanie.
+        """
+        if not self._czy_sprawdzac_robots(zadanie):
+            return None
+        return await self._sprawdz_robots(zadanie.adres_pobierania)
 
     async def _pobierz_bez_wyjatku(self, zadanie: Zadanie) -> WynikPobrania | BladGnb:
         """Zwraca wynik pobrania albo błąd projektu jako wartość."""

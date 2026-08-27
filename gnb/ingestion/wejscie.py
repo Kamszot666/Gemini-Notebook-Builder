@@ -31,13 +31,15 @@ from gnb.core.identyfikatory import (
 from gnb.core.konfiguracja import Konfiguracja
 from gnb.core.model import WejscieSurowe, Zrodlo
 from gnb.core.stale import StatusZrodla, TypWejscia, TypZrodla
-from gnb.core.url import adres_kanoniczny, adres_pobierania
+from gnb.core.url import adres_kanoniczny, adres_pobierania, waliduj_adres
 from gnb.core.wyjatki import BladTrwaly, FormatNieobslugiwany, PrzekroczonoLimit
+from gnb.core.youtube import czy_adres_youtube, rozpoznaj
 from gnb.normalization.kodowanie import zdekoduj
 
 FORMATY_PLIKOW = frozenset({"txt", "md"})
 FORMATY_TEKSTU_WKLEJONEGO = frozenset({"txt", "md"})
 FORMAT_STRONY_WWW = "html"
+FORMAT_YOUTUBE = "youtube"
 _ZNAK_BOM = "\ufeff"
 _BAJTOW_W_MEGABAJCIE = 1024 * 1024
 
@@ -53,11 +55,17 @@ class PozycjaWejsciowa:
     Pole `adres_kanoniczny` jest wypełnione wyłącznie dla adresów stron. Wartość
     w `wejscie.wartosc` jest wtedy adresem wysyłanym do serwera, czyli może mieć
     inną kolejność parametrów niż postać kanoniczna.
+
+    Pole `wskazane_jawnie` mówi, czy wejście pochodzi wprost z listy podanej przez
+    użytkownika. Od tego zależy wyjątek od kontroli pliku ``robots.txt`` opisany
+    w sekcji piętnastej CLAUDE.md. Adres znaleziony kiedyś przez sam program
+    w treści innego źródła będzie miał tu wartość fałsz.
     """
 
     wejscie: WejscieSurowe
     format_zrodla: str
     adres_kanoniczny: str | None = None
+    wskazane_jawnie: bool = True
 
 
 def przyjmij_tekst(
@@ -85,14 +93,30 @@ def przyjmij_tekst(
 def przyjmij_url(
     adres: str, moment_dodania: datetime, dodatkowe_parametry_sledzace: tuple[str, ...] = ()
 ) -> PozycjaWejsciowa:
-    """Tworzy pozycję wejściową z adresu strony internetowej.
+    """Tworzy pozycję wejściową z adresu strony internetowej albo filmu.
 
     Adres jest walidowany, a następnie zapisywany w dwóch postaciach: kanonicznej
     jako klucz tożsamości oraz pobierania jako to, co realnie trafi do serwera.
     Niepoprawny adres kończy się błędem trwałym.
+
+    Adres serwisu YouTube dostaje własny format źródła. Dla pojedynczego filmu
+    postacią kanoniczną jest adres zbudowany z samego identyfikatora filmu, więc
+    wszystkie warianty zapisu dają jedno źródło. Playlisty i kanały zachowują
+    ogólną postać kanoniczną adresu; ich odrzucenie z podaniem powodu następuje
+    później, w potoku, żeby trafiło do manifestu i raportu jako pominięcie.
     """
+    waliduj_adres(adres)
+    format_zrodla = FORMAT_STRONY_WWW
     kanoniczny = adres_kanoniczny(adres, dodatkowe_parametry_sledzace)
     do_pobrania = adres_pobierania(adres, dodatkowe_parametry_sledzace)
+
+    if czy_adres_youtube(adres):
+        format_zrodla = FORMAT_YOUTUBE
+        rozpoznanie = rozpoznaj(adres)
+        if rozpoznanie.adres_kanoniczny is not None:
+            kanoniczny = rozpoznanie.adres_kanoniczny
+            do_pobrania = rozpoznanie.adres_kanoniczny
+
     wejscie = WejscieSurowe(
         identyfikator_wejscia=_identyfikator_wejscia(TypWejscia.URL, kanoniczny),
         typ_wejscia=TypWejscia.URL,
@@ -100,18 +124,20 @@ def przyjmij_url(
         moment_dodania=moment_dodania,
     )
     return PozycjaWejsciowa(
-        wejscie=wejscie, format_zrodla=FORMAT_STRONY_WWW, adres_kanoniczny=kanoniczny
+        wejscie=wejscie, format_zrodla=format_zrodla, adres_kanoniczny=kanoniczny
     )
 
 
-def identyfikator_strony(adres_kanoniczny_zrodla: str) -> str:
+def identyfikator_adresu(typ_zrodla: TypZrodla, adres_kanoniczny_zrodla: str) -> str:
     """Buduje identyfikator źródła sieciowego z kanonicznej postaci jego adresu.
 
     Identyfikator jest znany przed pobraniem, dzięki czemu wznowienie pracy
-    rozpoznaje adresy już przetworzone i nie pobiera ich ponownie.
+    rozpoznaje adresy już przetworzone i nie pobiera ich ponownie. Dla filmu
+    postacią kanoniczną jest adres zbudowany z identyfikatora filmu, więc każdy
+    wariant zapisu tego samego filmu daje ten sam identyfikator źródła.
     """
     return identyfikator_zrodla(
-        TypZrodla.STRONA_WWW, suma_kontrolna_bajtow(adres_kanoniczny_zrodla.encode("utf-8"))
+        typ_zrodla, suma_kontrolna_bajtow(adres_kanoniczny_zrodla.encode("utf-8"))
     )
 
 
@@ -206,17 +232,23 @@ def _zrodlo_z_pliku(
 
 
 def _zrodlo_z_url(pozycja: PozycjaWejsciowa, moment: datetime) -> Zrodlo:
-    """Buduje źródło dla adresu strony. Suma kontrolna treści dochodzi po pobraniu."""
+    """Buduje źródło dla adresu. Suma kontrolna treści dochodzi po pobraniu."""
     kanoniczny = pozycja.adres_kanoniczny or adres_kanoniczny(pozycja.wejscie.wartosc)
+    typ = typ_zrodla_dla_formatu(pozycja.format_zrodla)
     return Zrodlo(
-        identyfikator_zrodla=identyfikator_strony(kanoniczny),
-        typ_zrodla=TypZrodla.STRONA_WWW,
+        identyfikator_zrodla=identyfikator_adresu(typ, kanoniczny),
+        typ_zrodla=typ,
         pochodzenie=kanoniczny,
         checksum=None,
         status=StatusZrodla.OCZEKUJE,
         utworzono=moment,
         zaktualizowano=moment,
     )
+
+
+def typ_zrodla_dla_formatu(format_zrodla: str) -> TypZrodla:
+    """Zwraca typ źródła odpowiadający formatowi adresu."""
+    return TypZrodla.YOUTUBE if format_zrodla == FORMAT_YOUTUBE else TypZrodla.STRONA_WWW
 
 
 def _zrodlo_z_tekstu(pozycja: PozycjaWejsciowa, moment: datetime) -> Zrodlo:

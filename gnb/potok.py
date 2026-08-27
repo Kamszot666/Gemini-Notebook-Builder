@@ -33,12 +33,15 @@ import httpx
 
 from gnb.core.identyfikatory import suma_kontrolna_bajtow
 from gnb.core.konfiguracja import Konfiguracja
-from gnb.core.model import Zrodlo
+from gnb.core.model import DokumentWyekstrahowany, Zrodlo
 from gnb.core.nazwy import nazwa_pliku_wynikowego, wygeneruj_nazwe_projektu
 from gnb.core.stale import StatusZrodla, TypWejscia, TypZrodla
 from gnb.core.wyjatki import BladGnb, BladTrwaly, PrzekroczonoLimit
+from gnb.core.youtube import rozpoznaj
 from gnb.extractors.bazowy import Ekstraktor, RejestrEkstraktorow, domyslny_rejestr
 from gnb.extractors.strona_www import KOMUNIKAT_WYMAGA_SKRYPTOW, czy_wymaga_skryptow
+from gnb.extractors.youtube import KOMUNIKAT_NAPISY_BEZ_TRESCI
+from gnb.extractors.youtube import zbuduj_dokument as zbuduj_dokument_z_napisow
 from gnb.ingestion.pobieranie import (
     OdpowiedzPobrania,
     Pobieracz,
@@ -47,11 +50,22 @@ from gnb.ingestion.pobieranie import (
     Zadanie,
 )
 from gnb.ingestion.wejscie import (
+    FORMAT_YOUTUBE,
     PozycjaWejsciowa,
+    identyfikator_adresu,
     identyfikator_awaryjny,
-    identyfikator_strony,
+    typ_zrodla_dla_formatu,
     waliduj_i_utworz_zrodlo,
     wczytaj_tresc_zrodla,
+)
+from gnb.ingestion.youtube import (
+    PobieraczYouTube,
+    PominietyFilm,
+    PreferencjeNapisow,
+    WynikYouTube,
+    do_json,
+    klucz_pamieci_podrecznej,
+    z_json,
 )
 from gnb.logging_pl.dziennik import (
     NAZWA_LOGU_SZCZEGOLOWEGO,
@@ -88,7 +102,7 @@ from gnb.output.raport import (
 )
 from gnb.output.tekst_bez_znacznikow import zamien_markdown_na_tekst
 from gnb.output.zapis import zapisz_wyniki
-from gnb.persistence.cache import PamiecPodreczna, otworz, teraz_utc
+from gnb.persistence.cache import PamiecPodreczna, WpisCache, otworz, teraz_utc
 from gnb.persistence.checkpoint import WERSJA_SCHEMATU as WERSJA_SCHEMATU_CHECKPOINTU
 from gnb.persistence.checkpoint import (
     Checkpoint,
@@ -104,10 +118,32 @@ _STATUSY_KONCOWE = frozenset(
     {StatusZrodla.SPAKOWANE.value, StatusZrodla.POMINIETE.value, StatusZrodla.BLAD.value}
 )
 _ROZSZERZENIE_ORYGINALU_TEKSTU = "txt"
+_ROZSZERZENIE_ORYGINALU_NAPISOW = "json"
 
 # Wynik fazy pobrania dla jednego adresu: treść, świadome pominięcie albo błąd.
 WynikFazyPobrania = OdpowiedzPobrania | PominietePobranie | BladGnb
+
+# Wynik fazy pobrania dla jednego filmu: napisy, świadome pominięcie albo błąd.
+WynikFazyFilmu = WynikYouTube | PominietyFilm | BladGnb
+
+_TYP_ZAWARTOSCI_NAPISOW = "application/json"
 _MAKSYMALNA_PODSTAWA_NAZWY = 120
+
+
+@dataclass(frozen=True, slots=True)
+class _PrzygotowanyDokument:
+    """Dokument gotowy do normalizacji i zapisu, wraz z danymi towarzyszącymi.
+
+    Struktura pozwala obsłużyć jedną ścieżką zapisu wszystkie rodzaje źródeł,
+    mimo że każdy z nich dochodzi do dokumentu inaczej: plik przez odczyt, strona
+    przez pobranie i ekstrakcję, a film przez napisy.
+    """
+
+    dokument: DokumentWyekstrahowany
+    suma_kontrolna: str
+    tekst_txt: str | None
+    stan_pobrania: StanPobrania | None
+    metadane: dict[str, str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,6 +175,7 @@ def przetworz_projekt(
     zegar_lokalny: Callable[[], datetime] = teraz_lokalny,
     rejestr: RejestrEkstraktorow | None = None,
     transport_http: httpx.AsyncBaseTransport | None = None,
+    pobieracz_youtube: PobieraczYouTube | None = None,
 ) -> WynikPrzetwarzania:
     """Przetwarza listę wejść w ramach jednego projektu i zwraca podsumowanie.
 
@@ -147,8 +184,9 @@ def przetworz_projekt(
     prowadzony jest przeznaczony dla użytkownika plik ``log_wazne.txt``. Oba
     zegary można podmienić w testach.
 
-    Argument `transport_http` służy wyłącznie testom. Pozwala podstawić sztuczny
-    transport i sprawdzić cały potok dla adresów bez korzystania z sieci.
+    Argumenty `transport_http` oraz `pobieracz_youtube` służą wyłącznie testom.
+    Pozwalają podstawić sztuczny transport oraz przygotowane napisy i sprawdzić
+    cały potok bez korzystania z sieci.
     """
     rejestr = rejestr or domyslny_rejestr(konfiguracja.zachowuj_odnosniki)
     czas_startu = zegar()
@@ -178,8 +216,11 @@ def przetworz_projekt(
         )
 
         pobrane = _pobierz_strony(pozycje, konfiguracja, checkpoint, log, transport_http)
+        filmy = _pobierz_filmy(
+            pozycje, konfiguracja, checkpoint, log, transport_http, pobieracz_youtube
+        )
         wykonanie = _Wykonanie(
-            uklad, konfiguracja, checkpoint, dziennik_wazny, log, rejestr, zegar, pobrane
+            uklad, konfiguracja, checkpoint, dziennik_wazny, log, rejestr, zegar, pobrane, filmy
         )
         for pozycja in pozycje:
             wykonanie.przetworz(pozycja)
@@ -228,6 +269,7 @@ class _Wykonanie:
         rejestr: RejestrEkstraktorow,
         zegar: Callable[[], datetime],
         pobrane: dict[str, WynikFazyPobrania] | None = None,
+        filmy: dict[str, WynikFazyFilmu] | None = None,
     ) -> None:
         self._uklad = uklad
         self._konfiguracja = konfiguracja
@@ -237,6 +279,7 @@ class _Wykonanie:
         self._rejestr = rejestr
         self._zegar = zegar
         self._pobrane: dict[str, WynikFazyPobrania] = pobrane if pobrane is not None else {}
+        self._filmy: dict[str, WynikFazyFilmu] = filmy if filmy is not None else {}
 
     def przetworz(self, pozycja: PozycjaWejsciowa) -> None:
         """Przetwarza jedno wejście, aktualizując checkpoint i logi."""
@@ -272,11 +315,64 @@ class _Wykonanie:
             self._zapisz_blad_zrodla(zrodlo, pozycja, blad)
 
     def _przetworz_zrodlo(self, pozycja: PozycjaWejsciowa, zrodlo: Zrodlo) -> None:
-        identyfikator = zrodlo.identyfikator_zrodla
+        """Doprowadza jedno źródło od treści do zapisanych plików wynikowych."""
+        przygotowane = (
+            self._przygotuj_film(pozycja, zrodlo)
+            if zrodlo.typ_zrodla is TypZrodla.YOUTUBE
+            else self._przygotuj_tresc(pozycja, zrodlo)
+        )
+        if przygotowane is None:
+            return
+        self._zapisz_dokument(pozycja, zrodlo, przygotowane)
 
+    def _przygotuj_film(
+        self, pozycja: PozycjaWejsciowa, zrodlo: Zrodlo
+    ) -> _PrzygotowanyDokument | None:
+        """Buduje dokument z napisów filmu pobranych we wcześniejszej fazie."""
+        identyfikator = zrodlo.identyfikator_zrodla
+        wynik = self._filmy.get(identyfikator)
+
+        if isinstance(wynik, PominietyFilm):
+            self._pomin(zrodlo, pozycja, wynik.powod)
+            return None
+        if isinstance(wynik, BladGnb):
+            raise wynik
+        if wynik is None:
+            raise BladTrwaly(
+                f"Brak wyniku pobrania napisów dla adresu {zrodlo.pochodzenie}.", identyfikator
+            )
+
+        dokument = zbuduj_dokument_z_napisow(
+            wynik, znaczniki_czasu=self._konfiguracja.znaczniki_czasu
+        )
+        if not dokument.tekst.strip():
+            self._pomin(zrodlo, pozycja, KOMUNIKAT_NAPISY_BEZ_TRESCI)
+            return None
+
+        surowe = do_json(wynik)
+        self._zachowaj_oryginal(pozycja, zrodlo, dokument.tekst, surowe)
+        self._loguj(
+            logging.INFO,
+            identyfikator,
+            f"Film {wynik.identyfikator}, napisy {wynik.napisy.typ} w języku "
+            f"{wynik.napisy.jezyk}, metoda {wynik.napisy.metoda or 'nieznana'}.",
+        )
+        return _PrzygotowanyDokument(
+            dokument=dokument,
+            suma_kontrolna=suma_kontrolna_bajtow(surowe),
+            tekst_txt=None,
+            stan_pobrania=None,
+            metadane=dict(dokument.metadane),
+        )
+
+    def _przygotuj_tresc(
+        self, pozycja: PozycjaWejsciowa, zrodlo: Zrodlo
+    ) -> _PrzygotowanyDokument | None:
+        """Buduje dokument ze źródła tekstowego, plikowego albo strony internetowej."""
+        identyfikator = zrodlo.identyfikator_zrodla
         tresc = self._tresc_zrodla(pozycja, zrodlo)
         if tresc is None:
-            return
+            return None
         tekst, kodowanie, surowe_bajty, stan_pobrania, suma_kontrolna = tresc
 
         self._zachowaj_oryginal(pozycja, zrodlo, tekst, surowe_bajty)
@@ -287,7 +383,27 @@ class _Wykonanie:
 
         if zrodlo.typ_zrodla is TypZrodla.STRONA_WWW and czy_wymaga_skryptow(tekst, dokument.tekst):
             self._pomin(zrodlo, pozycja, KOMUNIKAT_WYMAGA_SKRYPTOW)
-            return
+            return None
+
+        return _PrzygotowanyDokument(
+            dokument=dokument,
+            suma_kontrolna=suma_kontrolna,
+            tekst_txt=self._tekst_dla_wersji_txt(ekstraktor, dokument.tekst),
+            stan_pobrania=stan_pobrania,
+            metadane={},
+        )
+
+    def _zapisz_dokument(
+        self,
+        pozycja: PozycjaWejsciowa,
+        zrodlo: Zrodlo,
+        przygotowane: _PrzygotowanyDokument,
+    ) -> None:
+        """Normalizuje dokument, zapisuje pliki wynikowe i odnotowuje stan źródła."""
+        identyfikator = zrodlo.identyfikator_zrodla
+        dokument = przygotowane.dokument
+        stan_pobrania = przygotowane.stan_pobrania
+        suma_kontrolna = przygotowane.suma_kontrolna
 
         znormalizowany = zbuduj_dokument_znormalizowany(identyfikator, dokument.tekst)
 
@@ -308,7 +424,7 @@ class _Wykonanie:
             znormalizowany,
             decyzja,
             formaty_wlaczone=self._konfiguracja.formaty_wynikowe,
-            tekst_txt=self._tekst_dla_wersji_txt(ekstraktor, znormalizowany.tekst),
+            tekst_txt=przygotowane.tekst_txt,
         )
 
         wyniki_stanu = [
@@ -336,6 +452,7 @@ class _Wykonanie:
             decyzja_md=decyzja.generuj_md,
             uzasadnienie_md=list(decyzja.spelnione_warunki),
             pobranie=stan_pobrania,
+            metadane=dict(przygotowane.metadane),
         )
         self._zapisz_checkpoint()
         self._dziennik_wazny.zapisz(ZDARZENIE_ZRODLO_PRZYJETE)
@@ -418,7 +535,7 @@ class _Wykonanie:
         if not self._konfiguracja.zachowuj_oryginaly:
             return
         self._uklad.materialy_zrodlowe.mkdir(parents=True, exist_ok=True)
-        rozszerzenie = pozycja.format_zrodla or _ROZSZERZENIE_ORYGINALU_TEKSTU
+        rozszerzenie = _rozszerzenie_oryginalu(pozycja.format_zrodla)
         cel = self._uklad.materialy_zrodlowe / f"{zrodlo.identyfikator_zrodla}.{rozszerzenie}"
         if cel.exists():
             return
@@ -541,6 +658,174 @@ def _pobierz_strony(
     return {identyfikator: wynik for (identyfikator, _), wynik in zip(zadania, wyniki, strict=True)}
 
 
+def _pobierz_filmy(
+    pozycje: Sequence[PozycjaWejsciowa],
+    konfiguracja: Konfiguracja,
+    checkpoint: Checkpoint,
+    log: logging.Logger,
+    transport: httpx.AsyncBaseTransport | None = None,
+    pobieracz_youtube: PobieraczYouTube | None = None,
+) -> dict[str, WynikFazyFilmu]:
+    """Pobiera napisy wszystkich filmów z listy wejść i zwraca wyniki po identyfikatorze.
+
+    Playlisty, kanały i adresy YouTube bez identyfikatora filmu są odrzucane bez
+    sięgania do sieci, ze statusem pominięcia i powodem gotowym do pokazania
+    użytkownikowi. Filmy przetworzone w poprzednim uruchomieniu nie są pobierane
+    ponownie.
+    """
+    wyniki: dict[str, WynikFazyFilmu] = {}
+    do_pobrania: list[tuple[str, str, Zadanie]] = []
+    widziane: set[str] = set()
+
+    for pozycja in pozycje:
+        if pozycja.format_zrodla != FORMAT_YOUTUBE:
+            continue
+        kanoniczny = pozycja.adres_kanoniczny or pozycja.wejscie.wartosc
+        identyfikator = identyfikator_adresu(TypZrodla.YOUTUBE, kanoniczny)
+        if identyfikator in widziane:
+            continue
+        stan = checkpoint.zrodla.get(identyfikator)
+        if stan is not None and stan.status in _STATUSY_KONCOWE:
+            continue
+        widziane.add(identyfikator)
+
+        rozpoznanie = rozpoznaj(pozycja.wejscie.wartosc)
+        if not rozpoznanie.czy_film or rozpoznanie.identyfikator_filmu is None:
+            wyniki[identyfikator] = PominietyFilm(
+                identyfikator="",
+                adres_kanoniczny=kanoniczny,
+                powod=rozpoznanie.powod_odrzucenia or "Adres nie wskazuje pojedynczego filmu.",
+            )
+            continue
+
+        do_pobrania.append(
+            (
+                identyfikator,
+                rozpoznanie.identyfikator_filmu,
+                Zadanie(
+                    adres_pobierania=kanoniczny,
+                    klucz_kanoniczny=kanoniczny,
+                    wskazany_jawnie=pozycja.wskazane_jawnie,
+                ),
+            )
+        )
+
+    if do_pobrania:
+        log.info("Faza pobrania napisów: %d filmów do pobrania.", len(do_pobrania))
+        wyniki.update(
+            asyncio.run(
+                _pobierz_filmy_asynchronicznie(
+                    do_pobrania, konfiguracja, log, transport, pobieracz_youtube
+                )
+            )
+        )
+    return wyniki
+
+
+async def _pobierz_filmy_asynchronicznie(
+    zadania: Sequence[tuple[str, str, Zadanie]],
+    konfiguracja: Konfiguracja,
+    log: logging.Logger,
+    transport: httpx.AsyncBaseTransport | None,
+    pobieracz_youtube: PobieraczYouTube | None,
+) -> dict[str, WynikFazyFilmu]:
+    """Sprawdza reguły witryny i pobiera napisy kolejnych filmów.
+
+    Filmy są pobierane po kolei, ponieważ obie biblioteki napisów pracują
+    synchronicznie i same wykonują swoje żądania. Praca każdej z nich odbywa się
+    w osobnym wątku, żeby nie blokować pętli zdarzeń.
+    """
+    preferencje = _preferencje_napisow(konfiguracja)
+    pobieracz = pobieracz_youtube or PobieraczYouTube(preferencje, log=log)
+    pamiec = _otworz_pamiec_podreczna(konfiguracja, log)
+    wyniki: dict[str, WynikFazyFilmu] = {}
+
+    try:
+        async with Pobieracz(
+            UstawieniaPobierania.z_konfiguracji(konfiguracja),
+            transport=transport,
+            log=log,
+        ) as klient:
+            for identyfikator, identyfikator_filmu, zadanie in zadania:
+                pominiecie = await klient.sprawdz_reguly_witryny(zadanie)
+                if pominiecie is not None:
+                    wyniki[identyfikator] = PominietyFilm(
+                        identyfikator=identyfikator_filmu,
+                        adres_kanoniczny=zadanie.klucz_kanoniczny,
+                        powod=pominiecie.powod,
+                    )
+                    continue
+                wyniki[identyfikator] = await _film_z_pamieci_albo_serwisu(
+                    identyfikator_filmu, pobieracz, preferencje, pamiec, konfiguracja, log
+                )
+    finally:
+        if pamiec is not None:
+            pamiec.zamknij()
+    return wyniki
+
+
+async def _film_z_pamieci_albo_serwisu(
+    identyfikator_filmu: str,
+    pobieracz: PobieraczYouTube,
+    preferencje: PreferencjeNapisow,
+    pamiec: PamiecPodreczna | None,
+    konfiguracja: Konfiguracja,
+    log: logging.Logger,
+) -> WynikFazyFilmu:
+    """Zwraca napisy filmu z pamięci podręcznej albo pobiera je z serwisu."""
+    klucz = klucz_pamieci_podrecznej(identyfikator_filmu, preferencje)
+    if pamiec is not None:
+        wpis = pamiec.odczytaj(klucz)
+        if wpis is not None and wpis.czy_swiezy(
+            konfiguracja.maksymalny_wiek_cache_dni, teraz_utc()
+        ):
+            zapamietany = z_json(wpis.tresc)
+            if zapamietany is not None:
+                log.info("Napisy filmu %s wzięte z pamięci podręcznej.", identyfikator_filmu)
+                return zapamietany
+
+    try:
+        wynik = await asyncio.to_thread(pobieracz.pobierz, identyfikator_filmu)
+    except BladGnb as blad:
+        return blad
+
+    if isinstance(wynik, WynikYouTube) and pamiec is not None:
+        pamiec.zapisz(
+            WpisCache(
+                klucz=klucz,
+                adres_koncowy=wynik.adres_kanoniczny,
+                kod_odpowiedzi=200,
+                typ_zawartosci=_TYP_ZAWARTOSCI_NAPISOW,
+                deklarowane_kodowanie="utf-8",
+                etag=None,
+                last_modified=None,
+                tresc=do_json(wynik),
+                pobrano=teraz_utc(),
+            )
+        )
+    return wynik
+
+
+def _rozszerzenie_oryginalu(format_zrodla: str) -> str:
+    """Zwraca rozszerzenie pliku, pod którym zachowywany jest oryginał źródła.
+
+    Napisy filmu są zachowywane jako plik JSON, ponieważ w takiej postaci są
+    pobierane i w takiej dają się ponownie odczytać.
+    """
+    if format_zrodla == FORMAT_YOUTUBE:
+        return _ROZSZERZENIE_ORYGINALU_NAPISOW
+    return format_zrodla or _ROZSZERZENIE_ORYGINALU_TEKSTU
+
+
+def _preferencje_napisow(konfiguracja: Konfiguracja) -> PreferencjeNapisow:
+    """Buduje preferencje wyboru napisów z konfiguracji aplikacji."""
+    return PreferencjeNapisow(
+        jezyki=konfiguracja.jezyki_napisow,
+        dopuszczaj_automatyczne=konfiguracja.napisy_automatyczne,
+        dopuszczaj_tlumaczone=konfiguracja.napisy_tlumaczone,
+    )
+
+
 def _zadania_do_pobrania(
     pozycje: Sequence[PozycjaWejsciowa], checkpoint: Checkpoint
 ) -> list[tuple[str, Zadanie]]:
@@ -550,8 +835,12 @@ def _zadania_do_pobrania(
     for pozycja in pozycje:
         if pozycja.wejscie.typ_wejscia is not TypWejscia.URL:
             continue
+        if pozycja.format_zrodla == FORMAT_YOUTUBE:
+            continue
         kanoniczny = pozycja.adres_kanoniczny or pozycja.wejscie.wartosc
-        identyfikator = identyfikator_strony(kanoniczny)
+        identyfikator = identyfikator_adresu(
+            typ_zrodla_dla_formatu(pozycja.format_zrodla), kanoniczny
+        )
         if identyfikator in widziane:
             continue
         stan = checkpoint.zrodla.get(identyfikator)
@@ -577,7 +866,10 @@ async def _pobierz_asynchronicznie(
     pamiec = _otworz_pamiec_podreczna(konfiguracja, log)
     try:
         async with Pobieracz(
-            UstawieniaPobierania.z_konfiguracji(konfiguracja), pamiec=pamiec, transport=transport
+            UstawieniaPobierania.z_konfiguracji(konfiguracja),
+            pamiec=pamiec,
+            transport=transport,
+            log=log,
         ) as pobieracz:
             return list(await pobieracz.pobierz_wiele(zadania))
     finally:
@@ -672,6 +964,7 @@ def _zbuduj_manifest(uklad: UkladProjektu, checkpoint: Checkpoint) -> Manifest:
                 pliki_wynikowe=tuple(wynik.sciezka_wzgledna for wynik in stan.wyniki),
                 komunikat_bledu=stan.komunikat_bledu,
                 pobranie=_wpis_pobrania(stan.pobranie),
+                metadane=dict(stan.metadane),
             )
         )
         for wynik in stan.wyniki:

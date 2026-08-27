@@ -168,7 +168,7 @@ def test_zakaz_w_robots_konczy_sie_statusem_pominiete(tmp_path: Path) -> None:
 
     wynik = przetworz_projekt(
         _pozycje(_ADRES_ARTYKULU),
-        _konfiguracja(tmp_path, respektuj_robots=True),
+        _konfiguracja(tmp_path, respektuj_robots=True, wyjatek_robots_dla_zrodel_jawnych=False),
         nazwa_projektu="Test robots",
         zegar=_zegar_krokowy(),
         transport_http=serwer.transport(),
@@ -318,7 +318,7 @@ def test_raport_wymienia_powod_pominiecia_przez_robots(tmp_path: Path) -> None:
 
     wynik = przetworz_projekt(
         _pozycje(_ADRES_ARTYKULU),
-        _konfiguracja(tmp_path, respektuj_robots=True),
+        _konfiguracja(tmp_path, respektuj_robots=True, wyjatek_robots_dla_zrodel_jawnych=False),
         nazwa_projektu="Test raportu robots",
         zegar=_zegar_krokowy(),
         transport_http=serwer.transport(),
@@ -335,7 +335,7 @@ def test_niedostepny_plik_robots_konczy_pominieciem_calego_zrodla(tmp_path: Path
 
     wynik = przetworz_projekt(
         _pozycje(_ADRES_ARTYKULU),
-        _konfiguracja(tmp_path, respektuj_robots=True),
+        _konfiguracja(tmp_path, respektuj_robots=True, wyjatek_robots_dla_zrodel_jawnych=False),
         nazwa_projektu="Test niedostępnych reguł",
         zegar=_zegar_krokowy(),
         transport_http=serwer.transport(),
@@ -405,3 +405,40 @@ def test_wylaczony_wykaz_odnosnikow_nie_powstaje_w_pliku(tmp_path: Path) -> None
     assert "Odnośniki wymienione w artykule" not in tresc
     assert "https://przyklad.pl/badanie-2026" not in tresc
     assert "badanie z 2026 roku" in tresc
+
+
+def test_wyjatek_robots_pozwala_pobrac_adres_wskazany_jawnie(tmp_path: Path) -> None:
+    """Adres z listy użytkownika nie podlega kontroli robots.txt.
+
+    Uzasadnienie i cztery warunki zakresu opisuje sekcja piętnasta CLAUDE.md.
+    """
+    reguly = "User-agent: *\nDisallow: /"
+    serwer = _Serwer({"/robots.txt": httpx.Response(200, text=reguly)})
+
+    wynik = przetworz_projekt(
+        _pozycje(_ADRES_ARTYKULU),
+        _konfiguracja(tmp_path, respektuj_robots=True),
+        nazwa_projektu="Test wyjątku robots",
+        zegar=_zegar_krokowy(),
+        transport_http=serwer.transport(),
+    )
+
+    assert wynik.liczba_przetworzonych == 1
+    assert wynik.liczba_pominietych == 0
+    assert not [adres for adres in serwer.zadania if "robots.txt" in adres]
+
+
+def test_zastosowanie_wyjatku_robots_trafia_do_logu_szczegolowego(tmp_path: Path) -> None:
+    serwer = _Serwer()
+
+    wynik = przetworz_projekt(
+        _pozycje(_ADRES_ARTYKULU),
+        _konfiguracja(tmp_path, respektuj_robots=True),
+        nazwa_projektu="Test audytu wyjątku",
+        zegar=_zegar_krokowy(),
+        transport_http=serwer.transport(),
+    )
+
+    log = (wynik.katalog_projektu / "logi" / "log_szczegolowy.txt").read_text(encoding="utf-8")
+    assert "Pominięto kontrolę robots.txt" in log
+    assert _ADRES_ARTYKULU in log

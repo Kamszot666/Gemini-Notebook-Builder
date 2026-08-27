@@ -13,6 +13,7 @@ from gnb.core.stale import PoziomPewnosciStruktury, RodzajBloku, TypZrodla
 from gnb.extractors.strona_www import (
     METODA_GLOWNA,
     METODA_ZAPASOWA,
+    NAGLOWEK_SEKCJI_ODNOSNIKOW,
     EkstraktorStronyWww,
     czy_wymaga_skryptow,
 )
@@ -185,3 +186,69 @@ def test_krotka_poprawna_strona_nie_jest_uznana_za_wymagajaca_skryptow() -> None
         "<p>Krótka, ale poprawna notatka.</p></body></html>"
     )
     assert czy_wymaga_skryptow(strona, "Krótka, ale poprawna notatka.") is False
+
+
+_STRONA_Z_ODNOSNIKAMI = """<!DOCTYPE html>
+<html lang="pl"><head><meta charset="utf-8"><title>Skąd wiadomo</title></head>
+<body><article>
+<h1>Skąd wiadomo, że powtórzenia szkodzą</h1>
+<p>Jak pokazuje <a href="https://przyklad.pl/badanie-2026">badanie z 2026 roku</a>,
+powtórzenia w bazie wiedzy obniżają jakość odpowiedzi asystenta i utrudniają
+odnalezienie właściwego fragmentu przy dłuższej pracy.</p>
+<p>Podobne wnioski przedstawia <a href="https://inny.example/raport">raport branżowy</a>,
+a szczegóły metody opisano w <a href="#przypisy">przypisach</a> tego artykułu.
+Kontakt do redakcji: <a href="mailto:redakcja@przyklad.pl">napisz do nas</a>.</p>
+<p>Powtórzony odnośnik do <a href="https://przyklad.pl/badanie-2026">tego samego badania</a>
+nie powinien pojawić się w wykazie dwa razy, bo wykaz wskazuje źródła.</p>
+</article></body></html>
+"""
+
+
+def test_sekcja_odnosnikow_wymienia_adresy_zewnetrzne() -> None:
+    dokument = _ekstraktor().wyekstrahuj("strona_www-6", _STRONA_Z_ODNOSNIKAMI)
+    wiersze = dokument.tekst.splitlines()
+
+    assert f"## {NAGLOWEK_SEKCJI_ODNOSNIKOW}" in wiersze
+    assert "1. badanie z 2026 roku — https://przyklad.pl/badanie-2026" in wiersze
+    assert "2. raport branżowy — https://inny.example/raport" in wiersze
+
+
+def test_adres_odnosnika_znika_ze_srodka_zdania() -> None:
+    dokument = _ekstraktor().wyekstrahuj("strona_www-6", _STRONA_Z_ODNOSNIKAMI)
+    akapit = dokument.tekst.splitlines()[2]
+
+    assert "Jak pokazuje badanie z 2026 roku, powtórzenia" in akapit
+    assert "https://przyklad.pl/badanie-2026" not in akapit
+
+
+def test_wykaz_pomija_odsylacze_wewnetrzne_i_adresy_poczty() -> None:
+    dokument = _ekstraktor().wyekstrahuj("strona_www-6", _STRONA_Z_ODNOSNIKAMI)
+
+    assert "#przypisy" not in dokument.tekst
+    assert "mailto:" not in dokument.tekst
+    assert "przypisach" in dokument.tekst
+    assert "napisz do nas" in dokument.tekst
+
+
+def test_powtorzony_odnosnik_pojawia_sie_w_wykazie_raz() -> None:
+    dokument = _ekstraktor().wyekstrahuj("strona_www-6", _STRONA_Z_ODNOSNIKAMI)
+
+    assert dokument.tekst.count("https://przyklad.pl/badanie-2026") == 1
+    assert dokument.metadane["liczba_odnosnikow"] == "2"
+
+
+def test_wylaczone_zachowywanie_odnosnikow_usuwa_sekcje() -> None:
+    dokument = EkstraktorStronyWww(zachowuj_odnosniki=False).wyekstrahuj(
+        "strona_www-6", _STRONA_Z_ODNOSNIKAMI
+    )
+
+    assert NAGLOWEK_SEKCJI_ODNOSNIKOW not in dokument.tekst
+    assert "https://" not in dokument.tekst
+    assert "badanie z 2026 roku" in dokument.tekst
+
+
+def test_artykul_bez_odnosnikow_nie_dostaje_pustej_sekcji() -> None:
+    tekst = (KATALOG_DANYCH / "artykul_oryginal.html").read_text(encoding="utf-8")
+    dokument = _ekstraktor().wyekstrahuj("strona_www-1", tekst)
+
+    assert NAGLOWEK_SEKCJI_ODNOSNIKOW not in dokument.tekst

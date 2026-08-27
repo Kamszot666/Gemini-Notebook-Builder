@@ -66,16 +66,25 @@ class RejestrEkstraktorow:
         )
 
 
-def domyslny_rejestr() -> RejestrEkstraktorow:
+def domyslny_rejestr(zachowuj_odnosniki: bool = True) -> RejestrEkstraktorow:
     """Buduje rejestr z ekstraktorami dostępnymi po etapie drugim.
 
     Ekstraktor Markdown jest przed ekstraktorem tekstu płaskiego, żeby źródło
     z formatem ``md`` trafiło do właściwego adaptera także wtedy, gdy jest
     tekstem wklejonym. Ekstraktor stron internetowych rozpoznaje własny typ
     źródła, więc jego miejsce w kolejności nie ma znaczenia.
+
+    Argument `zachowuj_odnosniki` pochodzi z konfiguracji i decyduje o tym, czy
+    na końcu treści artykułu powstaje wykaz odnośników.
     """
     from gnb.extractors.markdown import EkstraktorMarkdown
     from gnb.extractors.strona_www import EkstraktorStronyWww
     from gnb.extractors.tekst import EkstraktorTekstu
 
-    return RejestrEkstraktorow((EkstraktorStronyWww(), EkstraktorMarkdown(), EkstraktorTekstu()))
+    return RejestrEkstraktorow(
+        (
+            EkstraktorStronyWww(zachowuj_odnosniki=zachowuj_odnosniki),
+            EkstraktorMarkdown(),
+            EkstraktorTekstu(),
+        )
+    )

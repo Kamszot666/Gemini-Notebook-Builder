@@ -61,6 +61,12 @@ Nazwa pola w pliku TOML, odpowiadająca zmienna środowiskowa oraz znaczenie:
    false`. W zmiennej środowiskowej przyjmowane są napisy `tak` i `nie`, `true`
    i `false` oraz `1` i `0`, niezależnie od wielkości liter.
 
+7. `zachowuj_odnosniki`, zmienna `GNB_ZACHOWUJ_ODNOSNIKI`. Decyduje, czy na końcu
+   treści artykułu pobranego ze strony powstaje sekcja „Odnośniki wymienione
+   w artykule” z ponumerowanym wykazem adresów. Domyślnie włączone. Wyłączenie
+   usuwa sam wykaz, a treść artykułu pozostaje bez zmian. Wartość podaje się tak
+   samo jak w polu `zachowuj_oryginaly`.
+
 ## Pola pobierania stron internetowych
 
 1. `nazwa_klienta`, zmienna `GNB_NAZWA_KLIENTA`. Nazwa, którą aplikacja
@@ -155,6 +161,7 @@ bezpieczny_limit_slow = 480000
 bezpieczny_limit_mb = 190
 formaty_wynikowe = ["txt", "md"]
 zachowuj_oryginaly = true
+zachowuj_odnosniki = true
 
 nazwa_klienta = "GeminiNotebookBuilder/0.1 (+https://github.com/Kamszot666/Gemini-Notebook-Builder)"
 limit_czasu_sekundy = 20

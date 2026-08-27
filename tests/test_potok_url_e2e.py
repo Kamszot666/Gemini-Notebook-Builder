@@ -304,7 +304,7 @@ def test_strona_wymagajaca_skryptow_jest_pomijana_z_wyjasnieniem(tmp_path: Path)
     (zrodlo,) = manifest["zrodla"]
     assert zrodlo["status"] == "pominiete"
     assert "skryptów" in zrodlo["komunikat_bledu"]
-    assert "wklej ją jako tekst" in zrodlo["komunikat_bledu"]
+    assert "zapisz ją do pliku" in zrodlo["komunikat_bledu"]
 
     raport = wynik.sciezka_raportu.read_text(encoding="utf-8")
     assert "Źródła nieprzetworzone, liczba: 1" in raport
@@ -347,3 +347,61 @@ def test_niedostepny_plik_robots_konczy_pominieciem_calego_zrodla(tmp_path: Path
     manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
     (zrodlo,) = manifest["zrodla"]
     assert "RFC 9309" in zrodlo["komunikat_bledu"]
+
+
+_STRONA_Z_ODNOSNIKAMI = (
+    '<!DOCTYPE html><html lang="pl"><head><meta charset="utf-8">'
+    "<title>Skąd wiadomo</title></head><body><article>"
+    "<h1>Skąd wiadomo, że powtórzenia szkodzą</h1>"
+    '<p>Jak pokazuje <a href="https://przyklad.pl/badanie-2026">badanie z 2026 roku</a>, '
+    "powtórzenia w bazie wiedzy obniżają jakość odpowiedzi i utrudniają odnalezienie "
+    "właściwego fragmentu przy dłuższej pracy z materiałem.</p>"
+    '<p>Podobne wnioski przedstawia <a href="https://inny.example/raport">raport branżowy</a>, '
+    "opisujący te same zjawiska na znacznie większym zbiorze dokumentów źródłowych.</p>"
+    "</article></body></html>"
+).encode()
+
+
+def test_wykaz_odnosnikow_trafia_do_pliku_wynikowego(tmp_path: Path) -> None:
+    odpowiedz = httpx.Response(
+        200, content=_STRONA_Z_ODNOSNIKAMI, headers={"content-type": "text/html; charset=utf-8"}
+    )
+    serwer = _Serwer({"/artykul": odpowiedz})
+
+    wynik = przetworz_projekt(
+        _pozycje(_ADRES_ARTYKULU),
+        _konfiguracja(tmp_path),
+        nazwa_projektu="Test odnośników",
+        zegar=_zegar_krokowy(),
+        transport_http=serwer.transport(),
+    )
+
+    (plik_txt,) = (wynik.katalog_projektu / "pliki_wynikowe").glob("*.txt")
+    tresc = plik_txt.read_text(encoding="utf-8")
+
+    assert "Odnośniki wymienione w artykule" in tresc
+    assert "1. badanie z 2026 roku — https://przyklad.pl/badanie-2026" in tresc
+    assert "2. raport branżowy — https://inny.example/raport" in tresc
+    assert "Jak pokazuje badanie z 2026 roku, powtórzenia" in tresc
+
+
+def test_wylaczony_wykaz_odnosnikow_nie_powstaje_w_pliku(tmp_path: Path) -> None:
+    odpowiedz = httpx.Response(
+        200, content=_STRONA_Z_ODNOSNIKAMI, headers={"content-type": "text/html; charset=utf-8"}
+    )
+    serwer = _Serwer({"/artykul": odpowiedz})
+
+    wynik = przetworz_projekt(
+        _pozycje(_ADRES_ARTYKULU),
+        _konfiguracja(tmp_path, zachowuj_odnosniki=False),
+        nazwa_projektu="Test bez odnośników",
+        zegar=_zegar_krokowy(),
+        transport_http=serwer.transport(),
+    )
+
+    (plik_txt,) = (wynik.katalog_projektu / "pliki_wynikowe").glob("*.txt")
+    tresc = plik_txt.read_text(encoding="utf-8")
+
+    assert "Odnośniki wymienione w artykule" not in tresc
+    assert "https://przyklad.pl/badanie-2026" not in tresc
+    assert "badanie z 2026 roku" in tresc

@@ -112,10 +112,31 @@ Gdy trafilatura nic nie zwróci, wchodzi mechanizm zapasowy oparty na `lxml`,
 który odzyskuje same akapity. Zgłasza on niski poziom pewności struktury, więc
 z materiału odzyskanego awaryjnie wersja MD nigdy nie powstanie.
 
-Odnośniki wewnątrz zdań nie są zachowywane, ponieważ adres w środku zdania
-utrudnia odsłuchanie tekstu czytnikiem ekranu. Pochodzenie całego artykułu jest
-zapisane w manifeście: adres kanoniczny, adres końcowy po przekierowaniach, kod
-odpowiedzi HTTP, deklarowane kodowanie oraz nagłówki `ETag` i `Last-Modified`.
+Pochodzenie całego artykułu jest zapisane w manifeście: adres kanoniczny, adres
+końcowy po przekierowaniach, kod odpowiedzi HTTP, deklarowane kodowanie oraz
+nagłówki `ETag` i `Last-Modified`.
+
+### Odnośniki wymienione w artykule
+
+Adres odnośnika nie zostaje w środku zdania, ponieważ utrudnia odsłuchanie tekstu
+czytnikiem ekranu. W miejscu odnośnika zostaje sam jego tekst, bez numeru
+i bez odsyłacza, żeby zdanie brzmiało naturalnie.
+
+Adresy nie są jednak gubione. Na końcu wersji TXT i MD powstaje sekcja
+zatytułowana „Odnośniki wymienione w artykule”, zawierająca ponumerowaną listę
+pozycji w postaci tekst odnośnika, myślnik, adres. Sekcja powstaje tylko wtedy,
+gdy w artykule był co najmniej jeden taki odnośnik. Powtórzony adres pojawia się
+w wykazie raz, ponieważ wykaz wskazuje źródła, a nie liczy odwołania.
+
+Do wykazu trafiają wyłącznie pełne adresy HTTP i HTTPS. Pomijane są odsyłacze
+w obrębie tej samej strony, adresy poczty, wywołania skryptów oraz adresy
+względne, których bez znajomości adresu bazowego nie da się rozwinąć do postaci
+użytecznej dla czytelnika.
+
+Powód takiego rozwiązania: adres zacytowany przez autora bywa jedynym wskazaniem
+badania albo danych, a identyfikowalność źródeł jest czwartym priorytetem
+z sekcji czwartej `CLAUDE.md`, wyżej niż wygoda formatowania. Sekcję można
+wyłączyć ustawieniem `zachowuj_odnosniki`.
 
 ### Pamięć podręczna
 

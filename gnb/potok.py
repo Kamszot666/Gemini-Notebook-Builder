@@ -150,7 +150,7 @@ def przetworz_projekt(
     Argument `transport_http` służy wyłącznie testom. Pozwala podstawić sztuczny
     transport i sprawdzić cały potok dla adresów bez korzystania z sieci.
     """
-    rejestr = rejestr if rejestr is not None else domyslny_rejestr()
+    rejestr = rejestr or domyslny_rejestr(konfiguracja.zachowuj_odnosniki)
     czas_startu = zegar()
 
     nazwa = nazwa_projektu or _wygeneruj_nazwe_projektu(pozycje)
@@ -649,6 +649,7 @@ def _nowy_checkpoint(
             "bezpieczny_limit_mb": str(konfiguracja.bezpieczny_limit_mb),
             "formaty_wynikowe": ",".join(konfiguracja.formaty_wynikowe),
             "zachowuj_oryginaly": "tak" if konfiguracja.zachowuj_oryginaly else "nie",
+            "zachowuj_odnosniki": "tak" if konfiguracja.zachowuj_odnosniki else "nie",
         },
         czas_ostatniej_zmiany=moment.isoformat(),
     )

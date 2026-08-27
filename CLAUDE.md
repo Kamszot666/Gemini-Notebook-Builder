@@ -383,15 +383,16 @@ Realizuj etapami. Nie zaczynaj kolejnego, zanim poprzedni nie ma testów i nie d
 2. Etap pierwszy: pipeline dla tekstu i plików TXT oraz MD, normalizacja, liczenie słów, zapis wyniku, manifest, checkpoint, logi. To jest najmniejsza działająca całość.
 3. Etap drugi: URL i strony WWW, walidacja list URL, cache, retry i backoff, obsługa błędów.
 4. Etap trzeci: YouTube i napisy.
-5. Etap czwarty: dokumenty, czyli PDF tekstowy, DOCX, HTML, EPUB, CSV, SRT i VTT.
-6. Etap piąty: deduplikacja wielopoziomowa wraz z audytem.
-7. Etap szósty: pakowanie, grupowanie tematyczne, podział według trzech limitów.
-8. Etap siódmy: dostępny interfejs WWW z postępem, wznowieniem, polem instrukcji systemowej i polem promptu wyszukiwania.
-9. Etap ósmy: obrazy, OCR, PDF skanowany, tematyczne PDF z opisami.
-10. Etap dziewiąty: audio, wykrywanie mowy, transkrypcja nagrań mowy, odrzucanie materiału muzycznego.
-11. Etap dziesiąty: materiały nutowe, czyli MIDI, MusicXML, Guitar Pro oraz nuty w PDF i obrazach wraz z opisem tekstowym.
-12. Etap jedenasty: globalny skrót Control plus Shift plus F12 jako moduł opcjonalny.
-13. Etap dwunasty: pełny test end-to-end, uzupełnienie dokumentacji, raport końcowy.
+5. Etap czwarty A: metadane artykułu z danych strukturalnych JSON-LD oraz walidacja jakości ekstrakcji. Zakres opisuje sekcja osiemnasta c.
+6. Etap czwarty: dokumenty, czyli PDF tekstowy, DOCX, HTML, EPUB, CSV, SRT i VTT.
+7. Etap piąty: deduplikacja wielopoziomowa wraz z audytem.
+8. Etap szósty: pakowanie, grupowanie tematyczne, podział według trzech limitów.
+9. Etap siódmy: dostępny interfejs WWW z postępem, wznowieniem, polem instrukcji systemowej i polem promptu wyszukiwania.
+10. Etap ósmy: obrazy, OCR, PDF skanowany, tematyczne PDF z opisami.
+11. Etap dziewiąty: audio, wykrywanie mowy, transkrypcja nagrań mowy, odrzucanie materiału muzycznego.
+12. Etap dziesiąty: materiały nutowe, czyli MIDI, MusicXML, Guitar Pro oraz nuty w PDF i obrazach wraz z opisem tekstowym.
+13. Etap jedenasty: globalny skrót Control plus Shift plus F12 jako moduł opcjonalny.
+14. Etap dwunasty: pełny test end-to-end, uzupełnienie dokumentacji, raport końcowy.
 
 Po każdym etapie uruchom testy i zaktualizuj dokumentację. Jeżeli test nie przechodzi, napraw problem przed przejściem dalej.
 
@@ -440,6 +441,21 @@ Czego w tej procedurze nie wolno, niezależnie od okoliczności:
 3. Żadnego rozwiązywania konfliktu scalania na własną rękę. Przy konflikcie zatrzymaj się, opisz go i poczekaj na decyzję użytkownika.
 4. Żadnego scalania pull requestu utworzonego przez kogoś innego.
 5. Jeżeli GitHub CLI nie jest zainstalowany lub nie jest zalogowany, nie próbuj obejść tego innym sposobem. Wykonaj kroki od pierwszego do szóstego, a potem napisz użytkownikowi, jakiego polecenia brakuje i co ma zrobić.
+
+## 18c. Etap czwarty A — zakres
+
+Ten etap jest zaplanowany, ale jeszcze nieuruchomiony. Powstaje po etapie trzecim, a przed etapem czwartym.
+
+1. Metadane artykułu z danych strukturalnych JSON-LD. Jeżeli strona zawiera poprawny blok schema.org typu `Article`, `NewsArticle` albo `BlogPosting`, wykorzystaj z niego autora, datę publikacji, datę aktualizacji, wydawcę i opis, a następnie zapisz je w manifeście oraz w nagłówku metadanych pliku wynikowego. Pole `articleBody` traktuj wyłącznie jako materiał porównawczy do oceny jakości ekstrakcji, nigdy jako główne źródło treści, ponieważ serwisy wypełniają je bardzo nierówno. Każdą wartość waliduj, a przy sprzeczności między JSON-LD a wynikiem ekstraktora zapisz obie wartości i oznacz rozbieżność w manifeście, zamiast po cichu wybierać jedną. Powód: data publikacji pozwala odróżnić artykuł sprzed lat od tegorocznego, co dla materiału w notatniku bywa różnicą między informacją a dezinformacją.
+2. Walidacja jakości ekstrakcji. Po ekstrakcji, a przed zapisem, oceń wynik zestawem heurystyk: liczba słów, obecność tytułu, liczba akapitów i nagłówków, stosunek długości treści do liczby elementów nawigacyjnych w oryginale, wykrycie fraz świadczących o stronie błędu albo o żądaniu włączenia JavaScriptu, wykrycie powtarzających się fragmentów oraz pustych sekcji. Wynikiem jest jedna z dwóch ocen zapisywanych w manifeście: ekstrakcja poprawna albo ekstrakcja podejrzana. Źródło z oceną podejrzaną zapisz normalnie, nigdy go nie kasuj, ale wypisz je w osobnej sekcji raportu końcowego zatytułowanej „Materiały do sprawdzenia”, wraz z powodem podejrzenia. Powód: dziś źródło, z którego wyciągnięto trzysta znaków zamiast dwunastu tysięcy, wygląda w wynikach identycznie jak poprawne, a to jest cicha utrata treści, czyli naruszenie drugiego priorytetu z sekcji czwartej.
+3. Świadomie odłożone na później, bez planowania osobnego etapu: obsługa artykułów wielostronicowych, czyli sklejanie kolejnych stron jednego tekstu, oraz czytanie mapy witryny i kanałów RSS jako źródła listy adresów.
+
+## 18d. Rozwiązania świadomie odrzucone
+
+Te rozwiązania zostały rozważone i odrzucone. Zapis istnieje po to, żeby nie wracać do nich za pół roku od zera. Każda pozycja ma warunek, po którego spełnieniu decyzję wolno zrewidować.
+
+1. ODRZUCONE: przeglądarka bezgłowa, czyli Playwright albo Selenium, do stron wymagających JavaScriptu. Powody w kolejności ważności. Po pierwsze, Chromium to kilkaset megabajtów plików wykonywalnych i bibliotek natywnych, a kontrola aplikacji Windows na komputerze deweloperskim zablokowała już pojedynczą bibliotekę DLL wymaganą przez nowszą wersję mypy, więc ryzyko zablokowania całej przeglądarki jest realne, a diagnoza takiego problemu przy pracy z czytnikiem ekranu jest kosztowna. Po drugie, strony niedające się odczytać bez wykonania skryptów to mały ułamek materiałów, a istnieje dla nich obejście: zapisanie strony z przeglądarki do pliku i podanie jej jako pliku lokalnego. Po trzecie, uruchamianie przeglądarki dla każdego adresu byłoby wielokrotnie droższe niż żądanie HTTP. Warunek rewizji: gdyby projekt miał kiedyś działać na serwerze z Linuksem, gdzie kontrola aplikacji nie obowiązuje, obsługa taka może wrócić wyłącznie jako moduł opcjonalny, którego brak nie zatrzymuje aplikacji, na tej samej zasadzie co moduł globalnego skrótu z sekcji dwunastej.
+2. ODRZUCONE: frameworki crawlerowe, czyli Crawlee for Python oraz Scrapy razem ze `scrapy-playwright`. Powody. Po pierwsze, te narzędzia rozwiązują zadanie, którego ten projekt nie ma: odkrywanie nowych adresów przez podążanie za odnośnikami, kolejkowanie tysięcy żądań i zarządzanie wieloma sesjami. Aplikacja dostaje od użytkownika gotową listę adresów, a limit notatnika wynosi sto źródeł na planie Plus, więc skala rzędu tysiąca artykułów, dla której te frameworki są projektowane, tutaj nie występuje. Po drugie, mechanizmy, dla których zwykle się je dobiera, czyli ponowienia, rosnący odstęp, ograniczanie częstotliwości na domenę, wykrywanie duplikatów i kolejkowanie, są już zaimplementowane w `gnb/ingestion` i pokryte testami. Po trzecie, Scrapy stoi na Twisted, a nasz klient na asyncio, więc jego dołożenie oznaczałoby konflikt pętli zdarzeń i przepisanie działającego kodu. Warunek rewizji: gdyby projekt kiedyś miał sam odkrywać adresy, na przykład z mapy witryny albo kanału RSS, wtedy warto wrócić do tej oceny, ale nadal osobno rozważyć, czy nie wystarczy prosty moduł czytający `sitemap.xml`.
 
 ## 19. Kryterium ukończenia funkcji
 

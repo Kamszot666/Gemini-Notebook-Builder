@@ -218,3 +218,55 @@ def test_rozdzial_ktorego_nie_da_sie_sparsowac_daje_ostrzezenie() -> None:
     assert "nie dało się sparsować" in dokument.ostrzezenia[0]
     assert "Rozdział pierwszy" not in dokument.tekst
     assert "Rozdział drugi" in dokument.tekst
+
+
+def test_tekst_lezacy_bezposrednio_w_kontenerze_nie_ginie() -> None:
+    """Zdanie zapisane wprost w elemencie div, bez akapitu, trafia do wyniku.
+
+    Pliki EPUB generowane automatycznie potrafią zostawić treść bez otaczającego
+    akapitu. Wcześniej taka treść wypadała bez śladu, bo funkcja obsługiwała
+    zamkniętą listę znaczników i nie miała gałęzi domyślnej.
+    """
+    tresc = (
+        "<html><body><div>"
+        "Zdanie luźne w kontenerze."
+        "<p>Zwykły akapit.</p>"
+        "Zdanie po akapicie."
+        "</div></body></html>"
+    )
+    dokument = EkstraktorEpub().wyekstrahuj("plik_dokument-12", _epub_z_jednym_rozdzialem(tresc))
+
+    assert "Zdanie luźne w kontenerze." in dokument.tekst
+    assert "Zwykły akapit." in dokument.tekst
+    assert "Zdanie po akapicie." in dokument.tekst
+
+
+def test_tresc_w_nieobslugiwanych_znacznikach_nie_ginie() -> None:
+    """Podpis ilustracji, lista definicji i element poboczny trafiają do wyniku."""
+    tresc = (
+        "<html><body>"
+        "<figure><figcaption>Podpis pod ilustracją.</figcaption></figure>"
+        "<dl><dt>Termin słownikowy</dt><dd>Objaśnienie terminu.</dd></dl>"
+        "<aside><p>Uwaga na marginesie.</p></aside>"
+        "</body></html>"
+    )
+    dokument = EkstraktorEpub().wyekstrahuj("plik_dokument-13", _epub_z_jednym_rozdzialem(tresc))
+
+    assert "Podpis pod ilustracją." in dokument.tekst
+    assert "Termin słownikowy" in dokument.tekst
+    assert "Objaśnienie terminu." in dokument.tekst
+    assert "Uwaga na marginesie." in dokument.tekst
+
+
+def test_naglowek_dokumentu_xhtml_nie_trafia_do_tresci() -> None:
+    """Gałąź domyślna nie może wciągnąć tytułu pliku, stylów ani skryptów."""
+    tresc = (
+        "<html><head><title>NAZWA PLIKU XHTML</title>"
+        "<style>body { color: red; }</style></head>"
+        "<body><p>Właściwa treść rozdziału.</p></body></html>"
+    )
+    dokument = EkstraktorEpub().wyekstrahuj("plik_dokument-14", _epub_z_jednym_rozdzialem(tresc))
+
+    assert "NAZWA PLIKU XHTML" not in dokument.tekst
+    assert "color: red" not in dokument.tekst
+    assert "Właściwa treść rozdziału." in dokument.tekst

@@ -17,6 +17,10 @@ Plik uszkodzony albo niebędący dokumentem Worda kończy się błędem trwałym
 z czytelnym komunikatem, a nie surowym wyjątkiem biblioteki. Jedno uszkodzone
 źródło nie może zatrzymać całego projektu.
 
+Akapity i tabele opakowane w kontrolki zawartości, czyli w element `w:sdt`, są
+rozwijane. Ta konstrukcja jest powszechna w dokumentach powstałych z szablonów,
+a bez rozwinięcia jej zawartość przepadała w całości.
+
 Ekstraktor nie rozpoznaje bloków kodu, ponieważ DOCX nie ma dla nich
 standardowego stylu — zgadywanie po nazwie czcionki byłoby heurystyką bez
 pewności, a projekt nie zgaduje struktury tam, gdzie nie da się jej stwierdzić
@@ -28,6 +32,8 @@ from __future__ import annotations
 import io
 import re
 import zipfile
+from collections.abc import Iterator
+from typing import Any
 
 from docx import Document
 from docx.document import Document as DokumentDocx
@@ -102,7 +108,7 @@ def _bloki_z_dokumentu(dokument_docx: DokumentDocx) -> list[BlokTresci]:
             )
             elementy_listy.clear()
 
-    for element in dokument_docx.element.body.iterchildren():
+    for element in _elementy_tresci(dokument_docx.element.body):
         if element.tag == qn("w:p"):
             akapit = Paragraph(element, dokument_docx)
             tekst = akapit.text.strip()
@@ -139,6 +145,26 @@ def _bloki_z_dokumentu(dokument_docx: DokumentDocx) -> list[BlokTresci]:
                 )
     zamknij_liste()
     return bloki
+
+
+def _elementy_tresci(rodzic: Any) -> Iterator[Any]:
+    """Zwraca elementy treści dokumentu, rozwijając kontrolki zawartości.
+
+    Kontrolka zawartości, czyli element `w:sdt`, opakowuje akapity i tabele
+    w dokumentach powstałych z szablonów. Jest to konstrukcja powszechna, a jej
+    zawartość leży o dwa poziomy głębiej, w elemencie `w:sdtContent`. Bez tego
+    rozwinięcia akapity z szablonu przepadały w całości, bo pętla po treści
+    widziała tylko sam element kontrolki i pomijała go jako nieznany.
+
+    Kontrolki bywają zagnieżdżone jedna w drugiej, więc rozwijanie jest
+    rekurencyjne.
+    """
+    for element in rodzic.iterchildren():
+        if element.tag == qn("w:sdt"):
+            for zawartosc in element.iterchildren(qn("w:sdtContent")):
+                yield from _elementy_tresci(zawartosc)
+        else:
+            yield element
 
 
 def _wiersze_tabeli(tabela: Table) -> list[str]:

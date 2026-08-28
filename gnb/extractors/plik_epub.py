@@ -61,6 +61,20 @@ _BLEDY_ODCZYTU_EPUB = (epub.EpubException, zipfile.BadZipFile, KeyError, OSError
 _ZNACZNIKI_NAGLOWKOW = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
 _ZNACZNIKI_KONTENEROW = frozenset({"div", "section", "article", "main", "body"})
 _ZNACZNIKI_KOMOREK = frozenset({"td", "th"})
+
+# Znaczniki, które nie niosą treści książki. Nagłówek dokumentu XHTML zawiera
+# tytuł pliku, style i skrypty, więc gałąź domyślna musi go pomijać, inaczej
+# wciągnęłaby te dane do tekstu jako akapit.
+_ZNACZNIKI_POMIJANE = frozenset({"head", "title", "style", "script", "meta", "link", "noscript"})
+
+# Znaczniki, dla których ekstraktor ma własną gałąź. Obecność któregokolwiek
+# z nich wewnątrz nieznanego znacznika oznacza, że warto w niego wejść, zamiast
+# spłaszczać jego zawartość do jednego akapitu.
+_ZNACZNIKI_BLOKOWE = (
+    _ZNACZNIKI_NAGLOWKOW
+    | _ZNACZNIKI_KONTENEROW
+    | frozenset({"p", "ul", "ol", "table", "blockquote", "pre"})
+)
 _BIALE_ZNAKI = re.compile(r"\s+")
 
 
@@ -128,15 +142,26 @@ def _korzen_html(zawartosc: bytes) -> html.HtmlElement | None:
 
 
 def _bloki_z_elementu(element: html.HtmlElement | None) -> list[BlokTresci]:
-    """Zamienia bezpośrednie dzieci elementu na bloki treści, wchodząc w kontenery."""
+    """Zamienia bezpośrednie dzieci elementu na bloki treści, wchodząc w kontenery.
+
+    Tekst leżący bezpośrednio w kontenerze, bez otaczającego akapitu, jest
+    zbierany jako osobny akapit. Znacznik, dla którego nie ma własnej gałęzi,
+    trafia do gałęzi domyślnej zamiast wypadać bez śladu. Wcześniej obsługiwana
+    była zamknięta lista znaczników, więc treść w `figcaption`, `dl`, `dt`, `dd`,
+    `aside` i `figure`, a także tekst luźny, znikała z wyniku po cichu.
+    """
     if element is None:
         return []
     bloki: list[BlokTresci] = []
+    _dopisz_tekst_luzny(bloki, element.text)
     for dziecko in element:
         znacznik = dziecko.tag
         if not isinstance(znacznik, str):
+            _dopisz_tekst_luzny(bloki, dziecko.tail)
             continue
-        if znacznik in _ZNACZNIKI_NAGLOWKOW:
+        if znacznik in _ZNACZNIKI_POMIJANE:
+            pass
+        elif znacznik in _ZNACZNIKI_NAGLOWKOW:
             tekst = _tekst_elementu(dziecko)
             if tekst:
                 bloki.append(
@@ -166,7 +191,47 @@ def _bloki_z_elementu(element: html.HtmlElement | None) -> list[BlokTresci]:
                 bloki.append(BlokTresci(rodzaj=RodzajBloku.KOD, poziom=0, tresc=tekst))
         elif znacznik in _ZNACZNIKI_KONTENEROW:
             bloki.extend(_bloki_z_elementu(dziecko))
+        else:
+            bloki.extend(_bloki_z_nieznanego_znacznika(dziecko))
+        _dopisz_tekst_luzny(bloki, dziecko.tail)
     return bloki
+
+
+def _dopisz_tekst_luzny(bloki: list[BlokTresci], tekst: str | None) -> None:
+    """Dopisuje akapit z tekstu leżącego bezpośrednio w kontenerze, o ile jakiś jest.
+
+    Pliki EPUB generowane automatycznie potrafią zostawić zdanie wprost
+    w elemencie `div`, bez otaczającego akapitu. Bez tego kroku takie zdanie
+    nie trafiało do wyniku wcale.
+    """
+    if not tekst:
+        return
+    oczyszczony = _BIALE_ZNAKI.sub(" ", tekst).strip()
+    if oczyszczony:
+        bloki.append(BlokTresci(rodzaj=RodzajBloku.AKAPIT, poziom=0, tresc=oczyszczony))
+
+
+def _bloki_z_nieznanego_znacznika(element: html.HtmlElement) -> list[BlokTresci]:
+    """Zbiera treść znacznika, dla którego ekstraktor nie ma własnej gałęzi.
+
+    Znacznik zawierający w środku znany blok jest przechodzony rekurencyjnie, bo
+    jego struktura jest rozpoznawalna. Znacznik bez takiego bloku, na przykład
+    `figcaption` albo `dd`, daje jeden akapit z całą swoją treścią. Spłaszczenie
+    do akapitu jest tu lepsze niż rozbijanie zdania na osobne bloki po każdym
+    wyróżnieniu wewnątrzwierszowym.
+    """
+    if _zawiera_znany_blok(element):
+        return _bloki_z_elementu(element)
+    tekst = _tekst_elementu(element)
+    return [BlokTresci(rodzaj=RodzajBloku.AKAPIT, poziom=0, tresc=tekst)] if tekst else []
+
+
+def _zawiera_znany_blok(element: html.HtmlElement) -> bool:
+    """Prawda, gdy wewnątrz elementu jest znacznik, dla którego jest własna gałąź."""
+    return any(
+        isinstance(potomek.tag, str) and potomek.tag in _ZNACZNIKI_BLOKOWE
+        for potomek in element.iterdescendants()
+    )
 
 
 def _blok_listy(element: html.HtmlElement, *, numerowana: bool) -> BlokTresci | None:

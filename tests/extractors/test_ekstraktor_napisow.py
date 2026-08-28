@@ -99,3 +99,42 @@ def test_plik_testowy_vtt_daje_polaczony_tekst_bez_naglowka() -> None:
 
     assert "WEBVTT" not in dokument.tekst
     assert "Dzisiaj porozmawiamy o przygotowaniu bazy wiedzy" in dokument.tekst
+
+
+def test_blok_bez_znacznika_czasu_daje_ostrzezenie() -> None:
+    """Blok pominięty przy parsowaniu nie może zniknąć bez śladu.
+
+    Wcześniej taki blok był pomijany w całości, a licznik segmentów liczył
+    wyłącznie te przyjęte, więc z manifestu nie dało się wyczytać, ile treści
+    nie weszło do wyniku.
+    """
+    plik = (
+        "1\n00:00:01,000 --> 00:00:04,000\nPierwszy poprawny napis.\n\n"
+        "2\nBrakuje tu linii ze znacznikiem czasu.\n\n"
+        "3\n00:00:05,000 --> 00:00:08,000\nDrugi poprawny napis.\n"
+    )
+
+    dokument = EkstraktorNapisow().wyekstrahuj("plik_dokument-30", plik)
+
+    assert dokument.ostrzezenia
+    assert "pominięto 1" in dokument.ostrzezenia[0]
+    assert dokument.metadane["liczba_blokow_pominietych"] == "1"
+    assert "Pierwszy poprawny napis." in dokument.tekst
+    assert "Drugi poprawny napis." in dokument.tekst
+
+
+def test_naglowek_i_komentarze_vtt_nie_sa_liczone_jako_pominiete() -> None:
+    """Nagłówek WEBVTT oraz bloki NOTE, STYLE i REGION są pomijane zgodnie z formatem."""
+    plik = (
+        "WEBVTT\n\n"
+        "NOTE To jest komentarz autora.\n\n"
+        "STYLE\n::cue { color: yellow }\n\n"
+        "REGION\nid:podglad\n\n"
+        "00:00:01.000 --> 00:00:04.000\nJedyny napis w pliku.\n"
+    )
+
+    dokument = EkstraktorNapisow().wyekstrahuj("plik_dokument-31", plik)
+
+    assert dokument.metadane["liczba_blokow_pominietych"] == "0"
+    assert dokument.ostrzezenia == []
+    assert "Jedyny napis w pliku." in dokument.tekst

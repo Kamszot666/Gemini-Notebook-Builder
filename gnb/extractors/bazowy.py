@@ -78,6 +78,8 @@ def domyslny_rejestr(zachowuj_odnosniki: bool = True) -> RejestrEkstraktorow:
     na końcu treści artykułu powstaje wykaz odnośników.
     """
     from gnb.extractors.markdown import EkstraktorMarkdown
+    from gnb.extractors.napisy import EkstraktorNapisow
+    from gnb.extractors.plik_csv import EkstraktorCsv
     from gnb.extractors.strona_www import EkstraktorStronyWww
     from gnb.extractors.tekst import EkstraktorTekstu
 
@@ -85,6 +87,8 @@ def domyslny_rejestr(zachowuj_odnosniki: bool = True) -> RejestrEkstraktorow:
         (
             EkstraktorStronyWww(zachowuj_odnosniki=zachowuj_odnosniki),
             EkstraktorMarkdown(),
+            EkstraktorCsv(),
+            EkstraktorNapisow(),
             EkstraktorTekstu(),
         )
     )

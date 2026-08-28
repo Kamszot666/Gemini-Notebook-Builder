@@ -1,4 +1,11 @@
-"""Ekstrakcja treści artykułu ze strony internetowej.
+"""Ekstrakcja treści artykułu ze strony internetowej oraz z pliku HTML lokalnego.
+
+Ten sam ekstraktor obsługuje oba przypadki, ponieważ ekstrakcja pracuje na
+tekście kodu HTML niezależnie od tego, czy pochodzi z pobrania, czy z pliku na
+dysku. Plik lokalny nie przechodzi przez sprawdzenie, czy strona wymaga
+wykonania skryptów: to jest opisany w CLAUDE.md sposób obejścia takiej strony,
+czyli zapisanie jej z przeglądarki po wykonaniu skryptów i podanie zapisanego
+pliku jako źródła.
 
 Podstawowym narzędziem jest ``trafilatura``, zgodnie z sekcją piętnastą
 CLAUDE.md. Odrzuca ona menu, banery zgody na pliki cookie, reklamy, ramki
@@ -56,6 +63,11 @@ METODA_GLOWNA = "trafilatura"
 METODA_ZAPASOWA = "lxml_zapasowy"
 FORMATY_STRON = frozenset({"html", "htm", "xhtml", ""})
 
+# Format pustego napisu jest wykluczony dla pliku lokalnego: adres bez wskazówki
+# formatu domyślnie oznacza stronę, ale plik bez rozszerzenia nie powinien być
+# domyślnie traktowany jako HTML.
+FORMATY_STRON_PLIKOW = frozenset({"html", "htm", "xhtml"})
+
 _ZNACZNIKI_NIETRESCIOWE = (
     "script",
     "style",
@@ -86,9 +98,8 @@ _SCHEMATY_ODNOSNIKOW = ("http://", "https://")
 KOMUNIKAT_WYMAGA_SKRYPTOW = (
     "Strona buduje treść dopiero w przeglądarce, przez wykonanie skryptów, więc "
     "nie da się z niej pobrać tekstu bez przeglądarki. Źródło zostało pominięte. "
-    "Obejście: otwórz stronę w przeglądarce i zapisz ją do pliku, a następnie podaj "
-    "ten plik jako źródło lokalne. Pliki HTML będą obsługiwane od etapu czwartego, "
-    "a już teraz działa skopiowanie treści artykułu i wklejenie jej jako tekst."
+    "Obejście: otwórz stronę w przeglądarce, zapisz ją do pliku HTML i podaj ten "
+    "plik jako źródło lokalne, albo skopiuj treść artykułu i wklej ją jako tekst."
 )
 
 
@@ -115,7 +126,11 @@ class EkstraktorStronyWww:
         self._zachowuj_odnosniki = zachowuj_odnosniki
 
     def obsluguje(self, typ_zrodla: TypZrodla, format_zrodla: str) -> bool:
-        return typ_zrodla is TypZrodla.STRONA_WWW and format_zrodla in FORMATY_STRON
+        if typ_zrodla is TypZrodla.STRONA_WWW:
+            return format_zrodla in FORMATY_STRON
+        if typ_zrodla is TypZrodla.PLIK_DOKUMENT:
+            return format_zrodla in FORMATY_STRON_PLIKOW
+        return False
 
     def wyekstrahuj(self, identyfikator_zrodla: str, tekst: str) -> DokumentWyekstrahowany:
         """Zwraca treść artykułu jako tekst w zapisie Markdown wraz z blokami struktury."""

@@ -156,7 +156,12 @@ pliku wynikowego.
   zasobów, oparta na SQLite, z trybem WAL i numerem wersji schematu.
 - `gnb/persistence/checkpoint.py` — `checkpoint.json` z zapisem atomowym przez
   plik tymczasowy i `os.replace`, z jedną kopią zapasową. Po restarcie źródła
-  ze statusem końcowym nie są przetwarzane ponownie.
+  ze statusem końcowym nie są przetwarzane ponownie. Odczyt rozgałęzia się po
+  numerze wersji schematu i migruje dane starszej wersji przed budową obiektów,
+  więc katalog projektu założony poprzednią wersją aplikacji nadal daje się
+  wznowić. Plik w wersji nowszej niż obsługiwana, plik bez numeru wersji oraz plik
+  bez spodziewanego pola kończą się błędem trwałym z komunikatem po polsku,
+  a nie surowym śladem stosu.
 
 ## Pakiet gnb.logging_pl
 

@@ -13,8 +13,12 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from gnb.core.konfiguracja import Konfiguracja
+from gnb.extractors.napisy import KOMUNIKAT_BRAK_TRESCI
+from gnb.extractors.plik_csv import KOMUNIKAT_BRAK_DANYCH
+from gnb.extractors.plik_pdf import KOMUNIKAT_BEZ_WARSTWY_TEKSTOWEJ
 from gnb.ingestion.wejscie import PozycjaWejsciowa, przyjmij_plik
-from gnb.potok import przetworz_projekt
+from gnb.output.raport import NAGLOWEK_MATERIALOW_DO_SPRAWDZENIA
+from gnb.potok import KOMUNIKAT_PLIK_BEZ_TRESCI, przetworz_projekt
 
 KATALOG_DANYCH = Path(__file__).resolve().parent / "dane"
 
@@ -140,3 +144,139 @@ def test_naglowek_pliku_binarnego_ma_pole_plik_a_nie_adres(tmp_path: Path) -> No
 
     assert "Plik: dokument.docx" in naglowek
     assert "Adres:" not in naglowek
+
+
+def test_ostrzezenie_ekstraktora_dociera_do_manifestu_i_raportu(tmp_path: Path) -> None:
+    """Ostrzeżenie zgłoszone przez ekstraktor przechodzi tę samą drogę co pominięcie.
+
+    Pusty plik napisów i pusty plik CSV kończyły się wcześniej statusem
+    „spakowane”, plikiem zawierającym sam nagłówek metadanych i raportem
+    mówiącym, że oba źródła są poprawne. Ostrzeżenie ekstraktora nie było
+    odczytywane przez nikogo, czyli mechanizm ostrzeżeń nie docierał do
+    użytkownika wcale.
+    """
+    katalog_wejsc = tmp_path / "wejscia"
+    katalog_wejsc.mkdir()
+    (katalog_wejsc / "puste.srt").write_text(
+        "1\n00:00:01,000 --> 00:00:02,000\n\n", encoding="utf-8"
+    )
+    (katalog_wejsc / "puste.csv").write_text("\n\n", encoding="utf-8")
+    moment = datetime(2026, 8, 28, 9, 0, tzinfo=UTC)
+    pozycje = [
+        przyjmij_plik(katalog_wejsc / "puste.srt", moment),
+        przyjmij_plik(katalog_wejsc / "puste.csv", moment),
+    ]
+
+    wynik = przetworz_projekt(
+        pozycje,
+        Konfiguracja(katalog_wynikow=tmp_path / "wyniki"),
+        nazwa_projektu="Test ostrzeżeń",
+        zegar=_zegar_krokowy(),
+    )
+
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    zrodla = {Path(zrodlo["pochodzenie"]).name: zrodlo for zrodlo in manifest["zrodla"]}
+    assert KOMUNIKAT_BRAK_TRESCI in zrodla["puste.srt"]["ostrzezenia"]
+    assert KOMUNIKAT_BRAK_DANYCH in zrodla["puste.csv"]["ostrzezenia"]
+    # Plik złożony z samego nagłówka metadanych jest wykrywany niezależnie od
+    # ekstraktora, bo ocena jakości celowo pomija formaty CSV, SRT i VTT.
+    assert KOMUNIKAT_PLIK_BEZ_TRESCI in zrodla["puste.srt"]["ostrzezenia"]
+    assert KOMUNIKAT_PLIK_BEZ_TRESCI in zrodla["puste.csv"]["ostrzezenia"]
+
+    raport = wynik.sciezka_raportu.read_text(encoding="utf-8")
+    assert NAGLOWEK_MATERIALOW_DO_SPRAWDZENIA in raport
+    assert KOMUNIKAT_BRAK_TRESCI in raport
+    assert KOMUNIKAT_BRAK_DANYCH in raport
+    assert "puste.srt" in raport
+    assert "puste.csv" in raport
+
+    log_szczegolowy = (wynik.katalog_projektu / "logi" / "log_szczegolowy.txt").read_text(
+        encoding="utf-8"
+    )
+    assert KOMUNIKAT_BRAK_DANYCH in log_szczegolowy
+
+    # Widok tekstowy manifestu też musi wymieniać ostrzeżenie, bo to jego czyta
+    # użytkownik, a nie postać JSON.
+    manifest_txt = (wynik.katalog_projektu / "manifest.txt").read_text(encoding="utf-8")
+    assert "Ostrzeżenia ekstrakcji:" in manifest_txt
+
+
+def test_pdf_bez_warstwy_tekstowej_ostrzega_w_manifescie(tmp_path: Path) -> None:
+    """Skan PDF bez warstwy tekstowej daje ostrzeżenie widoczne w manifeście i raporcie.
+
+    Dokumentacja formatów obiecywała to zachowanie, zanim ostrzeżenia zaczęły
+    docierać gdziekolwiek poza obiekt dokumentu.
+    """
+    moment = datetime(2026, 8, 28, 9, 0, tzinfo=UTC)
+    wynik = przetworz_projekt(
+        [przyjmij_plik(KATALOG_DANYCH / "pdf_skan.pdf", moment)],
+        Konfiguracja(katalog_wynikow=tmp_path),
+        nazwa_projektu="Test skanu PDF",
+        zegar=_zegar_krokowy(),
+    )
+
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    assert KOMUNIKAT_BEZ_WARSTWY_TEKSTOWEJ in manifest["zrodla"][0]["ostrzezenia"]
+    assert KOMUNIKAT_BEZ_WARSTWY_TEKSTOWEJ in wynik.sciezka_raportu.read_text(encoding="utf-8")
+
+
+def test_uszkodzony_dokument_nie_zatrzymuje_pozostalych_zrodel(tmp_path: Path) -> None:
+    """Uszkodzony DOCX i uszkodzony EPUB kończą się błędem źródła, nie awarią przebiegu.
+
+    Obie biblioteki zgłaszają wyjątki spoza taksonomii projektu, więc potok ich
+    nie łapał: cały przebieg przerywał się, a poprawne źródła z tej samej partii
+    nie były przetwarzane wcale.
+    """
+    katalog_wejsc = tmp_path / "wejscia"
+    katalog_wejsc.mkdir()
+    # Treść obu plików musi się różnić, bo identyfikator źródła pochodzi z sumy
+    # kontrolnej i dwa pliki o identycznej zawartości byłyby jednym źródłem.
+    (katalog_wejsc / "uszkodzony.docx").write_bytes(b"to nie jest archiwum zip, wariant DOCX")
+    (katalog_wejsc / "uszkodzony.epub").write_bytes(b"to nie jest archiwum zip, wariant EPUB")
+    moment = datetime(2026, 8, 28, 9, 0, tzinfo=UTC)
+    pozycje = [
+        przyjmij_plik(katalog_wejsc / "uszkodzony.docx", moment),
+        przyjmij_plik(katalog_wejsc / "uszkodzony.epub", moment),
+        przyjmij_plik(KATALOG_DANYCH / "pdf_tekstowy.pdf", moment),
+    ]
+
+    wynik = przetworz_projekt(
+        pozycje,
+        Konfiguracja(katalog_wynikow=tmp_path / "wyniki"),
+        nazwa_projektu="Test uszkodzonych dokumentów",
+        zegar=_zegar_krokowy(),
+    )
+
+    assert wynik.liczba_bledow == 2
+    assert wynik.liczba_przetworzonych == 1
+
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    zrodla = {Path(zrodlo["pochodzenie"]).name: zrodlo for zrodlo in manifest["zrodla"]}
+    assert zrodla["uszkodzony.docx"]["status"] == "blad"
+    assert zrodla["uszkodzony.epub"]["status"] == "blad"
+    assert "uszkodzony" in zrodla["uszkodzony.docx"]["komunikat_bledu"]
+    assert zrodla["pdf_tekstowy.pdf"]["status"] == "spakowane"
+
+
+def test_plik_usuniety_po_walidacji_konczy_sie_bledem_zrodla(tmp_path: Path) -> None:
+    """Plik znikający między walidacją a odczytem nie może wywrócić przebiegu."""
+    katalog_wejsc = tmp_path / "wejscia"
+    katalog_wejsc.mkdir()
+    znikajacy = katalog_wejsc / "znikajacy.txt"
+    znikajacy.write_text("Treść, która zaraz zniknie.", encoding="utf-8")
+    moment = datetime(2026, 8, 28, 9, 0, tzinfo=UTC)
+    pozycje = [
+        przyjmij_plik(znikajacy, moment),
+        przyjmij_plik(KATALOG_DANYCH / "pdf_tekstowy.pdf", moment),
+    ]
+    znikajacy.unlink()
+
+    wynik = przetworz_projekt(
+        pozycje,
+        Konfiguracja(katalog_wynikow=tmp_path / "wyniki"),
+        nazwa_projektu="Test znikającego pliku",
+        zegar=_zegar_krokowy(),
+    )
+
+    assert wynik.liczba_bledow == 1
+    assert wynik.liczba_przetworzonych == 1

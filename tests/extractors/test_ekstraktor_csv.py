@@ -72,3 +72,20 @@ def test_plik_testowy_ze_srednikiem_daje_jeden_blok_tabeli() -> None:
     wiersze = dokument.bloki[0].tresc.split("\n")
     assert wiersze[0] == "metoda\tkoszt_obliczeniowy\twykrywa\tdomyslnie_wlaczona"
     assert len(wiersze) == 5
+
+
+def test_pionowa_kreska_w_komorce_nie_rozbija_tabeli() -> None:
+    """Kreska w treści komórki jest escapowana, więc nie tworzy dodatkowej kolumny.
+
+    Pionowa kreska rozdziela komórki w zapisie tabeli Markdown. Komórka o treści
+    zawierającej ten znak rozbijała dotąd strukturę całego wiersza.
+    """
+    tekst = "Nazwa;Opis\nMetoda A;wariant pierwszy | wariant drugi\n"
+
+    dokument = EkstraktorCsv().wyekstrahuj("plik_dokument-40", tekst)
+
+    wiersze = [wiersz for wiersz in dokument.tekst.split("\n") if wiersz.startswith("|")]
+    wiersz_danych = wiersze[-1]
+    assert r"wariant pierwszy \| wariant drugi" in wiersz_danych
+    # Wiersz ma mieć dokładnie dwie komórki, tak jak nagłówek, a nie trzy.
+    assert wiersz_danych.count(" | ") == 1

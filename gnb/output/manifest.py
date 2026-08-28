@@ -3,7 +3,10 @@
 ``manifest.json`` jest źródłem prawdy, ``manifest.txt`` jest z niego generowanym
 widokiem czytelnym liniowo dla użytkownika, bez tabel i bez znaków ozdobnych.
 Manifest zawiera po jednym wpisie na źródło i po jednym na plik wynikowy, wraz
-z decyzją o wygenerowaniu wersji MD i jej uzasadnieniem.
+z decyzją o wygenerowaniu wersji MD i jej uzasadnieniem. Wpis źródła niesie też
+ostrzeżenia zgłoszone przez ekstraktor, na przykład informację o pliku PDF bez
+warstwy tekstowej. Ostrzeżenie, które nie dociera do użytkownika, jest gorsze
+niż jego brak, bo daje fałszywe poczucie, że utrata treści zostałaby zauważona.
 
 Manifest jest budowany z pełnego stanu checkpointu, więc po wznowieniu pracy
 opisuje wszystkie źródła projektu, a nie tylko te przetworzone w ostatnim
@@ -50,6 +53,7 @@ class WpisZrodla:
     metadane: dict[str, str] = field(default_factory=dict)
     ocena_jakosci: str | None = None
     powody_oceny: tuple[str, ...] = ()
+    ostrzezenia: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +117,7 @@ def _do_slownika(manifest: Manifest) -> dict[str, Any]:
                 "metadane": dict(wpis.metadane),
                 "ocena_jakosci": wpis.ocena_jakosci,
                 "powody_oceny": list(wpis.powody_oceny),
+                "ostrzezenia": list(wpis.ostrzezenia),
             }
             for wpis in manifest.zrodla
         ],
@@ -183,6 +188,9 @@ def zbuduj_widok_tekstowy(manifest: Manifest) -> str:
         if wpis_zrodla.powody_oceny:
             wiersze.append("  Powody oceny:")
             wiersze.extend(f"    - {powod}" for powod in wpis_zrodla.powody_oceny)
+        if wpis_zrodla.ostrzezenia:
+            wiersze.append("  Ostrzeżenia ekstrakcji:")
+            wiersze.extend(f"    - {ostrzezenie}" for ostrzezenie in wpis_zrodla.ostrzezenia)
         if wpis_zrodla.komunikat_bledu:
             wiersze.append(f"  Komunikat błędu: {wpis_zrodla.komunikat_bledu}")
         wiersze.append("")

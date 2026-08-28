@@ -41,12 +41,23 @@ SEKUND_W_GODZINIE = 3600
 
 _ZNAKI_KONCA_ZDANIA = (".", "!", "?", "…", ":")
 
-# Oznaczenia dźwięków, na przykład „[muzyka]” albo „(śmiech)”, oraz znaczniki
-# pozycjonowania i wyróżnień, które napisy bywają wplatać w treść.
-_OZNACZENIA_DZWIEKOW = re.compile(r"\[[^\]]*\]|\([^)]*\)")
+# Nawias okrągły albo kwadratowy wraz z zawartością. Sam nawias nie przesądza
+# jeszcze, że to oznaczenie dźwięku — rozstrzyga o tym `_czy_oznaczenie_dzwieku`.
+_NAWIAS = re.compile(r"\[[^\]]*\]|\([^)]*\)")
 _ZNACZNIKI_WEWNETRZNE = re.compile(r"<[^>]*>")
 _NUTY = re.compile(r"[♪♫]")
 _BIALE_ZNAKI = re.compile(r"\s+")
+_CYFRA = re.compile(r"\d")
+
+# Najdłuższe oznaczenie dźwięku, jakie usuwamy z treści segmentu. Typowe
+# oznaczenie to jedno słowo, na przykład „[muzyka]” albo „(śmiech)”, rzadziej
+# krótka fraza w rodzaju „[muzyka w tle]”. Dłuższy nawias to już zdanie
+# poboczne wypowiedzi, więc zostaje.
+MAKSYMALNA_LICZBA_SLOW_OZNACZENIA_DZWIEKU = 3
+
+# Znaki, których obecność w nawiasie świadczy o wypowiedzi, a nie o etykiecie
+# dźwięku. Dwukropka tu nie ma, bo bywa częścią wskazania mówiącego.
+_ZNAKI_ZDANIA_W_NAWIASIE = (".", "!", "?", "…")
 
 
 class Akapit:
@@ -151,26 +162,71 @@ def _znacznik_czasu(sekundy: float, z_godzinami: bool) -> str:
 def _oczysc_segment(tekst: str) -> str:
     """Usuwa z segmentu oznaczenia dźwięków, znaczniki i nadmiarowe białe znaki."""
     bez_znacznikow = _ZNACZNIKI_WEWNETRZNE.sub(" ", tekst)
-    bez_dzwiekow = _OZNACZENIA_DZWIEKOW.sub(" ", bez_znacznikow)
+    bez_dzwiekow = _usun_oznaczenia_dzwiekow(bez_znacznikow)
     bez_nut = _NUTY.sub(" ", bez_dzwiekow)
     return _BIALE_ZNAKI.sub(" ", bez_nut).strip()
+
+
+def _usun_oznaczenia_dzwiekow(tekst: str) -> str:
+    """Usuwa z segmentu wyłącznie nawiasy będące oznaczeniem dźwięku.
+
+    Wcześniej usuwana była zawartość każdego nawiasu, co kasowało treść
+    merytoryczną: zdanie „Wojna trwała (1939-1945) i objęła cały kontynent”
+    traciło daty. Nawias jest więc oceniany, a nie usuwany z góry, i przy
+    wątpliwości zostaje, bo utrata treści kosztuje więcej niż zostawiona
+    etykieta dźwięku.
+    """
+    caly_segment = tekst.strip()
+
+    def zamien(dopasowanie: re.Match[str]) -> str:
+        fragment = dopasowanie.group(0)
+        return " " if _czy_oznaczenie_dzwieku(fragment, caly_segment) else fragment
+
+    return _NAWIAS.sub(zamien, tekst)
+
+
+def _czy_oznaczenie_dzwieku(fragment: str, caly_segment: str) -> bool:
+    """Rozstrzyga, czy nawias jest etykietą dźwięku, czy częścią wypowiedzi.
+
+    Kryterium ma dwie ścieżki. Nawias obejmujący cały segment jest etykietą,
+    ponieważ segment napisów złożony wyłącznie z nawiasu nie jest wypowiedzią —
+    tak zapisuje się „[muzyka rockowa gra w tle]”. Nawias wewnątrz zdania jest
+    etykietą tylko wtedy, gdy jest krótki i nie zawiera znaku końca zdania.
+
+    Zawartość z cyfrą zostaje zawsze i ta reguła wyprzedza obie ścieżki. Daty,
+    zakresy lat, wyniki i numery w nawiasie nigdy nie są oznaczeniami dźwięków,
+    a to właśnie one były dotąd tracone.
+    """
+    wnetrze = fragment[1:-1].strip()
+    if _CYFRA.search(wnetrze):
+        return False
+    if fragment == caly_segment:
+        return True
+    if any(znak in wnetrze for znak in _ZNAKI_ZDANIA_W_NAWIASIE):
+        return False
+    return len(wnetrze.split()) <= MAKSYMALNA_LICZBA_SLOW_OZNACZENIA_DZWIEKU
 
 
 def _bez_powtorzenia(dotychczasowy: str, nowy: str) -> str:
     """Zwraca tę część nowego segmentu, której nie ma jeszcze w akapicie.
 
-    Napisy automatyczne powtarzają końcówkę poprzedniego segmentu, bo tekst
-    przewija się na ekranie. Bez tego kroku to samo zdanie trafiłoby do wyniku
-    kilka razy.
+    Usuwane jest wyłącznie rzeczywiste nakładanie się, czyli sytuacja, w której
+    koniec dotychczasowego akapitu jest dosłownie początkiem nowego segmentu.
+    Tak wygląda przewijanie tekstu na ekranie w napisach automatycznych i tylko
+    to zjawisko miało być tu obsłużone.
+
+    Wcześniej kasowany był każdy segment, którego tekst występował gdziekolwiek
+    w bieżącym akapicie, przez co sekwencja „Tak.”, zdanie, „Tak.” traciła drugie
+    „Tak.”. Porównanie idzie po słowach, a nie po znakach, więc końcówka
+    poprzedniego wyrazu nie może przypadkiem dopasować się do całego wyrazu.
     """
     if not dotychczasowy:
         return nowy
-    if nowy in dotychczasowy:
-        return ""
+    slowa_dotychczasowe = dotychczasowy.split()
     slowa_nowe = nowy.split()
-    for dlugosc in range(len(slowa_nowe), 0, -1):
-        poczatek = " ".join(slowa_nowe[:dlugosc])
-        if dotychczasowy.endswith(poczatek):
+    najdluzsze_nakladanie = min(len(slowa_dotychczasowe), len(slowa_nowe))
+    for dlugosc in range(najdluzsze_nakladanie, 0, -1):
+        if slowa_dotychczasowe[-dlugosc:] == slowa_nowe[:dlugosc]:
             return " ".join(slowa_nowe[dlugosc:])
     return nowy
 

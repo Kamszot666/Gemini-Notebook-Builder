@@ -8,11 +8,11 @@ czas pracy.
 
 Po liczbach raport wymienia z nazwy każde źródło pominięte oraz każde źródło
 zakończone błędem, razem z powodem. Na końcu wymienia materiały do sprawdzenia,
-czyli źródła zapisane poprawnie, ale o podejrzanym wyniku ekstrakcji. Takie
-źródło nie jest kasowane ani pomijane: jest w wynikach i czeka na obejrzenie
-przez człowieka. Sama liczba pominięć nie mówi użytkownikowi,
-czego zabrakło, a odszukiwanie tego w manifeście jest niewygodne przy odsłuchu
-czytnikiem ekranu.
+czyli źródła zapisane poprawnie, przy których wynik ekstrakcji wygląda
+podejrzanie albo ekstraktor zgłosił ostrzeżenie. Takie źródło nie jest kasowane
+ani pomijane: jest w wynikach i czeka na obejrzenie przez człowieka. Sama liczba
+pominięć nie mówi użytkownikowi, czego zabrakło, a odszukiwanie tego w manifeście
+jest niewygodne przy odsłuchu czytnikiem ekranu.
 
 Dopóki nie ma deduplikacji ani plików PDF, odpowiednie liczby są zerowe. Raport
 zawsze wypisuje wszystkie pozycje, żeby jego układ był przewidywalny.
@@ -25,9 +25,10 @@ from pathlib import Path
 
 NAGLOWEK_MATERIALOW_DO_SPRAWDZENIA = "Materiały do sprawdzenia"
 OPIS_MATERIALOW_DO_SPRAWDZENIA = (
-    "Te źródła zostały zapisane i są w plikach wynikowych. Wynik ich ekstrakcji "
-    "wygląda jednak podejrzanie, więc warto zajrzeć do pliku przed wgraniem go "
-    "do notatnika. Żadne z nich nie zostało usunięte."
+    "Te źródła zostały zapisane i są w plikach wynikowych. Przy każdym z nich coś "
+    "jednak wymaga obejrzenia: albo wynik ekstrakcji wygląda podejrzanie, albo "
+    "ekstraktor zgłosił ostrzeżenie. Warto zajrzeć do pliku przed wgraniem go do "
+    "notatnika. Żadne z nich nie zostało usunięte."
 )
 
 
@@ -43,11 +44,19 @@ class ZrodloNieprzetworzone:
 
 @dataclass(frozen=True, slots=True)
 class MaterialDoSprawdzenia:
-    """Źródło zapisane poprawnie, którego wynik ekstrakcji wygląda podejrzanie."""
+    """Źródło zapisane poprawnie, przy którym coś wymaga obejrzenia przez człowieka.
+
+    Dwie listy są rozdzielone celowo, bo mówią o różnych rzeczach. Pole `powody`
+    niesie wynik heurystycznej oceny jakości, czyli przypuszczenie. Pole
+    `ostrzezenia` niesie to, co ekstraktor stwierdził wprost, na przykład brak
+    warstwy tekstowej w pliku PDF. Zlanie ich w jedną listę kazałoby użytkownikowi
+    zgadywać, które zdanie jest faktem, a które podejrzeniem.
+    """
 
     identyfikator: str
     pochodzenie: str
-    powody: tuple[str, ...]
+    powody: tuple[str, ...] = ()
+    ostrzezenia: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,8 +150,12 @@ def _wiersze_materialow_do_sprawdzenia(
     for material in materialy:
         wiersze.append(f"Źródło: {material.pochodzenie}")
         wiersze.append(f"  Identyfikator: {material.identyfikator}")
-        wiersze.append("  Powody:")
-        wiersze.extend(f"    - {powod}" for powod in material.powody)
+        if material.ostrzezenia:
+            wiersze.append("  Ostrzeżenia ekstrakcji:")
+            wiersze.extend(f"    - {ostrzezenie}" for ostrzezenie in material.ostrzezenia)
+        if material.powody:
+            wiersze.append("  Powody podejrzenia:")
+            wiersze.extend(f"    - {powod}" for powod in material.powody)
         wiersze.append("")
     return wiersze[:-1]
 

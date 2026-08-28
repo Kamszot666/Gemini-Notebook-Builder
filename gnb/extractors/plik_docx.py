@@ -13,6 +13,14 @@ dwie osobne listy i traci przez to układ dokumentu. Kolejne akapity o tym samym
 stylu listy są sklejane w jeden blok listy, zgodnie z wewnętrznym formatem
 bloku ustalonym dla całego projektu.
 
+Plik uszkodzony albo niebędący dokumentem Worda kończy się błędem trwałym
+z czytelnym komunikatem, a nie surowym wyjątkiem biblioteki. Jedno uszkodzone
+źródło nie może zatrzymać całego projektu.
+
+Akapity i tabele opakowane w kontrolki zawartości, czyli w element `w:sdt`, są
+rozwijane. Ta konstrukcja jest powszechna w dokumentach powstałych z szablonów,
+a bez rozwinięcia jej zawartość przepadała w całości.
+
 Ekstraktor nie rozpoznaje bloków kodu, ponieważ DOCX nie ma dla nich
 standardowego stylu — zgadywanie po nazwie czcionki byłoby heurystyką bez
 pewności, a projekt nie zgaduje struktury tam, gdzie nie da się jej stwierdzić
@@ -23,19 +31,34 @@ from __future__ import annotations
 
 import io
 import re
+import zipfile
+from collections.abc import Iterator
+from typing import Any
 
 from docx import Document
 from docx.document import Document as DokumentDocx
+from docx.opc.exceptions import OpcError
 from docx.oxml.ns import qn
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 
 from gnb.core.model import BlokTresci, DokumentWyekstrahowany
 from gnb.core.stale import PoziomPewnosciStruktury, RodzajBloku, TypZrodla
+from gnb.core.wyjatki import BladTrwaly
 from gnb.extractors.bloki_markdown import zapisz_bloki_jako_markdown
 
 METODA_EKSTRAKCJI = "docx"
 FORMATY_DOCX = frozenset({"docx"})
+
+KOMUNIKAT_USZKODZONY = (
+    "Plik DOCX jest uszkodzony albo nie jest dokumentem programu Word: nie dało "
+    "się odczytać jego archiwum ani zawartości."
+)
+
+# Wyjątki, którymi biblioteka zgłasza plik nienadający się do odczytu. Błąd
+# klucza pojawia się dla poprawnego archiwum zip pozbawionego pliku
+# „[Content_Types].xml”, czyli dla archiwum, które nie jest dokumentem DOCX.
+_BLEDY_ODCZYTU_DOCX = (OpcError, zipfile.BadZipFile, KeyError, ValueError, OSError)
 
 _WZORZEC_NAGLOWKA = re.compile(r"^Heading (\d+)$")
 _FORMAT_DATY = "%Y-%m-%d"
@@ -52,7 +75,11 @@ class EkstraktorDocx:
 
     def wyekstrahuj(self, identyfikator_zrodla: str, bajty: bytes) -> DokumentWyekstrahowany:
         """Odczytuje dokument DOCX zachowując nagłówki, listy i tabele w kolejności."""
-        dokument_docx = Document(io.BytesIO(bajty))
+        try:
+            dokument_docx = Document(io.BytesIO(bajty))
+        except _BLEDY_ODCZYTU_DOCX as blad:
+            raise BladTrwaly(KOMUNIKAT_USZKODZONY, identyfikator_zrodla) from blad
+
         bloki = _bloki_z_dokumentu(dokument_docx)
         tytul = _tytul(dokument_docx, bloki)
         return DokumentWyekstrahowany(
@@ -81,7 +108,7 @@ def _bloki_z_dokumentu(dokument_docx: DokumentDocx) -> list[BlokTresci]:
             )
             elementy_listy.clear()
 
-    for element in dokument_docx.element.body.iterchildren():
+    for element in _elementy_tresci(dokument_docx.element.body):
         if element.tag == qn("w:p"):
             akapit = Paragraph(element, dokument_docx)
             tekst = akapit.text.strip()
@@ -118,6 +145,26 @@ def _bloki_z_dokumentu(dokument_docx: DokumentDocx) -> list[BlokTresci]:
                 )
     zamknij_liste()
     return bloki
+
+
+def _elementy_tresci(rodzic: Any) -> Iterator[Any]:
+    """Zwraca elementy treści dokumentu, rozwijając kontrolki zawartości.
+
+    Kontrolka zawartości, czyli element `w:sdt`, opakowuje akapity i tabele
+    w dokumentach powstałych z szablonów. Jest to konstrukcja powszechna, a jej
+    zawartość leży o dwa poziomy głębiej, w elemencie `w:sdtContent`. Bez tego
+    rozwinięcia akapity z szablonu przepadały w całości, bo pętla po treści
+    widziała tylko sam element kontrolki i pomijała go jako nieznany.
+
+    Kontrolki bywają zagnieżdżone jedna w drugiej, więc rozwijanie jest
+    rekurencyjne.
+    """
+    for element in rodzic.iterchildren():
+        if element.tag == qn("w:sdt"):
+            for zawartosc in element.iterchildren(qn("w:sdtContent")):
+                yield from _elementy_tresci(zawartosc)
+        else:
+            yield element
 
 
 def _wiersze_tabeli(tabela: Table) -> list[str]:

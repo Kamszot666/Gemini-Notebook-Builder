@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import io
+import zipfile
 from pathlib import Path
 
 import docx
+import pytest
+from docx.oxml.ns import qn
 
 from gnb.core.stale import PoziomPewnosciStruktury, RodzajBloku, TypZrodla
+from gnb.core.wyjatki import BladTrwaly
 from gnb.extractors.plik_docx import EkstraktorDocx
 
 KATALOG_DANYCH = Path(__file__).resolve().parents[1] / "dane"
@@ -105,3 +109,70 @@ def test_plik_testowy_ma_naglowki_akapity_i_liste() -> None:
     assert RodzajBloku.AKAPIT in rodzaje
     assert RodzajBloku.LISTA in rodzaje
     assert dokument.tytul == "Jak przygotować bazę wiedzy dla asystenta AI"
+
+
+def _archiwum_zip_bez_dokumentu() -> bytes:
+    """Buduje poprawne archiwum zip, które nie jest dokumentem DOCX."""
+    bufor = io.BytesIO()
+    with zipfile.ZipFile(bufor, "w") as archiwum:
+        archiwum.writestr("cokolwiek.txt", "to nie jest dokument")
+    return bufor.getvalue()
+
+
+def test_uszkodzony_plik_konczy_sie_bledem_trwalym() -> None:
+    """Plik, który nie jest archiwum zip, nie może wywrócić całego przebiegu.
+
+    Biblioteka zgłasza tu wyjątek spoza taksonomii projektu, więc potok go nie
+    łapał i poprawne źródła z tej samej partii nie były przetwarzane.
+    """
+    with pytest.raises(BladTrwaly, match="uszkodzony"):
+        EkstraktorDocx().wyekstrahuj("plik_dokument-20", b"to nie jest plik DOCX")
+
+
+def test_archiwum_bez_zawartosci_dokumentu_konczy_sie_bledem_trwalym() -> None:
+    """Poprawne archiwum zip bez pliku Content_Types też jest błędem trwałym."""
+    with pytest.raises(BladTrwaly, match="uszkodzony"):
+        EkstraktorDocx().wyekstrahuj("plik_dokument-21", _archiwum_zip_bez_dokumentu())
+
+
+def _docx_z_kontrolka_zawartosci() -> bytes:
+    """Buduje plik DOCX, w którym akapit jest opakowany w kontrolkę zawartości.
+
+    Kontrolka, czyli element w:sdt, powstaje tu przez przeniesienie gotowego
+    akapitu do struktury w:sdt i w:sdtContent, ponieważ biblioteka nie ma na to
+    własnego interfejsu. Tak wygląda dokument utworzony z szablonu.
+    """
+    dokument = docx.Document()
+    dokument.add_paragraph("Akapit zwykły.")
+    akapit_w_kontrolce = dokument.add_paragraph("Akapit w kontrolce zawartości.")
+    dokument.add_paragraph("Akapit końcowy.")
+
+    element_akapitu = akapit_w_kontrolce._p
+    cialo = element_akapitu.getparent()
+    kontrolka = cialo.makeelement(qn("w:sdt"), {})
+    zawartosc = cialo.makeelement(qn("w:sdtContent"), {})
+    cialo.replace(element_akapitu, kontrolka)
+    kontrolka.append(zawartosc)
+    zawartosc.append(element_akapitu)
+
+    bufor = io.BytesIO()
+    dokument.save(bufor)
+    return bufor.getvalue()
+
+
+def test_akapit_w_kontrolce_zawartosci_nie_ginie() -> None:
+    """Akapit opakowany w w:sdt trafia do wyniku, w swojej kolejności.
+
+    Kontrolki zawartości są powszechne w dokumentach z szablonów. Wcześniej ich
+    zawartość przepadała w całości, bo pętla po treści widziała tylko sam element
+    kontrolki i pomijała go jako nieznany.
+    """
+    dokument = EkstraktorDocx().wyekstrahuj("plik_dokument-22", _docx_z_kontrolka_zawartosci())
+
+    assert "Akapit w kontrolce zawartości." in dokument.tekst
+    assert dokument.tekst.index("Akapit zwykły.") < dokument.tekst.index(
+        "Akapit w kontrolce zawartości."
+    )
+    assert dokument.tekst.index("Akapit w kontrolce zawartości.") < dokument.tekst.index(
+        "Akapit końcowy."
+    )

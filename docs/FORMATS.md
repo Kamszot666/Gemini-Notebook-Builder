@@ -199,7 +199,11 @@ strukturalnych:
    dwupoziomową.
 2. Zawiera co najmniej dwie listy, z których przynajmniej jedna ma co najmniej
    trzy elementy.
-3. Zawiera co najmniej jedną tabelę.
+3. Zawiera co najmniej jedną tabelę, którą da się zapisać bez utraty znaczenia.
+   Tabela o wierszach różnej długości tego warunku nie spełnia: zapis Markdown ma
+   stałą liczbę kolumn wyznaczoną przez nagłówek, więc wiersz o innej liczbie
+   komórek albo straciłby nadmiarowe komórki, albo dostałby puste. Sama pionowa
+   kreska w treści komórki nie przeszkadza, bo przy zapisie jest escapowana.
 4. Zawiera blok kodu lub zapis techniczny, w którym formatowanie niesie
    znaczenie.
 
@@ -340,12 +344,28 @@ takiej linii jest pomijany w całości, co naturalnie usuwa nagłówek „WEBVTT
 oraz bloki komentarza `NOTE`, `STYLE` i `REGION` pliku VTT, bez osobnej obsługi
 każdego z nich.
 
+Pominięcie bloku, który nie jest ani nagłówkiem, ani komentarzem, jest już
+utratą treści, więc takie bloki są liczone. Ich liczba trafia do metadanych
+źródła jako `liczba_blokow_pominietych`, a niezerowa wartość daje ostrzeżenie
+widoczne w manifeście i w sekcji „Materiały do sprawdzenia” raportu końcowego.
+
 Segmenty są sklejane w akapity dokładnie tym samym mechanizmem co napisy
 pobrane z YouTube: fragmenty urwane w połowie zdania są łączone w zdania,
 a segmenty, które powtarzają końcówkę poprzedniego — co zdarza się w plikach
 eksportowanych z automatycznego rozpoznawania mowy — nie dublują tekstu
-w wyniku. Znaczniki wewnątrzwierszowe, na przykład wyróżnienia i wskazania
-mówiącego w pliku VTT, są usuwane.
+w wyniku. Powtórzeniem jest przy tym wyłącznie rzeczywiste nakładanie się, czyli
+sytuacja, w której koniec dotychczasowego akapitu jest dosłownie początkiem
+nowego segmentu. Zdanie powtórzone w innym miejscu wypowiedzi zostaje, bo jest
+treścią, a nie skutkiem przewijania tekstu na ekranie.
+
+Znaczniki wewnątrzwierszowe, na przykład wyróżnienia i wskazania mówiącego
+w pliku VTT, są usuwane. Usuwane są też oznaczenia dźwięków, ale wyłącznie te,
+które rzeczywiście nimi są. Zawartość nawiasu zawierająca cyfrę zostaje zawsze,
+bo daty, zakresy lat i numery nie są oznaczeniami dźwięków. Nawias obejmujący
+cały segment jest oznaczeniem, ponieważ segment złożony wyłącznie z nawiasu nie
+jest wypowiedzią. Nawias wewnątrz zdania jest oznaczeniem tylko wtedy, gdy ma
+najwyżej trzy słowa i nie zawiera znaku końca zdania. Przy wątpliwości nawias
+zostaje, bo utrata treści kosztuje więcej niż zostawiona etykieta dźwięku.
 
 Plik napisów, tak jak transkrypcja YouTube, nie ma struktury dokumentu i nie
 ma tytułu, więc nigdy nie powstaje dla niego wersja MD i nie podlega ocenie
@@ -355,8 +375,9 @@ jakości ekstrakcji.
 
 Ekstraktor czyta wyłącznie tekst już obecny w pliku PDF. Strona zeskanowana
 bez warstwy tekstowej, czyli sam obraz strony, daje pusty wynik i ostrzeżenie
-w manifeście — rozpoznawanie tekstu ze skanu, czyli OCR, jest zadaniem etapu
-ósmego. Plik zaszyfrowany albo zabezpieczony przed kopiowaniem kończy się
+zapisane w manifeście, w logu szczegółowym oraz w sekcji „Materiały do
+sprawdzenia” raportu końcowego — rozpoznawanie tekstu ze skanu, czyli OCR, jest
+zadaniem etapu ósmego. Plik zaszyfrowany albo zabezpieczony przed kopiowaniem kończy się
 błędem trwałym z czytelnym komunikatem: taki plik nie zaimportuje się także
 wprost do notatnika, niezależnie od planu. Plik uszkodzony albo o nieprawidłowej
 strukturze kończy się tym samym rodzajem błędu, a nie awarią programu.
@@ -387,9 +408,18 @@ listy są sklejane w jeden blok listy. Tytuł pochodzi z właściwości pliku, a
 jej brak, z pierwszego rozpoznanego nagłówka. Autor oraz daty utworzenia
 i modyfikacji, jeżeli są w pliku, trafiają do metadanych źródła.
 
+Akapity i tabele opakowane w kontrolki zawartości, czyli w element `w:sdt`, są
+rozwijane i czytane normalnie. Ta konstrukcja jest powszechna w dokumentach
+utworzonych z szablonów, a bez rozwinięcia jej zawartość nie trafiłaby do wyniku
+wcale.
+
 Ekstraktor nie rozpoznaje bloków kodu, ponieważ DOCX nie ma dla nich
 standardowego stylu, a zgadywanie po nazwie czcionki byłoby heurystyką bez
 pewności.
+
+Plik uszkodzony albo niebędący dokumentem programu Word kończy się błędem
+trwałym z czytelnym komunikatem, a nie awarią programu. Jedno uszkodzone źródło
+nie zatrzymuje pozostałych źródeł tej samej partii.
 
 ### EPUB
 
@@ -404,6 +434,23 @@ wprost ze znaczników XHTML, z wejściem rekurencyjnym w kontenery `div`,
 `section` i `article`, żeby treść owinięta w takie elementy, typowa dla plików
 EPUB generowanych automatycznie, nie zginęła. Tytuł i autor pochodzą
 z metadanych Dublin Core pliku, obecnych w każdym poprawnym pliku EPUB.
+
+Treść, dla której nie ma osobnej gałęzi, też nie ginie. Tekst leżący
+bezpośrednio w kontenerze, bez otaczającego akapitu, staje się akapitem.
+Znacznik spoza listy obsługiwanych — na przykład `figcaption`, `dl`, `dt`, `dd`,
+`aside` albo `figure` — jest przechodzony rekurencyjnie, gdy zawiera w środku
+znany blok, a w przeciwnym razie daje jeden akapit z całą swoją treścią.
+Nagłówek dokumentu XHTML, czyli `head` razem z tytułem pliku, stylami
+i skryptami, jest pomijany, bo nie jest treścią książki.
+
+Komórki wiersza tabeli są zbierane w kolejności ich wystąpienia w dokumencie,
+niezależnie od tego, czy są komórką nagłówkową `th`, czy zwykłą `td`. Wiersz
+zawierający oba rodzaje zachowuje więc kolejność kolumn.
+
+Rozdział, którego nie da się sparsować, jest pomijany, ale zgłasza ostrzeżenie
+z nazwą pliku rozdziału, więc nie znika po cichu. Pozostałe rozdziały są
+odczytywane normalnie. Plik uszkodzony albo niebędący książką EPUB kończy się
+błędem trwałym z czytelnym komunikatem, a nie awarią programu.
 
 ### Poziom pewności struktury plików dokumentowych
 
@@ -547,6 +594,29 @@ wymienia takie źródła w sekcji „Materiały do sprawdzenia”.
 
 Progi są celowo zachowawcze. Fałszywe podejrzenie kosztuje jedno zajrzenie do
 pliku, a przeoczona utrata treści kosztuje wiarygodność całej bazy wiedzy.
+
+## Ostrzeżenia ekstraktorów
+
+Ocena jakości jest heurystyką, czyli przypuszczeniem. Obok niej działa drugi,
+niezależny mechanizm: ostrzeżenie zgłoszone wprost przez ekstraktor. Ostrzeżenie
+nie jest przypuszczeniem, tylko stwierdzeniem — na przykład że plik PDF nie ma
+warstwy tekstowej, że plik CSV nie zawiera żadnego wiersza z danymi, że rozdziału
+EPUB nie dało się sparsować albo że w pliku napisów pominięto bloki bez znacznika
+czasu.
+
+Ostrzeżenie przechodzi tę samą drogę co pominięcie. Trafia jednocześnie do
+checkpointu, do manifestu w obu postaciach, do logu szczegółowego, do logu
+ważnego oraz do sekcji „Materiały do sprawdzenia” raportu końcowego. Wykaz
+w raporcie rozdziela ostrzeżenia ekstrakcji od powodów podejrzenia, żeby nie
+trzeba było zgadywać, które zdanie jest faktem, a które heurystyką.
+
+Osobnym ostrzeżeniem, zgłaszanym przez potok, a nie przez ekstraktor, jest plik
+wynikowy zawierający wyłącznie nagłówek metadanych, bez treści źródła. To
+wykrycie działa dla każdego formatu, także dla CSV oraz napisów SRT i VTT, które
+świadomie nie podlegają ocenie jakości.
+
+Ostrzeżenie nie zmienia statusu źródła. Źródło jest zapisywane normalnie i nie
+jest kasowane.
 
 ## Dwie miary liczby znaków
 

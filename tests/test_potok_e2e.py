@@ -403,3 +403,46 @@ def test_zrodla_bez_ekstrakcji_nie_dostaja_oceny_jakosci(tmp_path: Path) -> None
     assert all(zrodlo["ocena_jakosci"] is None for zrodlo in manifest["zrodla"])
     assert all(zrodlo["powody_oceny"] == [] for zrodlo in manifest["zrodla"])
     assert "Materiały do sprawdzenia" not in wynik.sciezka_raportu.read_text(encoding="utf-8")
+
+
+def test_wznowienie_ze_starszego_checkpointu_dziala(tmp_path: Path) -> None:
+    """Katalog projektu założony poprzednią wersją aplikacji nadal daje się wznowić.
+
+    Checkpoint jest tu celowo cofnięty do postaci wersji schematu 3: numer wersji
+    wraca do trzech, a pole opisujące liczbę znaków pliku wynikowego odzyskuje
+    starą nazwę. Bez migracji odczyt kończył się surowym ``KeyError``, więc każdy
+    starszy katalog projektu wywracał program zamiast się wznowić.
+    """
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path)
+    pierwsze = przetworz_projekt(
+        _pozycje(),
+        konfiguracja,
+        nazwa_projektu="Test starszego checkpointu",
+        zegar=_zegar_krokowy(),
+    )
+    sciezka_checkpointu = pierwsze.katalog_projektu / "checkpoint.json"
+    dane = json.loads(sciezka_checkpointu.read_text(encoding="utf-8"))
+    dane["wersja_schematu"] = 3
+    for stan in dane["zrodla"].values():
+        stan.pop("ocena_jakosci", None)
+        stan.pop("powody_oceny", None)
+        stan.pop("ostrzezenia", None)
+        for wynik in stan["wyniki"]:
+            wynik["liczba_znakow"] = wynik.pop("liczba_znakow_pliku")
+    sciezka_checkpointu.write_text(json.dumps(dane, ensure_ascii=False), encoding="utf-8")
+    sciezka_checkpointu.with_suffix(".json.bak").write_text(
+        json.dumps(dane, ensure_ascii=False), encoding="utf-8"
+    )
+
+    drugie = przetworz_projekt(
+        _pozycje(),
+        konfiguracja,
+        nazwa_projektu="Test starszego checkpointu",
+        zegar=_zegar_krokowy(),
+    )
+
+    assert drugie.wznowiono is True
+    assert drugie.liczba_przetworzonych == pierwsze.liczba_przetworzonych
+    manifest = json.loads(drugie.sciezka_manifestu.read_text(encoding="utf-8"))
+    assert len(manifest["zrodla"]) == 4
+    assert all(wynik["liczba_znakow_pliku"] > 0 for wynik in manifest["wyniki"])

@@ -8,6 +8,10 @@ zaczyna się nagłówkiem „WEBVTT” i może zawierać bloki komentarza NOTE, 
 i REGION. Blok bez linii ze znacznikiem czasu jest pomijany w całości, co
 naturalnie usuwa nagłówek i te bloki bez osobnej obsługi każdego z nich.
 
+Pominięcie bloku, który nie jest ani nagłówkiem, ani komentarzem, jest jednak
+utratą treści, więc takie bloki są liczone i zgłaszane jako ostrzeżenie. Sama
+liczba przyjętych segmentów nie mówiła nic o tym, ile bloków odrzucono.
+
 Segmenty napisów są sklejane w akapity tym samym mechanizmem co napisy pobrane
 z YouTube, opisanym w `gnb.extractors.napisy_wspolne`: fragmenty urwane
 w połowie zdania są łączone w zdania, a napisy generowane automatycznie, które
@@ -36,8 +40,18 @@ FORMATY_NAPISOW = frozenset({"srt", "vtt"})
 
 KOMUNIKAT_BRAK_TRESCI = (
     "Plik napisów nie zawiera żadnego tekstu, tylko znaczniki czasu albo puste "
-    "wiersze, więc nie ma z czego zbudować dokumentu. Źródło zostało pominięte."
+    "wiersze, więc nie ma z czego zbudować dokumentu."
 )
+KOMUNIKAT_POMINIETE_BLOKI = (
+    "W pliku napisów pominięto {liczba} bloków, ponieważ nie zawierały linii ze "
+    "znacznikiem czasu albo nie miały treści pod nią. Ich zawartość nie znalazła "
+    "się w wyniku."
+)
+
+# Bloki, które w plikach VTT z założenia nie są napisem: nagłówek pliku oraz
+# bloki komentarza, stylu i regionu. Ich pominięcie jest poprawne, więc nie są
+# liczone jako utrata treści i nie powodują ostrzeżenia.
+_POCZATKI_BLOKOW_NIENAPISOWYCH = ("WEBVTT", "NOTE", "STYLE", "REGION")
 
 _WZORZEC_LINII_CZASU = re.compile(
     r"^\s*(?P<start>(?:\d+:)?\d{2}:\d{2}[.,]\d{3})\s*-->\s*"
@@ -56,33 +70,52 @@ class EkstraktorNapisow:
 
     def wyekstrahuj(self, identyfikator_zrodla: str, tekst: str) -> DokumentWyekstrahowany:
         """Parsuje plik napisów i skleja segmenty w czytelne akapity."""
-        segmenty = _segmenty_z_pliku(tekst)
+        segmenty, liczba_pominietych = _segmenty_z_pliku(tekst)
         tresc = zapisz_akapity(zbuduj_akapity(segmenty))
+
+        ostrzezenia: list[str] = []
         if not tresc:
-            return DokumentWyekstrahowany(
-                identyfikator_zrodla=identyfikator_zrodla,
-                tekst="",
-                poziom_pewnosci_struktury=PoziomPewnosciStruktury.NISKI,
-                metoda_ekstrakcji=METODA_EKSTRAKCJI,
-                ostrzezenia=[KOMUNIKAT_BRAK_TRESCI],
-            )
+            ostrzezenia.append(KOMUNIKAT_BRAK_TRESCI)
+        if liczba_pominietych:
+            ostrzezenia.append(KOMUNIKAT_POMINIETE_BLOKI.format(liczba=liczba_pominietych))
+
         return DokumentWyekstrahowany(
             identyfikator_zrodla=identyfikator_zrodla,
             tekst=tresc,
             poziom_pewnosci_struktury=PoziomPewnosciStruktury.NISKI,
             metoda_ekstrakcji=METODA_EKSTRAKCJI,
-            metadane={"liczba_segmentow": str(len(segmenty))},
+            metadane={
+                "liczba_segmentow": str(len(segmenty)),
+                "liczba_blokow_pominietych": str(liczba_pominietych),
+            },
+            ostrzezenia=ostrzezenia,
         )
 
 
-def _segmenty_z_pliku(tekst: str) -> list[SegmentNapisow]:
-    """Wyodrębnia segmenty napisów z pliku SRT albo VTT."""
+def _segmenty_z_pliku(tekst: str) -> tuple[list[SegmentNapisow], int]:
+    """Wyodrębnia segmenty napisów oraz liczy bloki, których nie dało się odczytać.
+
+    Blok bez linii ze znacznikiem czasu albo bez treści pod nią jest pomijany.
+    Wcześniej znikał w ciszy, a licznik segmentów liczył wyłącznie te przyjęte,
+    więc z manifestu nie dało się wyczytać, ile treści nie weszło do wyniku.
+    Nagłówek pliku VTT oraz bloki komentarza, stylu i regionu nie są liczone,
+    bo ich pominięcie jest zamierzone.
+    """
     segmenty: list[SegmentNapisow] = []
+    liczba_pominietych = 0
     for blok in _bloki(tekst):
         segment = _segment_z_bloku(blok)
         if segment is not None:
             segmenty.append(segment)
-    return segmenty
+        elif not _czy_blok_nienapisowy(blok):
+            liczba_pominietych += 1
+    return segmenty, liczba_pominietych
+
+
+def _czy_blok_nienapisowy(wiersze: list[str]) -> bool:
+    """Prawda dla bloku, który z założenia formatu nie jest napisem."""
+    pierwszy = wiersze[0].strip().upper() if wiersze else ""
+    return pierwszy.startswith(_POCZATKI_BLOKOW_NIENAPISOWYCH)
 
 
 def _bloki(tekst: str) -> list[list[str]]:

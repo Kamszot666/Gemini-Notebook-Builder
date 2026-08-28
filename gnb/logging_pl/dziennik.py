@@ -43,6 +43,7 @@ ZDARZENIE_PROJEKT_ZAKONCZONY = "Projekt zakończony"
 ZDARZENIE_NAPISY_WYBRANE = "Napisy wybrane"
 ZDARZENIE_NAPISY_INNY_JEZYK = "Uwaga, napisy w innym języku niż preferowane"
 ZDARZENIE_JAKOSC_PODEJRZANA = "Uwaga, podejrzany wynik ekstrakcji"
+ZDARZENIE_OSTRZEZENIE_EKSTRAKCJI = "Uwaga, ostrzeżenie ekstraktora"
 
 _FORMAT_LOGU_SZCZEGOLOWEGO = (
     "%(asctime)s|%(levelname)s|%(name)s|%(identyfikator_zrodla)s|%(message)s"

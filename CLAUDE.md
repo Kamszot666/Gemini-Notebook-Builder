@@ -410,7 +410,7 @@ Realizuj etapami. Nie zaczynaj kolejnego, zanim poprzedni nie ma testów i nie d
 2. Etap pierwszy: pipeline dla tekstu i plików TXT oraz MD, normalizacja, liczenie słów, zapis wyniku, manifest, checkpoint, logi. To jest najmniejsza działająca całość.
 3. Etap drugi: URL i strony WWW, walidacja list URL, cache, retry i backoff, obsługa błędów.
 4. Etap trzeci: YouTube i napisy.
-5. Etap czwarty A: metadane artykułu z danych strukturalnych JSON-LD oraz walidacja jakości ekstrakcji. Zakres opisuje sekcja osiemnasta c.
+5. Etap czwarty A: metadane strukturalne z danych JSON-LD, ocena jakości ekstrakcji, nagłówek metadanych w plikach wynikowych. Ukończony, scalony pull requestami 10 i 11.
 6. Etap czwarty: dokumenty, czyli PDF tekstowy, DOCX, HTML, EPUB, CSV, SRT i VTT.
 7. Etap piąty: deduplikacja wielopoziomowa wraz z audytem.
 8. Etap szósty: pakowanie, grupowanie tematyczne, podział według trzech limitów.

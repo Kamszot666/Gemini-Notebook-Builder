@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from gnb.output.manifest import (
@@ -82,3 +83,28 @@ def test_manifest_txt_jest_czytelny_liniowo_bez_tabel(tmp_path: Path) -> None:
     assert "Komunikat błędu: Plik nie istnieje." in tekst
     assert "|" not in tekst
     assert "---" not in tekst
+
+
+def test_manifest_zapisuje_ocene_jakosci_wraz_z_powodami(tmp_path: Path) -> None:
+    manifest = replace(
+        _MANIFEST,
+        zrodla=(
+            replace(
+                _MANIFEST.zrodla[0],
+                ocena_jakosci="podejrzana",
+                powody_oceny=("źródło nie ma tytułu",),
+            ),
+            _MANIFEST.zrodla[1],
+        ),
+    )
+
+    zapisz_manifest(tmp_path / "manifest.json", tmp_path / "manifest.txt", manifest)
+
+    dane = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert dane["zrodla"][0]["ocena_jakosci"] == "podejrzana"
+    assert dane["zrodla"][0]["powody_oceny"] == ["źródło nie ma tytułu"]
+    assert dane["zrodla"][1]["ocena_jakosci"] is None
+
+    tekst = (tmp_path / "manifest.txt").read_text(encoding="utf-8")
+    assert "Ocena jakości ekstrakcji: podejrzana" in tekst
+    assert "    - źródło nie ma tytułu" in tekst

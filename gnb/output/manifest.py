@@ -48,6 +48,8 @@ class WpisZrodla:
     komunikat_bledu: str | None
     pobranie: WpisPobrania | None = None
     metadane: dict[str, str] = field(default_factory=dict)
+    ocena_jakosci: str | None = None
+    powody_oceny: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +111,8 @@ def _do_slownika(manifest: Manifest) -> dict[str, Any]:
                 "komunikat_bledu": wpis.komunikat_bledu,
                 "pobranie": _pobranie_do_slownika(wpis.pobranie),
                 "metadane": dict(wpis.metadane),
+                "ocena_jakosci": wpis.ocena_jakosci,
+                "powody_oceny": list(wpis.powody_oceny),
             }
             for wpis in manifest.zrodla
         ],
@@ -174,6 +178,11 @@ def zbuduj_widok_tekstowy(manifest: Manifest) -> str:
             wiersze.extend(
                 f"    {nazwa}: {wartosc}" for nazwa, wartosc in sorted(wpis_zrodla.metadane.items())
             )
+        if wpis_zrodla.ocena_jakosci:
+            wiersze.append(f"  Ocena jakości ekstrakcji: {wpis_zrodla.ocena_jakosci}")
+        if wpis_zrodla.powody_oceny:
+            wiersze.append("  Powody oceny:")
+            wiersze.extend(f"    - {powod}" for powod in wpis_zrodla.powody_oceny)
         if wpis_zrodla.komunikat_bledu:
             wiersze.append(f"  Komunikat błędu: {wpis_zrodla.komunikat_bledu}")
         wiersze.append("")

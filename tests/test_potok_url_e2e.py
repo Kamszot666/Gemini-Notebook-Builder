@@ -442,3 +442,61 @@ def test_zastosowanie_wyjatku_robots_trafia_do_logu_szczegolowego(tmp_path: Path
     log = (wynik.katalog_projektu / "logi" / "log_szczegolowy.txt").read_text(encoding="utf-8")
     assert "Pominięto kontrolę robots.txt" in log
     assert _ADRES_ARTYKULU in log
+
+
+def test_nazwa_projektu_powstaje_z_hosta_bez_przedrostka_www(tmp_path: Path) -> None:
+    serwer = _Serwer()
+    wynik = przetworz_projekt(
+        _pozycje("https://www.przyklad.pl/artykul"),
+        _konfiguracja(tmp_path),
+        zegar=_zegar_krokowy(),
+        transport_http=serwer.transport(),
+    )
+
+    assert wynik.nazwa_projektu.startswith("przyklad_pl_")
+    assert "www" not in wynik.nazwa_projektu
+    assert "https" not in wynik.nazwa_projektu
+    assert "__" not in wynik.nazwa_projektu
+
+
+def test_adres_bez_przedrostka_www_daje_te_sama_postac_nazwy(tmp_path: Path) -> None:
+    serwer = _Serwer()
+    wynik = przetworz_projekt(
+        _pozycje("https://przyklad.pl/artykul"),
+        _konfiguracja(tmp_path),
+        zegar=_zegar_krokowy(),
+        transport_http=serwer.transport(),
+    )
+
+    assert wynik.nazwa_projektu.startswith("przyklad_pl_")
+
+
+def test_dwa_artykuly_z_tego_samego_hosta_daja_rozne_nazwy_projektow(tmp_path: Path) -> None:
+    nazwy = set()
+    for numer, adres in enumerate(
+        ("https://przyklad.pl/artykul/pierwszy", "https://przyklad.pl/artykul/drugi")
+    ):
+        serwer = _Serwer()
+        wynik = przetworz_projekt(
+            _pozycje(adres),
+            _konfiguracja(tmp_path / f"projekt{numer}"),
+            zegar=_zegar_krokowy(),
+            transport_http=serwer.transport(),
+        )
+        nazwy.add(wynik.nazwa_projektu)
+
+    assert len(nazwy) == 2
+    assert all(nazwa.startswith("przyklad_pl_") for nazwa in nazwy)
+
+
+def test_nazwa_podana_wprost_ma_pierwszenstwo(tmp_path: Path) -> None:
+    serwer = _Serwer()
+    wynik = przetworz_projekt(
+        _pozycje(_ADRES_ARTYKULU),
+        _konfiguracja(tmp_path),
+        nazwa_projektu="Moja własna nazwa",
+        zegar=_zegar_krokowy(),
+        transport_http=serwer.transport(),
+    )
+
+    assert wynik.nazwa_projektu == "Moja własna nazwa"

@@ -119,7 +119,7 @@ def nazwa_pliku_wynikowego(tytul: str | None, identyfikator_zrodla: str) -> str:
         _trzon_z_tytulu(tytul or ""),
         nazwa_awaryjna=_czlon_typu_z_identyfikatora(identyfikator_zrodla),
     )
-    skrot = _skrot_z_identyfikatora(identyfikator_zrodla)
+    skrot = skrot_z_identyfikatora(identyfikator_zrodla)
     nazwa = f"{trzon}{ROZDZIELACZ_SKROTU_W_NAZWIE_PLIKU}{skrot}"
     return _WIELE_PODKRESLEN.sub("_", nazwa).strip("_")
 
@@ -150,8 +150,12 @@ def _czlon_typu_z_identyfikatora(identyfikator_zrodla: str) -> str:
     return czlon if czlon else _NAZWA_AWARYJNA_ZRODLA
 
 
-def _skrot_z_identyfikatora(identyfikator_zrodla: str) -> str:
-    """Zwraca początek skrótu z identyfikatora źródła, czyli człon po ostatnim myślniku."""
+def skrot_z_identyfikatora(identyfikator_zrodla: str) -> str:
+    """Zwraca początek skrótu z identyfikatora źródła, czyli człon po ostatnim myślniku.
+
+    Funkcja jest publiczna, ponieważ tego samego skrótu używa nazwa katalogu
+    projektu budowana z adresu źródła.
+    """
     czlon = identyfikator_zrodla.rsplit("-", 1)[-1].strip()
     skrot = (czlon if czlon else identyfikator_zrodla.strip())[:DLUGOSC_SKROTU_W_NAZWIE_PLIKU]
     return skrot if skrot else _NAZWA_AWARYJNA_ZRODLA

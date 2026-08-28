@@ -458,3 +458,41 @@ def test_napisy_w_preferowanym_jezyku_nie_daja_ostrzezenia(tmp_path: Path) -> No
     )
     (zrodlo,) = manifest["zrodla"]
     assert "jezyk_awaryjny" not in zrodlo["metadane"]
+
+
+def test_nazwa_projektu_dla_filmu_zawiera_identyfikator_filmu(tmp_path: Path) -> None:
+    pobieracz, _ = _pobieracz()
+    wynik = przetworz_projekt(
+        _pozycje(_ADRES),
+        _konfiguracja(tmp_path),
+        zegar=_zegar_krokowy(),
+        transport_http=_transport_bez_regul(),
+        pobieracz_youtube=pobieracz,
+    )
+
+    assert wynik.nazwa_projektu == "youtube_ig9ce55wbty"
+
+
+def test_skrocona_postac_adresu_daje_te_sama_nazwe_projektu(tmp_path: Path) -> None:
+    pobieracz, _ = _pobieracz()
+    wynik = przetworz_projekt(
+        _pozycje(_ADRES_SKROCONY),
+        _konfiguracja(tmp_path),
+        zegar=_zegar_krokowy(),
+        transport_http=_transport_bez_regul(),
+        pobieracz_youtube=pobieracz,
+    )
+
+    assert wynik.nazwa_projektu == "youtube_ig9ce55wbty"
+
+
+def test_playlista_daje_nazwe_z_hosta_bo_nie_ma_identyfikatora_filmu(tmp_path: Path) -> None:
+    wynik = przetworz_projekt(
+        _pozycje(_ADRES_PLAYLISTY),
+        _konfiguracja(tmp_path),
+        zegar=_zegar_krokowy(),
+        transport_http=_transport_bez_regul(),
+        pobieracz_youtube=_pobieracz()[0],
+    )
+
+    assert wynik.nazwa_projektu.startswith("youtube_com_")

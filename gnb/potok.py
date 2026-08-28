@@ -28,13 +28,18 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import httpx
 
 from gnb.core.identyfikatory import suma_kontrolna_bajtow
 from gnb.core.konfiguracja import Konfiguracja
 from gnb.core.model import DokumentWyekstrahowany, Zrodlo
-from gnb.core.nazwy import nazwa_pliku_wynikowego, wygeneruj_nazwe_projektu
+from gnb.core.nazwy import (
+    nazwa_pliku_wynikowego,
+    skrot_z_identyfikatora,
+    wygeneruj_nazwe_projektu,
+)
 from gnb.core.stale import StatusZrodla, TypWejscia, TypZrodla
 from gnb.core.wyjatki import BladGnb, BladTrwaly, PrzekroczonoLimit
 from gnb.core.youtube import rozpoznaj
@@ -945,12 +950,45 @@ def _zdekoduj_odpowiedz(odpowiedz: OdpowiedzPobrania) -> tuple[str, str]:
 
 
 def _wygeneruj_nazwe_projektu(pozycje: Sequence[PozycjaWejsciowa]) -> str:
+    """Buduje nazwę projektu z pierwszego wejścia, gdy użytkownik jej nie podał.
+
+    Nazwa podana opcją `--projekt` ma zawsze pierwszeństwo i ta funkcja w ogóle
+    wtedy nie jest wywoływana.
+    """
     if not pozycje:
         return wygeneruj_nazwe_projektu("")
     pierwsza = pozycje[0]
     if pierwsza.wejscie.typ_wejscia is TypWejscia.PLIK:
         return wygeneruj_nazwe_projektu(Path(pierwsza.wejscie.wartosc).stem)
+    if pierwsza.wejscie.typ_wejscia is TypWejscia.URL:
+        return wygeneruj_nazwe_projektu(_podstawa_nazwy_z_adresu(pierwsza))
     return wygeneruj_nazwe_projektu(pierwsza.wejscie.wartosc[:_MAKSYMALNA_PODSTAWA_NAZWY])
+
+
+def _podstawa_nazwy_z_adresu(pozycja: PozycjaWejsciowa) -> str:
+    """Buduje krótką podstawę nazwy projektu z adresu źródła.
+
+    Cały adres w nazwie katalogu jest nieczytelny przy odsłuchu: czytnik ekranu
+    odczytuje go w całości, razem z każdym podkreśleniem, przy każdym przejściu
+    przez katalog Dokumenty. Dlatego film daje nazwę złożoną z członu „youtube”
+    i identyfikatora filmu, a strona nazwę hosta bez przedrostka „www” wraz
+    z początkiem sumy kontrolnej źródła, który rozróżnia dwa artykuły z tego
+    samego serwisu.
+
+    Właściwa nazwa, budowana z tytułu źródła, wymagałaby znajomości tytułu przed
+    utworzeniem katalogu. Powody, dla których na razie tego nie robimy, opisuje
+    sekcja osiemnasta e CLAUDE.md.
+    """
+    kanoniczny = pozycja.adres_kanoniczny or pozycja.wejscie.wartosc
+
+    if pozycja.format_zrodla == FORMAT_YOUTUBE:
+        rozpoznanie = rozpoznaj(pozycja.wejscie.wartosc)
+        if rozpoznanie.identyfikator_filmu is not None:
+            return f"youtube {rozpoznanie.identyfikator_filmu}"
+
+    host = (urlsplit(kanoniczny).hostname or "").removeprefix("www.")
+    identyfikator = identyfikator_adresu(typ_zrodla_dla_formatu(pozycja.format_zrodla), kanoniczny)
+    return f"{host} {skrot_z_identyfikatora(identyfikator)}"
 
 
 def _nowy_checkpoint(

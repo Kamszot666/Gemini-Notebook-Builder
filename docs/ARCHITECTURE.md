@@ -116,7 +116,9 @@ pliku wynikowego.
 
 ## Pakiet gnb.persistence
 
-- `gnb/persistence/projekt.py` — układ katalogów projektu: materiały źródłowe,
+- `gnb/persistence/projekt.py` — układ katalogów projektu, z nazwą katalogu
+  wyznaczaną z nazwy podanej przez użytkownika, a w jej braku z pierwszego źródła:
+  materiały źródłowe,
   wyniki pośrednie, pliki wynikowe, logi, manifest, checkpoint.
 - `gnb/persistence/cache.py` — wspólna dla projektów pamięć podręczna pobranych
   zasobów, oparta na SQLite, z trybem WAL i numerem wersji schematu.

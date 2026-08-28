@@ -92,6 +92,7 @@ from gnb.logging_pl.dziennik import (
     ZDARZENIE_MANIFEST_ZAPISANY,
     ZDARZENIE_NAPISY_INNY_JEZYK,
     ZDARZENIE_NAPISY_WYBRANE,
+    ZDARZENIE_OSTRZEZENIE_EKSTRAKCJI,
     ZDARZENIE_PLIK_WYNIKOWY_ZAPISANY,
     ZDARZENIE_PROJEKT_UTWORZONY,
     ZDARZENIE_PROJEKT_WZNOWIONY,
@@ -183,6 +184,11 @@ WynikFazyPobrania = OdpowiedzPobrania | PominietePobranie | BladGnb
 
 # Wynik fazy pobrania dla jednego filmu: napisy, świadome pominięcie albo błąd.
 WynikFazyFilmu = WynikYouTube | PominietyFilm | BladGnb
+
+KOMUNIKAT_PLIK_BEZ_TRESCI = (
+    "Plik wynikowy zawiera wyłącznie nagłówek metadanych, bez treści źródła. "
+    "Ekstrakcja niczego nie odczytała, więc ten plik nie wniesie nic do notatnika."
+)
 
 _TYP_ZAWARTOSCI_NAPISOW = "application/json"
 _MAKSYMALNA_PODSTAWA_NAZWY = 120
@@ -615,6 +621,7 @@ class _Wykonanie:
             )
 
         ocena = self._ocen_jakosc(zrodlo, pozycja, dokument, znormalizowany.tekst, przygotowane)
+        ostrzezenia = self._zbierz_ostrzezenia(zrodlo, dokument, znormalizowany.tekst)
 
         decyzja = regula_md.ocen(dokument)
         nazwa_bazowa = nazwa_pliku_wynikowego(dokument.tytul, identyfikator)
@@ -657,6 +664,7 @@ class _Wykonanie:
             metadane=dict(przygotowane.metadane),
             ocena_jakosci=ocena.ocena if ocena is not None else None,
             powody_oceny=list(ocena.powody) if ocena is not None else [],
+            ostrzezenia=ostrzezenia,
         )
         self._zapisz_checkpoint()
         self._dziennik_wazny.zapisz(ZDARZENIE_ZRODLO_PRZYJETE)
@@ -668,6 +676,31 @@ class _Wykonanie:
             f"Zapisano {len(pliki)} plików wynikowych, wersja MD: "
             f"{'tak' if decyzja.generuj_md else 'nie'}.",
         )
+
+    def _zbierz_ostrzezenia(
+        self, zrodlo: Zrodlo, dokument: DokumentWyekstrahowany, tekst_znormalizowany: str
+    ) -> list[str]:
+        """Zbiera ostrzeżenia dotyczące źródła i odnotowuje je w obu logach.
+
+        Do ostrzeżeń zgłoszonych przez ekstraktor dochodzi ostrzeżenie potoku
+        o pliku wynikowym bez treści. Tamto wykrycie musi być tutaj, a nie
+        w ocenie jakości, ponieważ ocena celowo pomija CSV oraz napisy SRT i VTT,
+        a to właśnie pusty plik CSV i pusty plik napisów przechodziły dotąd jako
+        źródła poprawne.
+
+        Ostrzeżenie nie zmienia statusu źródła. Źródło jest zapisywane normalnie,
+        a ostrzeżenie trafia do checkpointu, a stąd do manifestu i do raportu.
+        """
+        ostrzezenia = list(dokument.ostrzezenia)
+        if not tekst_znormalizowany.strip():
+            ostrzezenia.append(KOMUNIKAT_PLIK_BEZ_TRESCI)
+        if not ostrzezenia:
+            return []
+
+        self._dziennik_wazny.zapisz(f"{ZDARZENIE_OSTRZEZENIE_EKSTRAKCJI}: {zrodlo.pochodzenie}")
+        for ostrzezenie in ostrzezenia:
+            self._loguj(logging.WARNING, zrodlo.identyfikator_zrodla, f"Ostrzeżenie: {ostrzezenie}")
+        return ostrzezenia
 
     def _ocen_jakosc(
         self,
@@ -1265,6 +1298,7 @@ def _zbuduj_manifest(uklad: UkladProjektu, checkpoint: Checkpoint) -> Manifest:
                 metadane=dict(stan.metadane),
                 ocena_jakosci=stan.ocena_jakosci,
                 powody_oceny=tuple(stan.powody_oceny),
+                ostrzezenia=tuple(stan.ostrzezenia),
             )
         )
         for wynik in stan.wyniki:
@@ -1355,15 +1389,21 @@ def _zrodla_nieprzetworzone(checkpoint: Checkpoint) -> tuple[ZrodloNieprzetworzo
 
 
 def _materialy_do_sprawdzenia(checkpoint: Checkpoint) -> tuple[MaterialDoSprawdzenia, ...]:
-    """Zbiera źródła zapisane poprawnie, ale o podejrzanym wyniku ekstrakcji."""
+    """Zbiera źródła zapisane poprawnie, przy których coś wymaga obejrzenia.
+
+    Kwalifikuje źródło podejrzane w ocenie jakości oraz źródło z ostrzeżeniem
+    ekstraktora. Ostrzeżenie musi tu trafiać niezależnie od oceny, bo ocena
+    celowo pomija część formatów, a ostrzeżenie dotyczy każdego z nich.
+    """
     return tuple(
         MaterialDoSprawdzenia(
             identyfikator=stan.identyfikator,
             pochodzenie=stan.pochodzenie,
             powody=tuple(stan.powody_oceny),
+            ostrzezenia=tuple(stan.ostrzezenia),
         )
         for stan in checkpoint.zrodla.values()
-        if stan.ocena_jakosci == OCENA_PODEJRZANA
+        if stan.ocena_jakosci == OCENA_PODEJRZANA or stan.ostrzezenia
     )
 
 

@@ -36,7 +36,7 @@ FORMATY_NAPISOW = frozenset({"srt", "vtt"})
 
 KOMUNIKAT_BRAK_TRESCI = (
     "Plik napisów nie zawiera żadnego tekstu, tylko znaczniki czasu albo puste "
-    "wiersze, więc nie ma z czego zbudować dokumentu. Źródło zostało pominięte."
+    "wiersze, więc nie ma z czego zbudować dokumentu."
 )
 
 _WZORZEC_LINII_CZASU = re.compile(

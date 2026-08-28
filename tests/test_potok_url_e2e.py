@@ -519,3 +519,133 @@ def test_naglowek_zrodla_sieciowego_zawiera_adres_pobierania(tmp_path: Path) -> 
     assert f"Adres: {_ADRES_ARTYKULU}" in naglowek
     assert "utm_source" not in naglowek
     assert "Plik:" not in naglowek
+
+
+_BLOK_JSON_LD = (
+    '<script type="application/ld+json">{"@type":"Article","author":"Anna Kowalska",'
+    '"datePublished":"2026-02-10T09:00:00Z","publisher":{"name":"Serwis Przykład"},'
+    '"description":"Opis artykułu z danych strukturalnych."}</script>'
+)
+_BLOK_JSON_LD_SPRZECZNY = (
+    '<meta property="article:published_time" content="2026-02-10T09:00:00Z">'
+    '<meta name="author" content="Anna Kowalska">'
+    '<script type="application/ld+json">{"@type":"Article","author":"Jan Nowak",'
+    '"datePublished":"2019-01-05"}</script>'
+)
+_STRONA_UBOGA = (
+    '<html lang="pl"><head><title>Strona uboga</title></head><body><article>'
+    "<h1>Strona uboga</h1>"
+    "<p>Pierwszy akapit tej strony jest krótki, ale ma ponad czterdzieści znaków.</p>"
+    "<p>Drugi akapit również jest krótki i również przekracza próg długości.</p>"
+    "</article></body></html>"
+)
+
+
+def _artykul_z_blokiem(blok: str) -> bytes:
+    """Zwraca artykuł testowy z dopisanym blokiem w sekcji nagłówkowej dokumentu."""
+    tekst = _artykul().decode("utf-8")
+    return tekst.replace("</head>", blok + "</head>").encode("utf-8")
+
+
+def _odpowiedz(tresc: bytes) -> httpx.Response:
+    return httpx.Response(200, content=tresc, headers={"content-type": "text/html; charset=utf-8"})
+
+
+def test_metadane_z_danych_strukturalnych_trafiaja_do_manifestu_i_naglowka(
+    tmp_path: Path,
+) -> None:
+    serwer = _Serwer({"/artykul": _odpowiedz(_artykul_z_blokiem(_BLOK_JSON_LD))})
+
+    wynik = przetworz_projekt(
+        _pozycje(_ADRES_ARTYKULU),
+        _konfiguracja(tmp_path),
+        nazwa_projektu="Test JSON-LD",
+        zegar=_zegar_krokowy(),
+        transport_http=serwer.transport(),
+    )
+
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    (zrodlo,) = manifest["zrodla"]
+
+    assert zrodlo["metadane"]["autor"] == "Anna Kowalska"
+    assert zrodlo["metadane"]["data_publikacji"] == "2026-02-10"
+    assert zrodlo["metadane"]["wydawca"] == "Serwis Przykład"
+    assert zrodlo["metadane"]["opis"] == "Opis artykułu z danych strukturalnych."
+    assert "rozbieznosc_metadanych" not in zrodlo["metadane"]
+
+    (plik,) = sorted((wynik.katalog_projektu / "pliki_wynikowe").iterdir())
+    tresc = plik.read_text(encoding="utf-8")
+    assert "Autor: Anna Kowalska" in tresc
+    assert "Data publikacji: 2026-02-10" in tresc
+
+
+def test_rozbiezne_metadane_zachowuja_obie_wartosci(tmp_path: Path) -> None:
+    serwer = _Serwer({"/artykul": _odpowiedz(_artykul_z_blokiem(_BLOK_JSON_LD_SPRZECZNY))})
+
+    wynik = przetworz_projekt(
+        _pozycje(_ADRES_ARTYKULU),
+        _konfiguracja(tmp_path),
+        nazwa_projektu="Test rozbieżności",
+        zegar=_zegar_krokowy(),
+        transport_http=serwer.transport(),
+    )
+
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    metadane = manifest["zrodla"][0]["metadane"]
+
+    assert metadane["autor"] == "Anna Kowalska"
+    assert metadane["autor_wg_danych_strukturalnych"] == "Jan Nowak"
+    assert metadane["data_publikacji"] == "2026-02-10"
+    assert metadane["data_publikacji_wg_danych_strukturalnych"] == "2019-01-05"
+    assert metadane["rozbieznosc_metadanych"] == "autor, data_publikacji"
+
+    log = (wynik.katalog_projektu / "logi" / "log_szczegolowy.txt").read_text(encoding="utf-8")
+    assert "Metadane z danych strukturalnych różnią się" in log
+
+
+def test_poprawny_artykul_dostaje_ocene_poprawna(tmp_path: Path) -> None:
+    serwer = _Serwer()
+
+    wynik = przetworz_projekt(
+        _pozycje(_ADRES_ARTYKULU),
+        _konfiguracja(tmp_path),
+        nazwa_projektu="Test oceny",
+        zegar=_zegar_krokowy(),
+        transport_http=serwer.transport(),
+    )
+
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    (zrodlo,) = manifest["zrodla"]
+
+    assert zrodlo["ocena_jakosci"] == "poprawna"
+    assert zrodlo["powody_oceny"] == []
+    assert "Materiały do sprawdzenia" not in wynik.sciezka_raportu.read_text(encoding="utf-8")
+
+
+def test_uboga_strona_jest_zapisana_ale_oznaczona_do_sprawdzenia(tmp_path: Path) -> None:
+    serwer = _Serwer({"/artykul": _odpowiedz(_STRONA_UBOGA.encode("utf-8"))})
+
+    wynik = przetworz_projekt(
+        _pozycje(_ADRES_ARTYKULU),
+        _konfiguracja(tmp_path),
+        nazwa_projektu="Test ubogiej strony",
+        zegar=_zegar_krokowy(),
+        transport_http=serwer.transport(),
+    )
+
+    assert wynik.liczba_przetworzonych == 1
+    assert wynik.liczba_pominietych == 0
+    assert list((wynik.katalog_projektu / "pliki_wynikowe").iterdir())
+
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    (zrodlo,) = manifest["zrodla"]
+    assert zrodlo["status"] == "spakowane"
+    assert zrodlo["ocena_jakosci"] == "podejrzana"
+    assert any("mniej niż 50 słów" in powod for powod in zrodlo["powody_oceny"])
+
+    raport = wynik.sciezka_raportu.read_text(encoding="utf-8")
+    assert "Materiały do sprawdzenia, liczba: 1" in raport
+    assert _ADRES_ARTYKULU in raport
+
+    log_wazny = (wynik.katalog_projektu / "logi" / "log_wazne.txt").read_text(encoding="utf-8")
+    assert "Uwaga, podejrzany wynik ekstrakcji" in log_wazny

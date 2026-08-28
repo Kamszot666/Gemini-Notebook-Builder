@@ -381,3 +381,25 @@ def test_limit_slow_jest_liczony_bez_naglowka_metadanych(tmp_path: Path) -> None
     (plik_txt,) = (wynik.katalog_projektu / "pliki_wynikowe").glob("*.txt")
     slowa_w_pliku = len(plik_txt.read_text(encoding="utf-8").split())
     assert slowa_w_pliku > liczba_slow, "plik z nagłówkiem ma więcej słów niż sama treść"
+
+
+def test_zrodla_bez_ekstrakcji_nie_dostaja_oceny_jakosci(tmp_path: Path) -> None:
+    """Tekst wklejony i pliki tekstowe nie podlegają ocenie jakości ekstrakcji.
+
+    Ich treść jest dokładnie tym, co podał użytkownik, więc nie ma czego oceniać.
+    Krótki tekst wklejony nie może z tego powodu trafiać do materiałów do
+    sprawdzenia.
+    """
+    wynik = przetworz_projekt(
+        _pozycje(),
+        Konfiguracja(katalog_wynikow=tmp_path / "wyniki"),
+        nazwa_projektu="Test bez oceny",
+        zegar=_zegar_krokowy(),
+        zegar_lokalny=_zegar_lokalny_krokowy(),
+    )
+
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+
+    assert all(zrodlo["ocena_jakosci"] is None for zrodlo in manifest["zrodla"])
+    assert all(zrodlo["powody_oceny"] == [] for zrodlo in manifest["zrodla"])
+    assert "Materiały do sprawdzenia" not in wynik.sciezka_raportu.read_text(encoding="utf-8")

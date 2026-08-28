@@ -356,6 +356,71 @@ zwykłego tekstu, bez składni Markdown, ponieważ są to metadane strukturalne,
 a nie treść artykułu, i nie mogą stać się nagłówkiem sekcji ani trafić do
 automatycznego spisu treści notatnika.
 
+## Metadane z danych strukturalnych strony
+
+Strony często opisują artykuł blokiem `application/ld+json` w standardzie
+schema.org. Aplikacja odczytuje z niego autora, datę publikacji, datę
+aktualizacji, wydawcę i opis, i uzupełnia nimi metadane z ekstraktora. Blok
+o innym typie niż `Article`, `NewsArticle` albo `BlogPosting` jest pomijany,
+podobnie jak blok, którego nie da się odczytać. Brak danych strukturalnych nie
+jest błędem: są one dodatkiem do ekstrakcji, a nie warunkiem przetworzenia
+źródła.
+
+Pole `articleBody` jest odczytywane wyłącznie jako materiał porównawczy do oceny
+jakości ekstrakcji. Nigdy nie zastępuje wyniku ekstraktora, bo serwisy wypełniają
+je bardzo nierówno: bywa puste, skrócone do zajawki albo pozbawione śródtytułów.
+
+Gdy ekstraktor i dane strukturalne podają to samo, w manifeście jest jedna
+wartość. Gdy podają co innego, żadna z nich nie jest kasowana. Pod kluczem pola
+zostaje wartość z ekstraktora, wartość z danych strukturalnych trafia pod klucz
+z przyrostkiem `_wg_danych_strukturalnych`, a nazwy pól rozbieżnych są wymienione
+pod kluczem `rozbieznosc_metadanych`. Rozbieżność jest dopisywana także do logu
+szczegółowego. Ciche wybranie jednej z dwóch sprzecznych dat oznaczałoby wpisanie
+do manifestu daty, której w źródle nie było.
+
+W nagłówku pliku wynikowego pojawia się wartość z ekstraktora, ponieważ pochodzi
+z tej samej ścieżki co treść. Obie wartości są w manifeście.
+
+## Ocena jakości ekstrakcji
+
+Źródło, z którego wyciągnięto trzysta znaków zamiast dwunastu tysięcy, wygląda
+w wynikach dokładnie tak samo jak poprawne: ma plik, wpis w manifeście i sumę
+kontrolną. Żeby taka cicha utrata treści dała się zauważyć, każde źródło
+przechodzące przez rozpoznawanie treści dostaje ocenę jakości: „poprawna” albo
+„podejrzana”.
+
+Oceniane są strony internetowe i filmy, bo ich treść powstaje przez ekstrakcję
+albo przez napisy. Tekst wklejony oraz pliki TXT i MD nie są oceniane, bo ich
+treść jest dokładnie tym, co podał użytkownik. Ostrzeżenie, którego nie da się
+naprawić, uczyłoby tylko pomijania wszystkich ostrzeżeń.
+
+Ocena „podejrzana” powstaje, gdy zachodzi co najmniej jeden z warunków:
+
+1. Treść ma mniej niż pięćdziesiąt słów.
+2. Źródło nie ma tytułu.
+3. Treść nie ma podziału na akapity.
+4. Treść zawiera zwrot typowy dla strony błędu albo dla żądania włączenia
+   skryptów.
+5. Ten sam akapit powtarza się co najmniej trzy razy.
+6. W oryginale jest więcej odnośników niż słów w wyniku ekstrakcji.
+7. Treść z danych strukturalnych jest ponad dwa razy dłuższa od wyniku
+   ekstrakcji.
+8. W treści jest więcej nagłówków niż akapitów, przy co najmniej dwóch
+   nagłówkach.
+9. Co najmniej dwa nagłówki nie mają pod sobą żadnej treści.
+
+Warunki ósmy i dziewiąty dotyczą tylko materiału z rozpoznaną strukturą.
+Transkrypcja filmu nie ma nagłówków, więc nie może stać się przez nie podejrzana.
+
+Źródło podejrzane jest zapisywane normalnie i nigdy nie jest kasowane ani
+pomijane. Ma pliki wynikowe, ma status „spakowane” i liczy się do limitu źródeł.
+Zmienia się tylko to, że użytkownik o nim wie: ocena i lista powodów trafiają do
+manifestu, wpis pojawia się w logu ważnym i w logu szczegółowym, a raport końcowy
+wymienia takie źródła w sekcji „Materiały do sprawdzenia”.
+
+Progi są celowo zachowawcze. Fałszywe podejrzenie kosztuje jedno zajrzenie do
+pliku, a przeoczona utrata treści kosztuje wiarygodność całej bazy wiedzy.
+
 ## Dwie miary liczby znaków
 
 W manifeście występują dwie liczby znaków i mierzą co innego, dlatego noszą różne

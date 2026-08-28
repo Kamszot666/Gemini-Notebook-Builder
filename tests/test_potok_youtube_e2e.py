@@ -513,3 +513,25 @@ def test_naglowek_filmu_zawiera_kanal_dlugosc_i_opis_napisow(tmp_path: Path) -> 
     assert "Język napisów: pl" in naglowek
     assert "Rodzaj napisów: tworzone ręcznie" in naglowek
     assert f"Adres: {_ADRES}" in naglowek
+
+
+def test_film_podlega_ocenie_jakosci(tmp_path: Path) -> None:
+    """Transkrypcja powstaje z rozpoznania mowy, więc podlega ocenie jakości.
+
+    Napisy w danych testowych są krótkie, więc wynik jest podejrzany. Źródło mimo
+    to przechodzi cały potok i jest zapisane, a użytkownik dowiaduje się o nim
+    z raportu.
+    """
+    wynik = _uruchom(tmp_path)
+
+    manifest = json.loads(
+        wynik.sciezka_manifestu.read_text(encoding="utf-8")  # type: ignore[attr-defined]
+    )
+    (zrodlo,) = manifest["zrodla"]
+
+    assert zrodlo["ocena_jakosci"] == "podejrzana"
+    assert any("mniej niż 50 słów" in powod for powod in zrodlo["powody_oceny"])
+    assert zrodlo["status"] == "spakowane"
+    assert "Materiały do sprawdzenia, liczba: 1" in wynik.sciezka_raportu.read_text(
+        encoding="utf-8"
+    )

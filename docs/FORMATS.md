@@ -170,6 +170,22 @@ Wewnętrznie końce wierszy są sprowadzane do pojedynczego znaku nowej linii,
 a znaki Unicode do postaci NFC. Pliki wynikowe są zapisywane w UTF-8 bez znaku
 kolejności bajtów, z końcami wierszy LF.
 
+### Białe znaki i znaki niewidoczne
+
+Wewnątrz wiersza tabulatory, twarde spacje, wąskie spacje niepodzielne oraz ciągi
+spacji stają się jedną spacją. Powód nie jest kosmetyczny: czytnik ekranu
+odczytuje tabulator jako osobny element, a w materiale dla notatnika jest to szum.
+
+Wcięcie na początku wiersza jest zachowywane co do liczby znaków, ponieważ niesie
+znaczenie: tak zapisywane są zagnieżdżenia list i wnętrze bloków kodu. Wcięcie
+zrobione tabulatorami staje się wcięciem spacjami, po jednej spacji na znak.
+
+Usuwane są znaki niewidoczne dla czytelnika: spacja o zerowej szerokości, spoiwo
+słów, znacznik kolejności bajtów wewnątrz tekstu oraz miękki łącznik. Usuwane są
+także znaki sterujące inne niż znak nowej linii. Zachowywane są natomiast łącznik
+nierozdzielający i spoiwo, czyli ZWNJ oraz ZWJ, ponieważ w części pism i w
+sekwencjach emoji zmieniają znaczenie zapisu.
+
 ## Wynik: TXT zawsze, MD warunkowo
 
 Plik TXT powstaje zawsze. Plik MD powstaje dodatkowo tylko wtedy, gdy spełnione
@@ -305,6 +321,20 @@ Przepisanie nie może gubić treści. Sprawdza to test
 `tests/output/test_tekst_bez_znacznikow.py`, który porównuje obie wersje pliku
 `tests/dane/dokument_strukturalny.md` i wymaga, żeby w wersji TXT znalazł się
 każdy wiersz treści i każda komórka tabeli.
+
+## Dwie miary liczby znaków
+
+W manifeście występują dwie liczby znaków i mierzą co innego, dlatego noszą różne
+nazwy.
+
+1. Liczba znaków źródła, zapisana przy wpisie źródła, liczy sam znormalizowany
+   tekst dokumentu. To ona służy do sprawdzania limitu notatnika.
+2. Liczba znaków pliku, zapisana przy wpisie pliku wynikowego pod nazwą
+   `liczba_znakow_pliku`, liczy zawartość zapisanego pliku. Jest zawsze o jeden
+   większa, ponieważ każdy plik wynikowy kończy się znakiem nowej linii.
+
+Liczby słów są w obu miejscach takie same, bo znak nowej linii nie tworzy nowego
+słowa.
 
 ## Nazwy plików wynikowych
 

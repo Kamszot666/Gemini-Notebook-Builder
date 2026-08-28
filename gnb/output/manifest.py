@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-WERSJA_SCHEMATU = 3
+WERSJA_SCHEMATU = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,13 +52,18 @@ class WpisZrodla:
 
 @dataclass(frozen=True, slots=True)
 class WpisWyniku:
-    """Wiersz manifestu opisujący jeden plik wynikowy."""
+    """Wiersz manifestu opisujący jeden plik wynikowy.
+
+    Pole `liczba_znakow_pliku` liczy zawartość pliku razem z końcowym znakiem
+    nowej linii, w odróżnieniu od liczby znaków źródła, która liczy sam tekst
+    dokumentu. Obie miary mają różne nazwy, bo mierzą co innego.
+    """
 
     sciezka: str
     format: str
     liczba_zrodel: int
     liczba_slow: int
-    liczba_znakow: int
+    liczba_znakow_pliku: int
     rozmiar_bajtow: int
     checksum: str
     status: str
@@ -113,7 +118,7 @@ def _do_slownika(manifest: Manifest) -> dict[str, Any]:
                 "format": wpis.format,
                 "liczba_zrodel": wpis.liczba_zrodel,
                 "liczba_slow": wpis.liczba_slow,
-                "liczba_znakow": wpis.liczba_znakow,
+                "liczba_znakow_pliku": wpis.liczba_znakow_pliku,
                 "rozmiar_bajtow": wpis.rozmiar_bajtow,
                 "checksum": wpis.checksum,
                 "status": wpis.status,
@@ -180,7 +185,7 @@ def zbuduj_widok_tekstowy(manifest: Manifest) -> str:
         wiersze.append(f"  Format: {wpis_wyniku.format}")
         wiersze.append(f"  Liczba źródeł: {wpis_wyniku.liczba_zrodel}")
         wiersze.append(f"  Liczba słów: {wpis_wyniku.liczba_slow}")
-        wiersze.append(f"  Liczba znaków: {wpis_wyniku.liczba_znakow}")
+        wiersze.append(f"  Liczba znaków pliku: {wpis_wyniku.liczba_znakow_pliku}")
         wiersze.append(f"  Rozmiar w bajtach: {wpis_wyniku.rozmiar_bajtow}")
         wiersze.append(f"  Suma kontrolna, skrót: {_skrocona_suma(wpis_wyniku.checksum)}")
         wiersze.append(f"  Status: {wpis_wyniku.status}")

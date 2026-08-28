@@ -463,7 +463,7 @@ class _Wykonanie:
                 sciezka_wzgledna=plik.sciezka.relative_to(self._uklad.katalog_projektu).as_posix(),
                 format=plik.format.value,
                 liczba_slow=plik.liczba_slow,
-                liczba_znakow=plik.liczba_znakow,
+                liczba_znakow_pliku=plik.liczba_znakow,
                 rozmiar_bajtow=plik.rozmiar_bajtow,
                 checksum=plik.checksum,
             )
@@ -1039,7 +1039,7 @@ def _zbuduj_manifest(uklad: UkladProjektu, checkpoint: Checkpoint) -> Manifest:
                     format=wynik.format,
                     liczba_zrodel=1,
                     liczba_slow=wynik.liczba_slow,
-                    liczba_znakow=wynik.liczba_znakow,
+                    liczba_znakow_pliku=wynik.liczba_znakow_pliku,
                     rozmiar_bajtow=wynik.rozmiar_bajtow,
                     checksum=wynik.checksum,
                     status=StatusZrodla.SPAKOWANE.value,

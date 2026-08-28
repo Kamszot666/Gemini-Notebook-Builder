@@ -39,7 +39,7 @@ def _przykladowy_checkpoint() -> Checkpoint:
                         sciezka_wzgledna="pliki_wynikowe/a.txt",
                         format="txt",
                         liczba_slow=10,
-                        liczba_znakow=60,
+                        liczba_znakow_pliku=60,
                         rozmiar_bajtow=61,
                         checksum="b" * 64,
                     )

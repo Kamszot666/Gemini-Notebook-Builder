@@ -8,6 +8,13 @@ Przed zastąpieniem poprzednia zawartość jest kopiowana do pliku z rozszerzeni
 
 Checkpoint przechowuje stan każdego źródła, więc po restarcie da się wznowić
 pracę bez powtarzania ukończonych etapów.
+
+Odczyt rozgałęzia się po numerze wersji schematu. Plik zapisany starszą wersją
+aplikacji jest migrowany do postaci bieżącej, zanim powstaną z niego obiekty,
+więc katalog projektu założony poprzednią wersją nadal daje się wznowić. Plik
+w wersji nowszej niż obsługiwana kończy się błędem trwałym z komunikatem po
+polsku, ponieważ starsza aplikacja nie ma jak odgadnąć znaczenia pól, których
+jeszcze nie zna.
 """
 
 from __future__ import annotations
@@ -15,6 +22,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -22,8 +30,15 @@ from typing import Any
 from gnb.core.wyjatki import BladTrwaly
 
 WERSJA_SCHEMATU = 4
+NAJSTARSZA_OBSLUGIWANA_WERSJA = 1
 _SUFIKS_TYMCZASOWY = ".tmp"
 _SUFIKS_KOPII = ".bak"
+
+KOMUNIKAT_NOWSZA_WERSJA = (
+    "Plik checkpointu pochodzi z nowszej wersji aplikacji: zapisano go w wersji "
+    "schematu {znaleziona}, a ta wersja aplikacji obsługuje najwyżej {obslugiwana}. "
+    "Zaktualizuj aplikację albo utwórz nowy projekt pod inną nazwą."
+)
 
 
 @dataclass
@@ -82,6 +97,7 @@ class StanZrodla:
     metadane: dict[str, str] = field(default_factory=dict)
     ocena_jakosci: str | None = None
     powody_oceny: list[str] = field(default_factory=list)
+    ostrzezenia: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -123,23 +139,47 @@ def wczytaj(sciezka: Path) -> Checkpoint | None:
 
     Brak pliku checkpointu zwraca ``None`` i nie jest błędem. Uszkodzony plik
     główny bez sprawnej kopii zapasowej daje błąd trwały z czytelnym komunikatem.
+
+    Plik zapisany starszą wersją schematu jest migrowany przed budową obiektów,
+    więc wznawia się normalnie. Brak spodziewanego pola po migracji oznacza plik
+    naprawdę uszkodzony i również kończy się błędem trwałym, nigdy surowym
+    śladem stosu. Plik w wersji nowszej niż obsługiwana daje błąd trwały od razu,
+    bez sięgania po kopię zapasową, ponieważ kopia jest z tej samej wersji.
     """
     if not sciezka.exists():
         return None
     try:
         return _checkpoint_ze_slownika(_wczytaj_json(sciezka))
-    except (OSError, ValueError) as blad_glowny:
+    except _BLEDY_ODCZYTU as blad_glowny:
         kopia = sciezka.with_name(sciezka.name + _SUFIKS_KOPII)
         if not kopia.exists():
             raise BladTrwaly(
-                f"Plik checkpointu {sciezka} jest uszkodzony i nie ma kopii zapasowej."
+                f"Plik checkpointu {sciezka} jest uszkodzony i nie ma kopii zapasowej. "
+                f"Przyczyna: {_opis_przyczyny(blad_glowny)}"
             ) from blad_glowny
         try:
             return _checkpoint_ze_slownika(_wczytaj_json(kopia))
-        except (OSError, ValueError) as blad_kopii:
+        except _BLEDY_ODCZYTU as blad_kopii:
             raise BladTrwaly(
-                f"Plik checkpointu {sciezka} oraz jego kopia zapasowa są uszkodzone."
+                f"Plik checkpointu {sciezka} oraz jego kopia zapasowa są uszkodzone. "
+                f"Przyczyna: {_opis_przyczyny(blad_kopii)}"
             ) from blad_kopii
+
+
+# Wyjątki odczytu, po których warto sięgnąć po kopię zapasową. Brak klucza oraz
+# niewłaściwy typ pola są tu razem z błędem składni JSON, ponieważ wszystkie
+# trzy znaczą to samo: zawartość pliku nie odpowiada schematowi. Bez nich
+# uszkodzony plik kończył się surowym śladem stosu zamiast polskiego komunikatu.
+_BLEDY_ODCZYTU = (OSError, ValueError, KeyError, TypeError)
+
+
+def _opis_przyczyny(blad: Exception) -> str:
+    """Opisuje po polsku, co było nie tak z zawartością pliku checkpointu."""
+    if isinstance(blad, KeyError):
+        return f"brak spodziewanego pola {blad.args[0]!r}."
+    if isinstance(blad, OSError):
+        return "pliku nie dało się odczytać z dysku."
+    return f"{blad}"
 
 
 def _wczytaj_json(sciezka: Path) -> dict[str, Any]:
@@ -147,6 +187,113 @@ def _wczytaj_json(sciezka: Path) -> dict[str, Any]:
     if not isinstance(dane, dict):
         raise ValueError("Zawartość pliku checkpointu nie jest obiektem JSON.")
     return dane
+
+
+def _zmigruj(dane: dict[str, Any]) -> dict[str, Any]:
+    """Doprowadza dane wczytane z pliku do postaci bieżącej wersji schematu.
+
+    Migracja jest wykonywana krok po kroku, po jednym przejściu na wersję, i
+    zawsze przed budową obiektów. Dzięki temu odczyt starszego pliku kończy się
+    wznowieniem projektu, a nie błędem braku pola.
+    """
+    wersja = _wersja_schematu(dane)
+    if wersja > WERSJA_SCHEMATU:
+        raise BladTrwaly(
+            KOMUNIKAT_NOWSZA_WERSJA.format(znaleziona=wersja, obslugiwana=WERSJA_SCHEMATU)
+        )
+    if wersja < NAJSTARSZA_OBSLUGIWANA_WERSJA:
+        raise ValueError(f"Numer wersji schematu checkpointu jest nieprawidłowy: {wersja}.")
+
+    while wersja < WERSJA_SCHEMATU:
+        dane = _MIGRACJE[wersja](dane)
+        wersja += 1
+        dane["wersja_schematu"] = wersja
+    return dane
+
+
+def _wersja_schematu(dane: dict[str, Any]) -> int:
+    """Zwraca numer wersji schematu zapisany w pliku.
+
+    Brak numeru albo numer, który nie jest liczbą, oznacza plik uszkodzony, a nie
+    plik starszej wersji, więc kończy się błędem wartości. Dzięki temu odczyt
+    sięgnie po kopię zapasową, zamiast zgadywać, jaką postać ma zawartość.
+    """
+    surowa = dane.get("wersja_schematu")
+    if isinstance(surowa, bool) or not isinstance(surowa, int | str):
+        raise ValueError("Plik checkpointu nie zawiera numeru wersji schematu.")
+    try:
+        return int(surowa)
+    except ValueError as blad:
+        raise ValueError(
+            f"Numer wersji schematu checkpointu nie jest liczbą: {surowa!r}."
+        ) from blad
+
+
+def _z_wersji_1_na_2(dane: dict[str, Any]) -> dict[str, Any]:
+    """Przechodzi z wersji 1 na 2. Wersja 2 dodała pole ``pobranie`` przy źródle.
+
+    Pole zostało dodane z bezpieczną wartością domyślną i jest odczytywane przez
+    ``get``, więc plik wersji 1 wczytuje się poprawnie bez przenoszenia danych.
+    Krok istnieje po to, żeby ciąg wersji był pełny i widoczny wprost w kodzie.
+    """
+    return dane
+
+
+def _z_wersji_2_na_3(dane: dict[str, Any]) -> dict[str, Any]:
+    """Przechodzi z wersji 2 na 3. Wersja 3 dodała pole ``metadane`` przy źródle.
+
+    Tak samo jak przy poprzednim kroku, jest to zmiana wyłącznie dodająca pole
+    z bezpieczną wartością domyślną, więc dane nie wymagają przekształcenia.
+    """
+    return dane
+
+
+def _z_wersji_3_na_4(dane: dict[str, Any]) -> dict[str, Any]:
+    """Przechodzi z wersji 3 na 4, zmieniając nazwę pola liczby znaków pliku wynikowego.
+
+    W wersji 3 pole opisujące plik wynikowy nosiło nazwę ``liczba_znakow``, taką
+    samą jak pole opisujące dokument źródłowy, mimo że obie miary liczą co innego.
+    W wersji 4 pole pliku nazywa się ``liczba_znakow_pliku``.
+
+    Migracja jest wyłącznie przeniesieniem klucza wewnątrz wpisu wyniku, bez
+    żadnego przeliczania. Wartości nie wolno wyprowadzać z pola ``liczba_znakow``
+    zapisanego przy źródle, ponieważ tamto pole liczy tekst dokumentu, a nie plik,
+    a przy źródle z wersją TXT i wersją MD naraz obydwa pliki dostałyby tę samą
+    błędną liczbę.
+    """
+    for stan in _wpisy_zrodel(dane):
+        wyniki = stan.get("wyniki")
+        if not isinstance(wyniki, list):
+            continue
+        for wynik in wyniki:
+            if not isinstance(wynik, dict):
+                continue
+            if "liczba_znakow" in wynik and "liczba_znakow_pliku" not in wynik:
+                wynik["liczba_znakow_pliku"] = wynik.pop("liczba_znakow")
+    return dane
+
+
+def _wpisy_zrodel(dane: dict[str, Any]) -> list[dict[str, Any]]:
+    """Zwraca wpisy źródeł nadające się do przekształcenia przez migrację.
+
+    Wpisy o nieoczekiwanym kształcie są pomijane, ponieważ ich sprawdzeniem
+    zajmuje się właściwy odczyt, który zgłosi czytelny błąd. Migracja nie jest
+    miejscem na walidację.
+    """
+    zrodla = dane.get("zrodla")
+    if not isinstance(zrodla, dict):
+        return []
+    return [stan for stan in zrodla.values() if isinstance(stan, dict)]
+
+
+# Kolejne przejścia między wersjami schematu. Klucz to wersja, z której krok
+# wychodzi. Rozgałęzienie po numerze wersji jest tu jedynym powodem, dla którego
+# numer w pliku ma znaczenie: numer wczytany i z niczym nieporównany byłby ozdobą.
+_MIGRACJE: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {
+    1: _z_wersji_1_na_2,
+    2: _z_wersji_2_na_3,
+    3: _z_wersji_3_na_4,
+}
 
 
 def _checkpoint_do_slownika(checkpoint: Checkpoint) -> dict[str, Any]:
@@ -181,6 +328,7 @@ def _stan_do_slownika(stan: StanZrodla) -> dict[str, Any]:
         "metadane": dict(stan.metadane),
         "ocena_jakosci": stan.ocena_jakosci,
         "powody_oceny": list(stan.powody_oceny),
+        "ostrzezenia": list(stan.ostrzezenia),
     }
 
 
@@ -209,6 +357,9 @@ def _wynik_do_slownika(wynik: StanWyniku) -> dict[str, Any]:
 
 
 def _checkpoint_ze_slownika(dane: dict[str, Any]) -> Checkpoint:
+    # Migracja wykonuje się przed jakąkolwiek budową obiektu, żeby wpis zapisany
+    # starszą wersją aplikacji miał już komplet pól, gdy dojdzie do jego odczytu.
+    dane = _zmigruj(dane)
     surowe_zrodla = dane.get("zrodla", {})
     if not isinstance(surowe_zrodla, dict):
         raise ValueError("Pole „zrodla” w checkpoincie ma niepoprawny typ.")
@@ -249,6 +400,7 @@ def _stan_ze_slownika(dane: Any) -> StanZrodla:
         metadane=_metadane_ze_slownika(dane.get("metadane")),
         ocena_jakosci=_opcjonalny_tekst(dane.get("ocena_jakosci")),
         powody_oceny=[str(element) for element in dane.get("powody_oceny", [])],
+        ostrzezenia=[str(element) for element in dane.get("ostrzezenia", [])],
     )
 
 

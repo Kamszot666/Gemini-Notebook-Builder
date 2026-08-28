@@ -120,12 +120,14 @@ def domyslny_rejestr_binarny() -> RejestrEkstraktorowBinarnych:
 
 
 def domyslny_rejestr(zachowuj_odnosniki: bool = True) -> RejestrEkstraktorow:
-    """Buduje rejestr z ekstraktorami dostępnymi po etapie drugim.
+    """Buduje rejestr ekstraktorów tekstowych: tekstu, Markdown, CSV, napisów
+    plikowych oraz stron internetowych i plików HTML.
 
     Ekstraktor Markdown jest przed ekstraktorem tekstu płaskiego, żeby źródło
     z formatem ``md`` trafiło do właściwego adaptera także wtedy, gdy jest
     tekstem wklejonym. Ekstraktor stron internetowych rozpoznaje własny typ
-    źródła, więc jego miejsce w kolejności nie ma znaczenia.
+    źródła, więc jego miejsce w kolejności nie ma znaczenia. To samo dotyczy
+    ekstraktorów CSV i napisów, bo rozpoznają swój format po rozszerzeniu.
 
     Argument `zachowuj_odnosniki` pochodzi z konfiguracji i decyduje o tym, czy
     na końcu treści artykułu powstaje wykaz odnośników.

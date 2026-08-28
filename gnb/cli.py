@@ -2,10 +2,11 @@
 
 Udostępnia trzy polecenia. Polecenie ``diagnostyka`` sprawdza dostępność
 narzędzi zewnętrznych wymienionych w sekcji piątej CLAUDE.md. Polecenie
-``przetworz`` uruchamia potok przetwarzania dla tekstu wklejonego, plików TXT
-i MD, adresów stron internetowych oraz adresów filmów z serwisu YouTube, dla
-których pobierane są napisy. Polecenie ``pamiec`` pokazuje stan
-wspólnej pamięci podręcznej pobranych stron i pozwala ją wyczyścić.
+``przetworz`` uruchamia potok przetwarzania dla tekstu wklejonego, plików
+lokalnych w formacie TXT, MD, HTML, CSV, SRT, VTT, PDF, DOCX i EPUB, adresów
+stron internetowych oraz adresów filmów z serwisu YouTube, dla których
+pobierane są napisy. Polecenie ``pamiec`` pokazuje stan wspólnej pamięci
+podręcznej pobranych stron i pozwala ją wyczyścić.
 
 Przed pobraniem czegokolwiek polecenie ``przetworz`` wypisuje podsumowanie listy
 adresów: ile jest poprawnych, ile duplikatów i ile wpisów odrzucono wraz

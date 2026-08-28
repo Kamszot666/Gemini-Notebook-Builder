@@ -1,9 +1,8 @@
-# Obsługiwane formaty — stan po etapie czwartym A
+# Obsługiwane formaty — stan po etapie czwartym
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
-Kolejne formaty, czyli PDF, DOCX, EPUB, ODT, PPTX, CSV, SRT, VTT, obrazy oraz
-materiały nutowe, dojdą w etapach opisanych w sekcji osiemnastej pliku
-`CLAUDE.md`.
+Kolejne formaty, czyli ODT, PPTX, obrazy oraz materiały nutowe, dojdą
+w etapach opisanych w sekcji osiemnastej pliku `CLAUDE.md`.
 
 ## Wejście
 
@@ -11,7 +10,9 @@ Obsługiwane jest pięć rodzajów wejścia:
 
 1. Tekst wklejony bezpośrednio przez użytkownika, traktowany jako tekst płaski.
 2. Tekst wklejony zadeklarowany przez użytkownika jako Markdown.
-3. Plik lokalny w formacie TXT lub MD.
+3. Plik lokalny w jednym z dziewięciu formatów: TXT, MD, HTML, CSV, SRT, VTT,
+   PDF, DOCX albo EPUB. Pierwsze dwa są plikiem tekstowym, pozostałe siedem
+   plikiem dokumentem — rozróżnienie opisuje sekcja „Pliki dokumentowe”.
 4. Adres strony internetowej, podany pojedynczo albo listą.
 5. Adres filmu z serwisu YouTube, dla którego pobierane są napisy.
 
@@ -278,8 +279,9 @@ Format jest jednolity w obrębie całego pliku, a podział na akapity jest taki 
 niezależnie od tego, czy znaczniki są włączone.
 
 Transkrypcja nie ma struktury dokumentu, więc dla filmu nigdy nie powstaje wersja
-MD. Plik TXT zawiera sam tekst transkrypcji; nagłówek metadanych w pliku
-wynikowym powstanie wspólnie dla wszystkich typów źródeł w etapie czwartym A.
+MD. Plik TXT zawiera sam tekst transkrypcji, poprzedzony nagłówkiem metadanych
+opisanym w sekcji „Nagłówek metadanych pliku wynikowego”, wspólnym dla
+wszystkich typów źródeł.
 
 ### Przypadki, w których film nie zostaje przetworzony
 
@@ -291,6 +293,127 @@ w którym powstanie transkrypcja mowy z samego dźwięku.
 Statusem „blad” kończą się: film prywatny, usunięty, niedostępny w regionie,
 ograniczony wiekiem oraz niepoprawny identyfikator filmu. Zablokowanie żądania
 przez serwis i błąd sieci są traktowane jako błędy przejściowe i ponawiane.
+
+## Pliki dokumentowe
+
+Etap czwarty dodał siedem formatów plików lokalnych: HTML, CSV, SRT, VTT, PDF,
+DOCX i EPUB. Wszystkie dostają typ źródła „plik dokument”, w odróżnieniu od
+plików TXT i MD, które są „plikiem tekstowym”. Rozróżnienie ma znaczenie
+praktyczne: tylko plik dokument z prozą, czyli PDF, DOCX, EPUB i HTML lokalny,
+podlega ocenie jakości ekstrakcji opisanej dalej w tym dokumencie.
+
+HTML, CSV, SRT i VTT są plikami tekstowymi w sensie kodowania: kodowanie znaków
+jest wykrywane tak samo jak dla pliku TXT. PDF, DOCX i EPUB są kontenerami
+binarnymi — próba wykrycia kodowania znakowego na ich bajtach dałaby
+bezużyteczny wynik, więc te trzy formaty czyta osobny rejestr ekstraktorów,
+pracujący wprost na bajtach pliku, a nie na tekście już rozkodowanym.
+
+### HTML lokalny
+
+Plik HTML lokalny korzysta z dokładnie tego samego ekstraktora co strona
+internetowa: ekstrakcja przez `trafilatura` pracuje na kodzie HTML niezależnie
+od tego, czy pochodzi z pobrania, czy z dysku. Jedyna różnica: plik lokalny nie
+przechodzi przez wykrywanie stron wymagających wykonania skryptów, ponieważ to
+jest opisany w CLAUDE.md sposób obejścia takiej strony — zapisanie jej
+z przeglądarki po wykonaniu skryptów i podanie zapisanego pliku jako źródła.
+
+### CSV
+
+Plik CSV staje się jedną tabelą. Ogranicznik kolumn jest rozpoznawany
+automatycznie spośród przecinka, średnika, tabulatora i pionowej kreski;
+gdy rozpoznanie się nie powiedzie, przyjmowany jest przecinek. Pierwszy wiersz
+jest zawsze traktowany jako nagłówek kolumn — to jest założenie, nie wynik
+wykrycia, bo z samego pliku CSV nie da się tego jednoznacznie rozstrzygnąć.
+
+Plik CSV nie ma tytułu ani podziału na akapity z natury formatu, więc świadomie
+nie podlega ocenie jakości ekstrakcji: dla tabeli danych brak tytułu nie jest
+oznaką utraty treści. Wersja TXT rozpisuje tabelę jako kolejne wiersze „nazwa
+kolumny: wartość”, po jednym wierszu na komórkę, tą samą drogą co tabela
+w dokumencie Markdown — czytnik ekranu odsłuchuje to wyraźnie lepiej niż wiersz
+z komórkami rozdzielonymi przecinkami.
+
+### Napisy z pliku: SRT i VTT
+
+Oba formaty mają tę samą budowę: bloki rozdzielone pustym wierszem, z jedną
+linią zawierającą znacznik czasu w postaci „początek --> koniec”. Blok bez
+takiej linii jest pomijany w całości, co naturalnie usuwa nagłówek „WEBVTT”
+oraz bloki komentarza `NOTE`, `STYLE` i `REGION` pliku VTT, bez osobnej obsługi
+każdego z nich.
+
+Segmenty są sklejane w akapity dokładnie tym samym mechanizmem co napisy
+pobrane z YouTube: fragmenty urwane w połowie zdania są łączone w zdania,
+a segmenty, które powtarzają końcówkę poprzedniego — co zdarza się w plikach
+eksportowanych z automatycznego rozpoznawania mowy — nie dublują tekstu
+w wyniku. Znaczniki wewnątrzwierszowe, na przykład wyróżnienia i wskazania
+mówiącego w pliku VTT, są usuwane.
+
+Plik napisów, tak jak transkrypcja YouTube, nie ma struktury dokumentu i nie
+ma tytułu, więc nigdy nie powstaje dla niego wersja MD i nie podlega ocenie
+jakości ekstrakcji.
+
+### PDF
+
+Ekstraktor czyta wyłącznie tekst już obecny w pliku PDF. Strona zeskanowana
+bez warstwy tekstowej, czyli sam obraz strony, daje pusty wynik i ostrzeżenie
+w manifeście — rozpoznawanie tekstu ze skanu, czyli OCR, jest zadaniem etapu
+ósmego. Plik zaszyfrowany albo zabezpieczony przed kopiowaniem kończy się
+błędem trwałym z czytelnym komunikatem: taki plik nie zaimportuje się także
+wprost do notatnika, niezależnie od planu. Plik uszkodzony albo o nieprawidłowej
+strukturze kończy się tym samym rodzajem błędu, a nie awarią programu.
+
+Nagłówek i numer strony, powtarzane na każdej stronie dłuższego dokumentu, są
+usuwane, żeby nie zaśmiecały wyniku tyloma powtórzeniami, ile jest stron.
+Wykrywanie jest celowo pozycyjne i ostrożne: sprawdzane są wyłącznie pierwsze
+dwa wiersze każdej strony, a wiersz znika ze wszystkich stron tylko wtedy, gdy
+jego treść jest identyczna na każdej z nich. Numer strony jest wykrywany
+wzorcem w rodzaju „Strona 3” albo „Page 3 of 10”, bo jego treść zmienia się na
+każdej stronie i porównanie tekstu by go nie złapało. Żaden inny wiersz nie
+jest ruszany, więc treść merytoryczna nie ginie nawet wtedy, gdy przypadkiem
+powtarza się między stronami — to zadanie deduplikacji z etapu piątego, a nie
+ekstrakcji.
+
+PDF nie ma niezawodnie odtwarzalnej struktury dokumentu: format zapisuje tekst
+jako pozycjonowane fragmenty na stronie, a nie jako drzewo nagłówków
+i akapitów. Ekstraktor nie zgaduje nagłówków z wielkości czcionki i nie tworzy
+bloków strukturalnych, więc dla pliku PDF nigdy nie powstaje wersja MD.
+
+### DOCX
+
+Format DOCX niesie prawdziwą strukturę semantyczną: styl akapitu mówi wprost,
+czy jest nagłówkiem i którego poziomu, czy elementem listy wypunktowanej albo
+numerowanej, a tabela jest osobnym elementem dokumentu. Akapity i tabele są
+czytane w kolejności występowania w pliku, a kolejne akapity tego samego stylu
+listy są sklejane w jeden blok listy. Tytuł pochodzi z właściwości pliku, a gdy
+jej brak, z pierwszego rozpoznanego nagłówka. Autor oraz daty utworzenia
+i modyfikacji, jeżeli są w pliku, trafiają do metadanych źródła.
+
+Ekstraktor nie rozpoznaje bloków kodu, ponieważ DOCX nie ma dla nich
+standardowego stylu, a zgadywanie po nazwie czcionki byłoby heurystyką bez
+pewności.
+
+### EPUB
+
+Rozdziały, zapisane wewnątrz pliku EPUB jako osobne pliki XHTML, są czytane
+w kolejności lektury zapisanej w spisie `spine`, a nie w kolejności zapisania
+wewnątrz archiwum — tylko `spine` gwarantuje właściwą kolejność. Dokument
+nawigacyjny EPUB 3, czyli plik ze spisem treści, jest pomijany, bo jest spisem
+odnośników, a nie treścią książki.
+
+Każdy rozdział jest rozbierany na nagłówki, akapity, listy, tabele i cytaty
+wprost ze znaczników XHTML, z wejściem rekurencyjnym w kontenery `div`,
+`section` i `article`, żeby treść owinięta w takie elementy, typowa dla plików
+EPUB generowanych automatycznie, nie zginęła. Tytuł i autor pochodzą
+z metadanych Dublin Core pliku, obecnych w każdym poprawnym pliku EPUB.
+
+### Poziom pewności struktury plików dokumentowych
+
+DOCX i EPUB niosą znaczniki semantyczne wprost z formatu — styl akapitu albo
+znacznik XHTML — więc ich struktura jest odwzorowywana, a nie zgadywana,
+i dostaje wysoki poziom pewności. HTML lokalny dostaje ten sam poziom co strona
+internetowa, bo struktura jest tam dopiero rozpoznawana przez `trafilatura`.
+PDF nie ma niezawodnie odtwarzalnej struktury, więc zawsze dostaje poziom
+niski, a plik CSV dostaje wysoki poziom mimo braku nagłówków czy list, bo jego
+jedyna struktura — tabela — jest odczytywana wprost, bez zgadywania.
 
 ## Czym różni się wersja TXT od wersji MD
 
@@ -390,9 +513,13 @@ przechodzące przez rozpoznawanie treści dostaje ocenę jakości: „poprawna�
 „podejrzana”.
 
 Oceniane są strony internetowe i filmy, bo ich treść powstaje przez ekstrakcję
-albo przez napisy. Tekst wklejony oraz pliki TXT i MD nie są oceniane, bo ich
-treść jest dokładnie tym, co podał użytkownik. Ostrzeżenie, którego nie da się
-naprawić, uczyłoby tylko pomijania wszystkich ostrzeżeń.
+albo przez napisy, a od etapu czwartego także pliki PDF, DOCX, EPUB i HTML
+lokalny, z tego samego powodu. Tekst wklejony oraz pliki TXT i MD nie są
+oceniane, bo ich treść jest dokładnie tym, co podał użytkownik. Plik CSV oraz
+napisy z pliku SRT i VTT też nie są oceniane: z natury formatu nie mają tytułu
+ani podziału na akapity, więc dostałyby nienaprawialne ostrzeżenie przy każdym
+pliku. Ostrzeżenie, którego nie da się naprawić, uczyłoby tylko pomijania
+wszystkich ostrzeżeń.
 
 Ocena „podejrzana” powstaje, gdy zachodzi co najmniej jeden z warunków:
 

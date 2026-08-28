@@ -177,6 +177,7 @@ def _czy_ocenic_jakosc(typ_zrodla: TypZrodla, format_zrodla: str) -> bool:
         return True
     return typ_zrodla is TypZrodla.PLIK_DOKUMENT and format_zrodla in _FORMATY_DOKUMENTOW_OCENIANE
 
+
 # Wynik fazy pobrania dla jednego adresu: treść, świadome pominięcie albo błąd.
 WynikFazyPobrania = OdpowiedzPobrania | PominietePobranie | BladGnb
 

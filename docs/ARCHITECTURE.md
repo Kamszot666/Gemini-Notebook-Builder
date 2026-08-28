@@ -1,14 +1,14 @@
-# Architektura — stan po etapie trzecim
+# Architektura — stan po etapie czwartym
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
-zakończeniu etapu trzeciego. Pełny docelowy podział na pakiety opisuje sekcja
+zakończeniu etapu czwartego. Pełny docelowy podział na pakiety opisuje sekcja
 szósta `CLAUDE.md`.
 
 ## Potok przetwarzania
 
 Punkt wejścia to funkcja `przetworz_projekt` w `gnb/potok.py`. Uruchamia ona
 etapy w stałej kolejności z sekcji ósmej `CLAUDE.md`, w części obsługiwanej przez
-etapy pierwszy, drugi i trzeci:
+etapy od pierwszego do czwartego:
 
 1. Wejście i walidacja — `gnb/ingestion/wejscie.py`, `gnb/ingestion/lista_url.py`.
 2. Pobranie stron i napisów oraz import treści i wykrycie kodowania —
@@ -61,7 +61,10 @@ identyfikator wynika z kanonicznej postaci adresu, a nie z treści.
 
 - `gnb/ingestion/wejscie.py` — przyjmowanie tekstu wklejonego, plików i adresów,
   walidacja i utworzenie `Zrodlo`. Wskazówka formatu jest przenoszona w osobnej
-  strukturze `PozycjaWejsciowa`, poza kontraktem `WejscieSurowe`.
+  strukturze `PozycjaWejsciowa`, poza kontraktem `WejscieSurowe`. Format pliku
+  decyduje o typie źródła — tekstowy dla TXT i MD, dokument dla pozostałych
+  siedmiu — oraz o tym, czy plik wymaga odczytu bajtów zamiast dekodowania
+  tekstu (`czy_format_binarny`, dla PDF, DOCX i EPUB).
 - `gnb/ingestion/lista_url.py` — przyjmowanie list adresów, wykrywanie duplikatów
   po postaci kanonicznej i podsumowanie pokazywane przed pobraniem.
 - `gnb/ingestion/pobieranie.py` — asynchroniczny klient HTTP z limitem czasu,
@@ -83,20 +86,41 @@ pliku wynikowego.
 
 ## Pakiet gnb.extractors
 
-- `gnb/extractors/bazowy.py` — protokół `Ekstraktor` oraz rejestr dobierający
-  ekstraktor po typie źródła i formacie. Nowy format to nowa implementacja
-  protokołu plus wpis w rejestrze.
+- `gnb/extractors/bazowy.py` — protokół `Ekstraktor` z rejestrem
+  `RejestrEkstraktorow` dla formatów tekstowych oraz protokół `EkstraktorBinarny`
+  z rejestrem `RejestrEkstraktorowBinarnych` dla PDF, DOCX i EPUB, pracujący
+  wprost na bajtach pliku. Nowy format to nowa implementacja właściwego
+  protokołu plus wpis we właściwym rejestrze.
 - `gnb/extractors/tekst.py` — tekst płaski, zawsze niski poziom pewności
   struktury, brak bloków.
 - `gnb/extractors/markdown.py` — Markdown przez `markdown-it-py` z regułą tabel,
   wysoki poziom pewności, rozpoznane bloki strukturalne.
-- `gnb/extractors/youtube.py` — sklejanie segmentów napisów w akapity, usuwanie
-  oznaczeń dźwięków i powtórzeń oraz opcjonalne znaczniki czasu.
+- `gnb/extractors/napisy_wspolne.py` — wspólne sklejanie segmentów napisów
+  w akapity: usuwanie oznaczeń dźwięków i powtórzeń oraz opcjonalne znaczniki
+  czasu. Używane przez ekstraktor YouTube oraz ekstraktor plików SRT i VTT.
+- `gnb/extractors/youtube.py` — wycinanie stopki tłumaczy z napisów tworzonych
+  ręcznie oraz zbieranie metadanych filmu, na bazie napisy_wspolne.
+- `gnb/extractors/napisy.py` — ekstraktor plików SRT i VTT: dzieli plik na
+  bloki rozdzielone pustym wierszem, a blok bez linii ze znacznikiem czasu
+  pomija w całości, co usuwa nagłówek WEBVTT oraz bloki NOTE, STYLE i REGION.
 - `gnb/extractors/strona_www.py` — treść artykułu przez `trafilatura`, średni
   poziom pewności, z mechanizmem zapasowym na `lxml` o niskim poziomie pewności.
   Zbiera też odnośniki zewnętrzne i dopisuje na końcu treści ich ponumerowany
-  wykaz, a w samym zdaniu zostawia sam tekst odnośnika.
-
+  wykaz, a w samym zdaniu zostawia sam tekst odnośnika. Ten sam ekstraktor
+  obsługuje też plik HTML lokalny, bez wykrywania stron wymagających skryptów.
+- `gnb/extractors/bloki_markdown.py` — zapis listy bloków treści jako tekstu
+  w zapisie Markdown, wspólny dla strony internetowej, CSV, DOCX i EPUB.
+- `gnb/extractors/plik_csv.py` — plik CSV jako jeden blok tabeli, z automatycznym
+  rozpoznaniem ogranicznika kolumn i pierwszym wierszem jako nagłówkiem.
+- `gnb/extractors/plik_pdf.py` — tekst z warstwy tekstowej PDF przez `pypdf`,
+  z usuwaniem pozycyjnie wykrytego powtarzalnego nagłówka i numeru strony.
+  Zawsze niski poziom pewności struktury, bez bloków.
+- `gnb/extractors/plik_docx.py` — akapity i tabele DOCX w kolejności
+  wystąpienia przez `python-docx`, ze stylem akapitu odwzorowanym wprost na
+  rodzaj bloku. Wysoki poziom pewności struktury.
+- `gnb/extractors/plik_epub.py` — rozdziały EPUB w kolejności `spine` przez
+  `EbookLib`, z pominięciem dokumentu nawigacyjnego i rekurencyjnym wejściem
+  w kontenery `div`, `section` i `article`. Wysoki poziom pewności struktury.
 - `gnb/extractors/dane_strukturalne.py` — odczyt metadanych artykułu z bloku
   JSON-LD strony oraz scalanie ich z metadanymi ekstraktora, z zachowaniem obu
   wartości przy rozbieżności.
@@ -116,8 +140,8 @@ pliku wynikowego.
 - `gnb/output/manifest.py` — `manifest.json` jako źródło prawdy i `manifest.txt`
   jako czytelny widok.
 - `gnb/output/ocena_jakosci.py` — heurystyczna ocena jakości ekstrakcji dla
-  źródeł rozpoznawanych, czyli stron i filmów. Zwraca ocenę wraz z listą powodów
-  i nigdy nie usuwa źródła.
+  źródeł rozpoznawanych: stron, filmów, PDF, DOCX, EPUB i HTML lokalnego.
+  Zwraca ocenę wraz z listą powodów i nigdy nie usuwa źródła.
 - `gnb/output/raport.py` — raport końcowy jako zwykły tekst, wraz z wykazem
   źródeł pominiętych i błędnych oraz powodem każdego z nich, a także z sekcją
   „Materiały do sprawdzenia” dla źródeł o podejrzanym wyniku ekstrakcji.

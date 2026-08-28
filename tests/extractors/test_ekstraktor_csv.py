@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from gnb.core.stale import PoziomPewnosciStruktury, RodzajBloku, TypZrodla
 from gnb.extractors.plik_csv import EkstraktorCsv
+from gnb.normalization.kodowanie import zdekoduj
+
+KATALOG_DANYCH = Path(__file__).resolve().parents[1] / "dane"
 
 
 def test_wiersze_przecinkowe_daja_jeden_blok_tabeli() -> None:
@@ -56,3 +61,14 @@ def test_obsluguje_wylacznie_format_csv_dla_pliku_dokumentu() -> None:
     assert ekstraktor.obsluguje(TypZrodla.PLIK_DOKUMENT, "csv") is True
     assert ekstraktor.obsluguje(TypZrodla.PLIK_DOKUMENT, "pdf") is False
     assert ekstraktor.obsluguje(TypZrodla.PLIK_TEKSTOWY, "csv") is False
+
+
+def test_plik_testowy_ze_srednikiem_daje_jeden_blok_tabeli() -> None:
+    dane = (KATALOG_DANYCH / "tabela_metod.csv").read_bytes()
+    tekst, _ = zdekoduj(dane)
+    dokument = EkstraktorCsv().wyekstrahuj("plik_dokument-6", tekst)
+
+    assert len(dokument.bloki) == 1
+    wiersze = dokument.bloki[0].tresc.split("\n")
+    assert wiersze[0] == "metoda\tkoszt_obliczeniowy\twykrywa\tdomyslnie_wlaczona"
+    assert len(wiersze) == 5

@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import io
+from pathlib import Path
 
 from ebooklib import epub
 
 from gnb.core.stale import PoziomPewnosciStruktury, RodzajBloku, TypZrodla
 from gnb.extractors.plik_epub import EkstraktorEpub
+
+KATALOG_DANYCH = Path(__file__).resolve().parents[1] / "dane"
 
 
 def _epub_z_dwoma_rozdzialami(*, tytul: str = "Testowa Książka") -> bytes:
@@ -82,3 +85,13 @@ def test_obsluguje_wylacznie_format_epub() -> None:
     ekstraktor = EkstraktorEpub()
     assert ekstraktor.obsluguje(TypZrodla.PLIK_DOKUMENT, "epub") is True
     assert ekstraktor.obsluguje(TypZrodla.PLIK_DOKUMENT, "docx") is False
+
+
+def test_plik_testowy_ma_naglowek_i_akapity() -> None:
+    dane = (KATALOG_DANYCH / "ksiazka.epub").read_bytes()
+    dokument = EkstraktorEpub().wyekstrahuj("plik_dokument-6", dane)
+
+    rodzaje = [blok.rodzaj for blok in dokument.bloki]
+    assert RodzajBloku.NAGLOWEK in rodzaje
+    assert RodzajBloku.AKAPIT in rodzaje
+    assert dokument.tytul is not None

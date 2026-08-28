@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import io
+from pathlib import Path
 
 import docx
 
 from gnb.core.stale import PoziomPewnosciStruktury, RodzajBloku, TypZrodla
 from gnb.extractors.plik_docx import EkstraktorDocx
+
+KATALOG_DANYCH = Path(__file__).resolve().parents[1] / "dane"
 
 
 def _docx_z_przykladowa_trescia() -> bytes:
@@ -91,3 +94,14 @@ def test_obsluguje_wylacznie_format_docx() -> None:
     ekstraktor = EkstraktorDocx()
     assert ekstraktor.obsluguje(TypZrodla.PLIK_DOKUMENT, "docx") is True
     assert ekstraktor.obsluguje(TypZrodla.PLIK_DOKUMENT, "pdf") is False
+
+
+def test_plik_testowy_ma_naglowki_akapity_i_liste() -> None:
+    dane = (KATALOG_DANYCH / "dokument.docx").read_bytes()
+    dokument = EkstraktorDocx().wyekstrahuj("plik_dokument-7", dane)
+
+    rodzaje = [blok.rodzaj for blok in dokument.bloki]
+    assert RodzajBloku.NAGLOWEK in rodzaje
+    assert RodzajBloku.AKAPIT in rodzaje
+    assert RodzajBloku.LISTA in rodzaje
+    assert dokument.tytul == "Jak przygotować bazę wiedzy dla asystenta AI"

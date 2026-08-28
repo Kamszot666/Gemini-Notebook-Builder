@@ -1,14 +1,16 @@
 """Testy ekstraktora plików PDF.
 
-Pliki PDF do testów są budowane ręcznie, bez zewnętrznych narzędzi, jako
-minimalny poprawny dokument ze stronami zawierającymi prosty ciąg tekstu
-rysowany operatorem `Tj`. Wystarcza to do sprawdzenia odczytu tekstu, bez
-angażowania dodatkowej zależności wyłącznie na potrzeby testów.
+Testy wykrywania powtarzalnego nagłówka i numeru strony oraz testy błędów
+kontrolowanych korzystają z gotowych plików w `tests/dane`, opisanych w
+`tests/dane/README_dane_testowe.md`. Pozostałe testy budują plik PDF ręcznie,
+bez zewnętrznych narzędzi, jako minimalny poprawny dokument ze stronami
+zawierającymi prosty ciąg tekstu rysowany operatorem `Tj`.
 """
 
 from __future__ import annotations
 
 import io
+from pathlib import Path
 
 import pytest
 from pypdf import PdfWriter
@@ -16,6 +18,8 @@ from pypdf import PdfWriter
 from gnb.core.stale import PoziomPewnosciStruktury, TypZrodla
 from gnb.core.wyjatki import BladTrwaly
 from gnb.extractors.plik_pdf import EkstraktorPdf
+
+KATALOG_DANYCH = Path(__file__).resolve().parents[1] / "dane"
 
 
 def _pdf_z_tekstem(*strony_tekstow: str) -> bytes:
@@ -105,3 +109,30 @@ def test_obsluguje_wylacznie_format_pdf() -> None:
     ekstraktor = EkstraktorPdf()
     assert ekstraktor.obsluguje(TypZrodla.PLIK_DOKUMENT, "pdf") is True
     assert ekstraktor.obsluguje(TypZrodla.PLIK_DOKUMENT, "docx") is False
+
+
+def test_powtarzalny_naglowek_i_numer_strony_znikaja_bez_utraty_tresci() -> None:
+    dane = (KATALOG_DANYCH / "pdf_tekstowy.pdf").read_bytes()
+    dokument = EkstraktorPdf().wyekstrahuj("plik_dokument-6", dane)
+
+    assert "Nagłówek powtarzany na każdej stronie" not in dokument.tekst
+    assert "Strona 1" not in dokument.tekst
+    assert "Strona 2" not in dokument.tekst
+    assert "Strona 3" not in dokument.tekst
+    assert dokument.tekst.count("Trzecim błędem jest utrata informacji") == 3
+    assert "Drugim częstym błędem jest usuwanie materiałów" in dokument.tekst
+
+
+def test_skan_bez_warstwy_tekstowej_daje_ostrzezenie() -> None:
+    dane = (KATALOG_DANYCH / "pdf_skan.pdf").read_bytes()
+    dokument = EkstraktorPdf().wyekstrahuj("plik_dokument-7", dane)
+
+    assert dokument.tekst == ""
+    assert dokument.ostrzezenia
+
+
+def test_plik_uszkodzony_z_danych_testowych_konczy_sie_bledem_trwalym() -> None:
+    dane = (KATALOG_DANYCH / "pdf_uszkodzony.pdf").read_bytes()
+
+    with pytest.raises(BladTrwaly, match="uszkodzony"):
+        EkstraktorPdf().wyekstrahuj("plik_dokument-8", dane)

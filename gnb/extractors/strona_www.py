@@ -50,6 +50,7 @@ from lxml import etree, html
 
 from gnb.core.model import BlokTresci, DokumentWyekstrahowany
 from gnb.core.stale import PoziomPewnosciStruktury, RodzajBloku, TypZrodla
+from gnb.extractors.bloki_markdown import zapisz_bloki_jako_markdown
 
 METODA_GLOWNA = "trafilatura"
 METODA_ZAPASOWA = "lxml_zapasowy"
@@ -145,7 +146,7 @@ class EkstraktorStronyWww:
             metadane["liczba_odnosnikow"] = str(len(odnosniki))
         return DokumentWyekstrahowany(
             identyfikator_zrodla=identyfikator_zrodla,
-            tekst=self._z_sekcja_odnosnikow(_markdown_z_blokow(bloki), odnosniki),
+            tekst=self._z_sekcja_odnosnikow(zapisz_bloki_jako_markdown(bloki), odnosniki),
             poziom_pewnosci_struktury=PoziomPewnosciStruktury.SREDNI,
             metoda_ekstrakcji=METODA_GLOWNA,
             tytul=metadane.get("tytul"),
@@ -317,56 +318,6 @@ def _sekcja_odnosnikow(odnosniki: list[Odnosnik]) -> str:
         for numer, odnosnik in enumerate(odnosniki, start=1)
     )
     return "\n".join(wiersze)
-
-
-def _markdown_z_blokow(bloki: list[BlokTresci]) -> str:
-    """Składa tekst w zapisie Markdown z rozpoznanych bloków treści.
-
-    Zapis Markdown jest tu postacią pośrednią. Plik MD powstanie z niego wprost,
-    a plik TXT po przepisaniu bez znaczników, tą samą drogą co dokumenty
-    markdownowe podane przez użytkownika.
-    """
-    fragmenty: list[str] = []
-    for blok in bloki:
-        if blok.rodzaj is RodzajBloku.NAGLOWEK:
-            fragmenty.append(f"{'#' * max(1, min(blok.poziom, 6))} {blok.tresc}")
-        elif blok.rodzaj is RodzajBloku.AKAPIT:
-            fragmenty.append(blok.tresc)
-        elif blok.rodzaj is RodzajBloku.LISTA:
-            fragmenty.append(_markdown_listy(blok))
-        elif blok.rodzaj is RodzajBloku.TABELA:
-            fragmenty.append(_markdown_tabeli(blok))
-        elif blok.rodzaj is RodzajBloku.CYTAT:
-            fragmenty.append(
-                "\n".join(f"> {wiersz}" for wiersz in blok.tresc.split("\n") if wiersz)
-            )
-        elif blok.rodzaj is RodzajBloku.KOD:
-            fragmenty.append(f"```\n{blok.tresc}\n```")
-    return "\n\n".join(fragment for fragment in fragmenty if fragment)
-
-
-def _markdown_listy(blok: BlokTresci) -> str:
-    """Zapisuje listę jako Markdown, zachowując rozróżnienie na wypunktowaną i numerowaną."""
-    elementy = [element for element in blok.tresc.split("\n") if element]
-    if blok.poziom == 1:
-        return "\n".join(f"{numer}. {element}" for numer, element in enumerate(elementy, start=1))
-    return "\n".join(f"- {element}" for element in elementy)
-
-
-def _markdown_tabeli(blok: BlokTresci) -> str:
-    """Zapisuje tabelę jako tabelę Markdown z wierszem rozdzielającym."""
-    wiersze = [wiersz for wiersz in blok.tresc.split("\n") if wiersz]
-    if not wiersze:
-        return ""
-    naglowek = wiersze[0].split("\t")
-    zapis = [
-        "| " + " | ".join(naglowek) + " |",
-        "| " + " | ".join("---" for _ in naglowek) + " |",
-    ]
-    for wiersz in wiersze[1:]:
-        komorki = wiersz.split("\t")
-        zapis.append("| " + " | ".join(komorki) + " |")
-    return "\n".join(zapis)
 
 
 def _wiersze_tabeli(element: etree._Element) -> list[str]:

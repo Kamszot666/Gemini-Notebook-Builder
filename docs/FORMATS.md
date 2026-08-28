@@ -1,4 +1,4 @@
-# Obsługiwane formaty — stan po etapie trzecim
+# Obsługiwane formaty — stan po etapie czwartym A
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
 Kolejne formaty, czyli PDF, DOCX, EPUB, ODT, PPTX, CSV, SRT, VTT, obrazy oraz

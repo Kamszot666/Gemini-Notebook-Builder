@@ -39,7 +39,7 @@ def _przykladowy_checkpoint() -> Checkpoint:
                         sciezka_wzgledna="pliki_wynikowe/a.txt",
                         format="txt",
                         liczba_slow=10,
-                        liczba_znakow=60,
+                        liczba_znakow_pliku=60,
                         rozmiar_bajtow=61,
                         checksum="b" * 64,
                     )
@@ -95,3 +95,36 @@ def test_uszkodzony_plik_glowny_wczytuje_sie_z_kopii(tmp_path: Path) -> None:
     wczytany = wczytaj(sciezka)
     assert wczytany is not None
     assert wczytany.zakonczony is False
+
+
+def test_ocena_jakosci_przezywa_zapis_i_odczyt(tmp_path: Path) -> None:
+    checkpoint = _przykladowy_checkpoint()
+    stan = checkpoint.zrodla["plik_tekstowy-1"]
+    stan.ocena_jakosci = "podejrzana"
+    stan.powody_oceny = ["źródło nie ma tytułu"]
+
+    sciezka = tmp_path / "checkpoint.json"
+    zapisz(sciezka, checkpoint)
+    odczytany = wczytaj(sciezka)
+
+    assert odczytany is not None
+    odczytany_stan = odczytany.zrodla["plik_tekstowy-1"]
+    assert odczytany_stan.ocena_jakosci == "podejrzana"
+    assert odczytany_stan.powody_oceny == ["źródło nie ma tytułu"]
+
+
+def test_brak_oceny_jakosci_w_starszym_checkpoincie_jest_poprawny(tmp_path: Path) -> None:
+    """Checkpoint bez pól oceny wczytuje się bez błędu, z oceną pustą."""
+    sciezka = tmp_path / "checkpoint.json"
+    zapisz(sciezka, _przykladowy_checkpoint())
+    tekst = sciezka.read_text(encoding="utf-8")
+    sciezka.write_text(
+        tekst.replace('"ocena_jakosci": null,', "").replace('"powody_oceny": [],', ""),
+        encoding="utf-8",
+    )
+
+    odczytany = wczytaj(sciezka)
+
+    assert odczytany is not None
+    assert odczytany.zrodla["plik_tekstowy-1"].ocena_jakosci is None
+    assert odczytany.zrodla["plik_tekstowy-1"].powody_oceny == []

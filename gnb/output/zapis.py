@@ -10,8 +10,15 @@ przygotowaną przez `gnb.output.tekst_bez_znacznikow`. Dzięki temu dwa pliki
 wynikowe tego samego źródła nie są swoimi kopiami i nie zajmują dwóch slotów
 notatnika na identyczną treść.
 
+Na początku każdego pliku, w wersji TXT i w wersji MD, zapisywany jest nagłówek
+metadanych źródła, w identycznej postaci zwykłego tekstu. Buduje go moduł
+`gnb.output.naglowek_metadanych`.
+
 Moduł zwraca opis `PlikWynikowy` dla każdego zapisanego pliku, z policzonymi
-słowami i znakami, rozmiarem w bajtach oraz sumą kontrolną.
+słowami i znakami, rozmiarem w bajtach oraz sumą kontrolną. Liczby te dotyczą
+zawartości pliku, więc obejmują nagłówek. Limity notatnika są sprawdzane osobno,
+na samej treści dokumentu, ponieważ nagłówek jest informacją o źródle, a nie jego
+treścią.
 """
 
 from __future__ import annotations
@@ -22,6 +29,7 @@ from gnb.core.identyfikatory import suma_kontrolna_pliku
 from gnb.core.liczenie_slow import policz_slowa, policz_znaki
 from gnb.core.model import DokumentZnormalizowany, PlikWynikowy
 from gnb.core.stale import FormatWynikowy
+from gnb.output.naglowek_metadanych import polacz_z_trescia
 from gnb.output.regula_md import DecyzjaFormatu
 
 FORMAT_MD = "md"
@@ -36,6 +44,7 @@ def zapisz_wyniki(
     *,
     formaty_wlaczone: tuple[str, ...] = ("txt", "md"),
     tekst_txt: str | None = None,
+    naglowek: str = "",
 ) -> list[PlikWynikowy]:
     """Zapisuje plik TXT zawsze, a plik MD tylko gdy pozwala reguła i konfiguracja.
 
@@ -45,10 +54,15 @@ def zapisz_wyniki(
     przeciwnym razie ten sam znormalizowany tekst. Wywołujący podaje `tekst_txt`
     wtedy, gdy tekst źródła zawiera znaczniki formatowania i wersja TXT ma być
     ich pozbawiona.
+
+    Nagłówek metadanych, jeżeli został podany, trafia na początek obu wersji
+    w identycznej postaci i jest oddzielony od treści jednym pustym wierszem.
     """
     katalog_wynikow.mkdir(parents=True, exist_ok=True)
-    tresc_md = _z_koncowym_znakiem_nowej_linii(dokument.tekst)
-    tresc_txt = _z_koncowym_znakiem_nowej_linii(dokument.tekst if tekst_txt is None else tekst_txt)
+    tresc_md = _z_koncowym_znakiem_nowej_linii(polacz_z_trescia(naglowek, dokument.tekst))
+    tresc_txt = _z_koncowym_znakiem_nowej_linii(
+        polacz_z_trescia(naglowek, dokument.tekst if tekst_txt is None else tekst_txt)
+    )
 
     wyniki: list[PlikWynikowy] = []
     sciezka_txt = katalog_wynikow / f"{nazwa_bazowa}.txt"

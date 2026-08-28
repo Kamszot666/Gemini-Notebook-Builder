@@ -304,7 +304,7 @@ Rozwiązanie przyjęte przez użytkownika:
 Każdy temat otrzymuje osobny projekt i osobny katalog. Katalogi te powstają poza repozytorium.
 
 1. Katalog nadrzędny pochodzi z konfiguracji. Domyślnie jest to `Dokumenty\Gemini Notebook Builder`, wyznaczany dynamicznie, a nie wpisany na sztywno, ponieważ nazwa katalogu Dokumenty zależy od języka systemu i może być przeniesiona na inny dysk.
-2. Nazwa katalogu projektu jest nazwą projektu. Jeżeli użytkownik jej nie poda, wygeneruj krótką nazwę na podstawie tematu.
+2. Nazwa katalogu projektu jest nazwą projektu. Nazwa podana przez użytkownika ma zawsze pierwszeństwo. Gdy jej nie poda, wygeneruj krótką nazwę: z tematu dla tekstu wklejonego, z nazwy pliku dla pliku, z członu `youtube` i identyfikatora filmu dla filmu, a dla strony z nazwy hosta bez przedrostka `www` oraz początku sumy kontrolnej źródła. Nazwa nigdy nie jest całym adresem, ponieważ czytnik ekranu odczytuje ją w całości przy każdym przejściu przez katalog wyników.
 3. Nazwa musi być bezpieczna dla Windows, zgodnie z zasadami sanityzacji z sekcji piętnastej.
 4. Użytkownik może wskazać własny katalog dla konkretnego projektu.
 5. Wewnątrz katalogu projektu trzymaj oddzielnie: materiały źródłowe, wyniki pośrednie, pliki wynikowe przeznaczone do notatnika, manifest, logi i checkpoint. Pliki wynikowe muszą być łatwe do znalezienia bez przeglądania reszty.
@@ -471,7 +471,7 @@ Czego w tej procedurze nie wolno, niezależnie od okoliczności:
 
 ## 18c. Etap czwarty A — zakres
 
-Ten etap jest zaplanowany, ale jeszcze nieuruchomiony. Powstaje po etapie trzecim, a przed etapem czwartym.
+Ten etap jest wykonany. Powstał po etapie trzecim, a przed etapem czwartym. Punkty pierwszy i drugi są zaimplementowane, opisane w `docs/FORMATS.md` i pokryte testami. Punkt trzeci pozostaje odłożony.
 
 1. Metadane artykułu z danych strukturalnych JSON-LD. Jeżeli strona zawiera poprawny blok schema.org typu `Article`, `NewsArticle` albo `BlogPosting`, wykorzystaj z niego autora, datę publikacji, datę aktualizacji, wydawcę i opis, a następnie zapisz je w manifeście oraz w nagłówku metadanych pliku wynikowego. Pole `articleBody` traktuj wyłącznie jako materiał porównawczy do oceny jakości ekstrakcji, nigdy jako główne źródło treści, ponieważ serwisy wypełniają je bardzo nierówno. Każdą wartość waliduj, a przy sprzeczności między JSON-LD a wynikiem ekstraktora zapisz obie wartości i oznacz rozbieżność w manifeście, zamiast po cichu wybierać jedną. Powód: data publikacji pozwala odróżnić artykuł sprzed lat od tegorocznego, co dla materiału w notatniku bywa różnicą między informacją a dezinformacją.
 2. Walidacja jakości ekstrakcji. Po ekstrakcji, a przed zapisem, oceń wynik zestawem heurystyk: liczba słów, obecność tytułu, liczba akapitów i nagłówków, stosunek długości treści do liczby elementów nawigacyjnych w oryginale, wykrycie fraz świadczących o stronie błędu albo o żądaniu włączenia JavaScriptu, wykrycie powtarzających się fragmentów oraz pustych sekcji. Wynikiem jest jedna z dwóch ocen zapisywanych w manifeście: ekstrakcja poprawna albo ekstrakcja podejrzana. Źródło z oceną podejrzaną zapisz normalnie, nigdy go nie kasuj, ale wypisz je w osobnej sekcji raportu końcowego zatytułowanej „Materiały do sprawdzenia”, wraz z powodem podejrzenia. Powód: dziś źródło, z którego wyciągnięto trzysta znaków zamiast dwunastu tysięcy, wygląda w wynikach identycznie jak poprawne, a to jest cicha utrata treści, czyli naruszenie drugiego priorytetu z sekcji czwartej.
@@ -488,7 +488,11 @@ Te rozwiązania zostały rozważone i odrzucone. Zapis istnieje po to, żeby nie
 
 Sprawy zauważone w trakcie pracy, świadomie odłożone, żeby nie ruszać ich przy okazji innej zmiany. Każda pozycja ma objaw, przyczynę i propozycję do rozważenia.
 
-1. Nazwa katalogu projektu przy pojedynczym źródle sieciowym. Objaw: dla jednego filmu katalog nazywa się `https_www_youtube_com_watch_v_ig9ce55wbty`, mimo że tytuł filmu jest znany i został poprawnie użyty w nazwie pliku wynikowego. Przyczyna: nazwa projektu powstaje przed pobraniem źródła, więc w tym momencie tytuł nie jest jeszcze znany, a nazwa jest generowana z adresu. Propozycja do rozważenia: przy pojedynczym źródle wyznaczać nazwę projektu po pobraniu, a przed utworzeniem katalogu. Zmiana nazwy katalogu już po utworzeniu odpada, bo oznaczałaby przenoszenie katalogu w trakcie pracy, co koliduje z checkpointem i wznawianiem. Decyzja przy etapie czwartym A. Zamiana liter na małe dotyczy wyłącznie nazwy katalogu i nie sięga identyfikatora filmu, więc danych to nie psuje.
+1. Nazwa katalogu projektu z tytułu źródła. Stan obecny: gdy użytkownik nie poda nazwy opcją `--projekt`, nazwa powstaje z adresu pierwszego źródła. Film daje `youtube_` i identyfikator filmu, strona daje nazwę hosta bez przedrostka `www` oraz początek sumy kontrolnej źródła, na przykład `example_com_a2aa00a5`. Jest to poprawa wobec poprzedniego stanu, w którym nazwą był cały adres, czterdziestoznakowy i nieczytelny przy odsłuchu.
+
+   Właściwe rozstrzygnięcie, czyli nazwa budowana z tytułu źródła, pozostaje otwarte. Wymagałoby ono znajomości tytułu przed utworzeniem katalogu, a tytuł jest znany dopiero po pobraniu. Wariant polegający na odłożeniu nazwy do czasu pobrania pierwszego źródła został rozważony i odrzucony: katalog projektu powstaje dziś od pierwszej sekundy, bo od razu piszą do niego log ważny, log szczegółowy i checkpoint. Odłożenie nazwy wymagałoby albo zapisu do katalogu tymczasowego i przeniesienia go po pobraniu, albo trzymania logów w pamięci. Obie drogi dotykają wznawiania, a możliwość wznowienia pracy stoi w hierarchii priorytetów wyżej niż czytelność nazwy katalogu.
+
+   Waga tego zagadnienia spadła po wprowadzeniu nagłówka metadanych: tytuł źródła jest widoczny w samym pliku wynikowym, więc nazwa katalogu przestała być jedynym miejscem, w którym można go odczytać.
 
 ## 19. Kryterium ukończenia funkcji
 

@@ -170,6 +170,22 @@ Wewnętrznie końce wierszy są sprowadzane do pojedynczego znaku nowej linii,
 a znaki Unicode do postaci NFC. Pliki wynikowe są zapisywane w UTF-8 bez znaku
 kolejności bajtów, z końcami wierszy LF.
 
+### Białe znaki i znaki niewidoczne
+
+Wewnątrz wiersza tabulatory, twarde spacje, wąskie spacje niepodzielne oraz ciągi
+spacji stają się jedną spacją. Powód nie jest kosmetyczny: czytnik ekranu
+odczytuje tabulator jako osobny element, a w materiale dla notatnika jest to szum.
+
+Wcięcie na początku wiersza jest zachowywane co do liczby znaków, ponieważ niesie
+znaczenie: tak zapisywane są zagnieżdżenia list i wnętrze bloków kodu. Wcięcie
+zrobione tabulatorami staje się wcięciem spacjami, po jednej spacji na znak.
+
+Usuwane są znaki niewidoczne dla czytelnika: spacja o zerowej szerokości, spoiwo
+słów, znacznik kolejności bajtów wewnątrz tekstu oraz miękki łącznik. Usuwane są
+także znaki sterujące inne niż znak nowej linii. Zachowywane są natomiast łącznik
+nierozdzielający i spoiwo, czyli ZWNJ oraz ZWJ, ponieważ w części pism i w
+sekwencjach emoji zmieniają znaczenie zapisu.
+
 ## Wynik: TXT zawsze, MD warunkowo
 
 Plik TXT powstaje zawsze. Plik MD powstaje dodatkowo tylko wtedy, gdy spełnione
@@ -305,6 +321,124 @@ Przepisanie nie może gubić treści. Sprawdza to test
 `tests/output/test_tekst_bez_znacznikow.py`, który porównuje obie wersje pliku
 `tests/dane/dokument_strukturalny.md` i wymaga, żeby w wersji TXT znalazł się
 każdy wiersz treści i każda komórka tabeli.
+
+## Nagłówek metadanych pliku wynikowego
+
+Każdy plik wynikowy zaczyna się nagłówkiem metadanych źródła. Sama treść nie
+mówi, skąd pochodzi: transkrypcja filmu bez tytułu i adresu jest w notatniku
+materiałem bez kontekstu, a artykuł bez daty publikacji bywa różnicą między
+informacją a dezinformacją.
+
+Każdy wiersz nagłówka ma postać etykieta, dwukropek, spacja, wartość. Kolejność
+pól jest stała:
+
+1. Tytuł.
+2. Typ źródła.
+3. Adres, dla źródeł sieciowych. Jest to adres pobierania, a nie postać
+   kanoniczna, żeby dało się go wkleić do przeglądarki wprost.
+4. Plik, dla źródeł lokalnych. Jest to nazwa pliku wejściowego.
+5. Autor.
+6. Data publikacji.
+7. Kanał, wyłącznie dla filmu.
+8. Długość, wyłącznie dla filmu, zapisana słownie, na przykład „20 minut 3 sekundy”.
+9. Język napisów, wyłącznie dla filmu z pobranymi napisami.
+10. Rodzaj napisów, wyłącznie dla filmu z pobranymi napisami.
+11. Data importu, w czasie lokalnym.
+12. Identyfikator źródła.
+
+Pole nieobecne dla danego źródła jest pomijane w całości, a nie drukowane z pustą
+wartością. Pola „Adres” i „Plik” wykluczają się wzajemnie, a tekst wklejony nie ma
+żadnego z nich.
+
+Nagłówek jest oddzielony od treści dokładnie jednym pustym wierszem. Nie ma linii
+ozdobnych ani separatorów ze znaków. Do wersji MD trafia w identycznej postaci
+zwykłego tekstu, bez składni Markdown, ponieważ są to metadane strukturalne,
+a nie treść artykułu, i nie mogą stać się nagłówkiem sekcji ani trafić do
+automatycznego spisu treści notatnika.
+
+## Metadane z danych strukturalnych strony
+
+Strony często opisują artykuł blokiem `application/ld+json` w standardzie
+schema.org. Aplikacja odczytuje z niego autora, datę publikacji, datę
+aktualizacji, wydawcę i opis, i uzupełnia nimi metadane z ekstraktora. Blok
+o innym typie niż `Article`, `NewsArticle` albo `BlogPosting` jest pomijany,
+podobnie jak blok, którego nie da się odczytać. Brak danych strukturalnych nie
+jest błędem: są one dodatkiem do ekstrakcji, a nie warunkiem przetworzenia
+źródła.
+
+Pole `articleBody` jest odczytywane wyłącznie jako materiał porównawczy do oceny
+jakości ekstrakcji. Nigdy nie zastępuje wyniku ekstraktora, bo serwisy wypełniają
+je bardzo nierówno: bywa puste, skrócone do zajawki albo pozbawione śródtytułów.
+
+Gdy ekstraktor i dane strukturalne podają to samo, w manifeście jest jedna
+wartość. Gdy podają co innego, żadna z nich nie jest kasowana. Pod kluczem pola
+zostaje wartość z ekstraktora, wartość z danych strukturalnych trafia pod klucz
+z przyrostkiem `_wg_danych_strukturalnych`, a nazwy pól rozbieżnych są wymienione
+pod kluczem `rozbieznosc_metadanych`. Rozbieżność jest dopisywana także do logu
+szczegółowego. Ciche wybranie jednej z dwóch sprzecznych dat oznaczałoby wpisanie
+do manifestu daty, której w źródle nie było.
+
+W nagłówku pliku wynikowego pojawia się wartość z ekstraktora, ponieważ pochodzi
+z tej samej ścieżki co treść. Obie wartości są w manifeście.
+
+## Ocena jakości ekstrakcji
+
+Źródło, z którego wyciągnięto trzysta znaków zamiast dwunastu tysięcy, wygląda
+w wynikach dokładnie tak samo jak poprawne: ma plik, wpis w manifeście i sumę
+kontrolną. Żeby taka cicha utrata treści dała się zauważyć, każde źródło
+przechodzące przez rozpoznawanie treści dostaje ocenę jakości: „poprawna” albo
+„podejrzana”.
+
+Oceniane są strony internetowe i filmy, bo ich treść powstaje przez ekstrakcję
+albo przez napisy. Tekst wklejony oraz pliki TXT i MD nie są oceniane, bo ich
+treść jest dokładnie tym, co podał użytkownik. Ostrzeżenie, którego nie da się
+naprawić, uczyłoby tylko pomijania wszystkich ostrzeżeń.
+
+Ocena „podejrzana” powstaje, gdy zachodzi co najmniej jeden z warunków:
+
+1. Treść ma mniej niż pięćdziesiąt słów.
+2. Źródło nie ma tytułu.
+3. Treść nie ma podziału na akapity.
+4. Treść zawiera zwrot typowy dla strony błędu albo dla żądania włączenia
+   skryptów.
+5. Ten sam akapit powtarza się co najmniej trzy razy.
+6. W oryginale jest więcej odnośników niż słów w wyniku ekstrakcji.
+7. Treść z danych strukturalnych jest ponad dwa razy dłuższa od wyniku
+   ekstrakcji.
+8. W treści jest więcej nagłówków niż akapitów, przy co najmniej dwóch
+   nagłówkach.
+9. Co najmniej dwa nagłówki nie mają pod sobą żadnej treści.
+
+Warunki ósmy i dziewiąty dotyczą tylko materiału z rozpoznaną strukturą.
+Transkrypcja filmu nie ma nagłówków, więc nie może stać się przez nie podejrzana.
+
+Źródło podejrzane jest zapisywane normalnie i nigdy nie jest kasowane ani
+pomijane. Ma pliki wynikowe, ma status „spakowane” i liczy się do limitu źródeł.
+Zmienia się tylko to, że użytkownik o nim wie: ocena i lista powodów trafiają do
+manifestu, wpis pojawia się w logu ważnym i w logu szczegółowym, a raport końcowy
+wymienia takie źródła w sekcji „Materiały do sprawdzenia”.
+
+Progi są celowo zachowawcze. Fałszywe podejrzenie kosztuje jedno zajrzenie do
+pliku, a przeoczona utrata treści kosztuje wiarygodność całej bazy wiedzy.
+
+## Dwie miary liczby znaków
+
+W manifeście występują dwie liczby znaków i mierzą co innego, dlatego noszą różne
+nazwy.
+
+1. Liczba znaków źródła, zapisana przy wpisie źródła, liczy sam znormalizowany
+   tekst dokumentu. To ona służy do sprawdzania limitu notatnika.
+2. Liczba znaków pliku, zapisana przy wpisie pliku wynikowego pod nazwą
+   `liczba_znakow_pliku`, liczy zawartość zapisanego pliku. Jest zawsze o jeden
+   większa, ponieważ każdy plik wynikowy kończy się znakiem nowej linii.
+
+Liczby słów są w obu miejscach takie same, bo znak nowej linii nie tworzy nowego
+słowa.
+
+Obie liczby przy pliku wynikowym obejmują nagłówek metadanych, ponieważ dotyczą
+zawartości pliku. Limity notatnika są natomiast sprawdzane na samej treści
+dokumentu, bez nagłówka: limit słów i limit rozmiaru mówią o tym, ile materiału
+niesie źródło, a nagłówek jest informacją o źródle, a nie jego treścią.
 
 ## Nazwy plików wynikowych
 

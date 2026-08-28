@@ -7,7 +7,10 @@ wykorzystania limitu źródeł, największy plik wynikowy, łączną liczbę sł
 czas pracy.
 
 Po liczbach raport wymienia z nazwy każde źródło pominięte oraz każde źródło
-zakończone błędem, razem z powodem. Sama liczba pominięć nie mówi użytkownikowi,
+zakończone błędem, razem z powodem. Na końcu wymienia materiały do sprawdzenia,
+czyli źródła zapisane poprawnie, ale o podejrzanym wyniku ekstrakcji. Takie
+źródło nie jest kasowane ani pomijane: jest w wynikach i czeka na obejrzenie
+przez człowieka. Sama liczba pominięć nie mówi użytkownikowi,
 czego zabrakło, a odszukiwanie tego w manifeście jest niewygodne przy odsłuchu
 czytnikiem ekranu.
 
@@ -20,6 +23,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+NAGLOWEK_MATERIALOW_DO_SPRAWDZENIA = "Materiały do sprawdzenia"
+OPIS_MATERIALOW_DO_SPRAWDZENIA = (
+    "Te źródła zostały zapisane i są w plikach wynikowych. Wynik ich ekstrakcji "
+    "wygląda jednak podejrzanie, więc warto zajrzeć do pliku przed wgraniem go "
+    "do notatnika. Żadne z nich nie zostało usunięte."
+)
+
 
 @dataclass(frozen=True, slots=True)
 class ZrodloNieprzetworzone:
@@ -29,6 +39,15 @@ class ZrodloNieprzetworzone:
     pochodzenie: str
     status: str
     powod: str
+
+
+@dataclass(frozen=True, slots=True)
+class MaterialDoSprawdzenia:
+    """Źródło zapisane poprawnie, którego wynik ekstrakcji wygląda podejrzanie."""
+
+    identyfikator: str
+    pochodzenie: str
+    powody: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +69,7 @@ class PodsumowanieProjektu:
     laczna_liczba_slow: int
     czas_pracy_sekundy: float
     zrodla_nieprzetworzone: tuple[ZrodloNieprzetworzone, ...] = ()
+    materialy_do_sprawdzenia: tuple[MaterialDoSprawdzenia, ...] = ()
 
 
 def zbuduj_raport(nazwa_projektu: str, podsumowanie: PodsumowanieProjektu) -> str:
@@ -81,6 +101,7 @@ def zbuduj_raport(nazwa_projektu: str, podsumowanie: PodsumowanieProjektu) -> st
         f"Czas pracy: {_opis_czasu(podsumowanie.czas_pracy_sekundy)}",
     ]
     wiersze.extend(_wiersze_zrodel_nieprzetworzonych(podsumowanie.zrodla_nieprzetworzone))
+    wiersze.extend(_wiersze_materialow_do_sprawdzenia(podsumowanie.materialy_do_sprawdzenia))
     return "\n".join(wiersze) + "\n"
 
 
@@ -96,6 +117,32 @@ def _wiersze_zrodel_nieprzetworzonych(
         wiersze.append(f"  Identyfikator: {zrodlo.identyfikator}")
         wiersze.append(f"  Status: {zrodlo.status}")
         wiersze.append(f"  Powód: {zrodlo.powod}")
+        wiersze.append("")
+    return wiersze[:-1]
+
+
+def _wiersze_materialow_do_sprawdzenia(
+    materialy: tuple[MaterialDoSprawdzenia, ...],
+) -> list[str]:
+    """Buduje wykaz źródeł o podejrzanym wyniku ekstrakcji wraz z powodami.
+
+    Sekcja powstaje tylko wtedy, gdy jest co wypisać, żeby raport z samych
+    poprawnych źródeł nie kończył się pustym nagłówkiem.
+    """
+    if not materialy:
+        return []
+    wiersze = [
+        "",
+        f"{NAGLOWEK_MATERIALOW_DO_SPRAWDZENIA}, liczba: {len(materialy)}",
+        "",
+        OPIS_MATERIALOW_DO_SPRAWDZENIA,
+        "",
+    ]
+    for material in materialy:
+        wiersze.append(f"Źródło: {material.pochodzenie}")
+        wiersze.append(f"  Identyfikator: {material.identyfikator}")
+        wiersze.append("  Powody:")
+        wiersze.extend(f"    - {powod}" for powod in material.powody)
         wiersze.append("")
     return wiersze[:-1]
 

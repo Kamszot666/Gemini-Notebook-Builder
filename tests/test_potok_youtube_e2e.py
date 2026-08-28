@@ -243,7 +243,8 @@ def test_wlaczone_znaczniki_czasu_pojawiaja_sie_w_pliku(tmp_path: Path) -> None:
     (plik,) = katalog.iterdir()
     tresc = plik.read_text(encoding="utf-8")
 
-    assert tresc.startswith("[00:00] ")
+    _, _, po_naglowku = tresc.partition("\n\n")
+    assert po_naglowku.startswith("[00:00] ")
 
 
 def test_film_bez_napisow_jest_pomijany_z_odeslaniem_do_etapu_dziewiatego(
@@ -458,3 +459,79 @@ def test_napisy_w_preferowanym_jezyku_nie_daja_ostrzezenia(tmp_path: Path) -> No
     )
     (zrodlo,) = manifest["zrodla"]
     assert "jezyk_awaryjny" not in zrodlo["metadane"]
+
+
+def test_nazwa_projektu_dla_filmu_zawiera_identyfikator_filmu(tmp_path: Path) -> None:
+    pobieracz, _ = _pobieracz()
+    wynik = przetworz_projekt(
+        _pozycje(_ADRES),
+        _konfiguracja(tmp_path),
+        zegar=_zegar_krokowy(),
+        transport_http=_transport_bez_regul(),
+        pobieracz_youtube=pobieracz,
+    )
+
+    assert wynik.nazwa_projektu == "youtube_ig9ce55wbty"
+
+
+def test_skrocona_postac_adresu_daje_te_sama_nazwe_projektu(tmp_path: Path) -> None:
+    pobieracz, _ = _pobieracz()
+    wynik = przetworz_projekt(
+        _pozycje(_ADRES_SKROCONY),
+        _konfiguracja(tmp_path),
+        zegar=_zegar_krokowy(),
+        transport_http=_transport_bez_regul(),
+        pobieracz_youtube=pobieracz,
+    )
+
+    assert wynik.nazwa_projektu == "youtube_ig9ce55wbty"
+
+
+def test_playlista_daje_nazwe_z_hosta_bo_nie_ma_identyfikatora_filmu(tmp_path: Path) -> None:
+    wynik = przetworz_projekt(
+        _pozycje(_ADRES_PLAYLISTY),
+        _konfiguracja(tmp_path),
+        zegar=_zegar_krokowy(),
+        transport_http=_transport_bez_regul(),
+        pobieracz_youtube=_pobieracz()[0],
+    )
+
+    assert wynik.nazwa_projektu.startswith("youtube_com_")
+
+
+def test_naglowek_filmu_zawiera_kanal_dlugosc_i_opis_napisow(tmp_path: Path) -> None:
+    wynik = _uruchom(tmp_path, nazwa="Test nagłówka filmu")
+
+    (plik_txt,) = (
+        wynik.katalog_projektu / "pliki_wynikowe"  # type: ignore[attr-defined]
+    ).glob("*.txt")
+    naglowek, _, _ = plik_txt.read_text(encoding="utf-8").partition("\n\n")
+
+    assert "Typ źródła: film z serwisu YouTube" in naglowek
+    assert "Kanał: Kanał testowy" in naglowek
+    assert "Długość: 15 minut 30 sekund" in naglowek
+    assert "Język napisów: pl" in naglowek
+    assert "Rodzaj napisów: tworzone ręcznie" in naglowek
+    assert f"Adres: {_ADRES}" in naglowek
+
+
+def test_film_podlega_ocenie_jakosci(tmp_path: Path) -> None:
+    """Transkrypcja powstaje z rozpoznania mowy, więc podlega ocenie jakości.
+
+    Napisy w danych testowych są krótkie, więc wynik jest podejrzany. Źródło mimo
+    to przechodzi cały potok i jest zapisane, a użytkownik dowiaduje się o nim
+    z raportu.
+    """
+    wynik = _uruchom(tmp_path)
+
+    manifest = json.loads(
+        wynik.sciezka_manifestu.read_text(encoding="utf-8")  # type: ignore[attr-defined]
+    )
+    (zrodlo,) = manifest["zrodla"]
+
+    assert zrodlo["ocena_jakosci"] == "podejrzana"
+    assert any("mniej niż 50 słów" in powod for powod in zrodlo["powody_oceny"])
+    assert zrodlo["status"] == "spakowane"
+    assert "Materiały do sprawdzenia, liczba: 1" in wynik.sciezka_raportu.read_text(
+        encoding="utf-8"
+    )

@@ -28,17 +28,27 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import httpx
 
 from gnb.core.identyfikatory import suma_kontrolna_bajtow
 from gnb.core.konfiguracja import Konfiguracja
 from gnb.core.model import DokumentWyekstrahowany, Zrodlo
-from gnb.core.nazwy import nazwa_pliku_wynikowego, wygeneruj_nazwe_projektu
+from gnb.core.nazwy import (
+    nazwa_pliku_wynikowego,
+    skrot_z_identyfikatora,
+    wygeneruj_nazwe_projektu,
+)
 from gnb.core.stale import StatusZrodla, TypWejscia, TypZrodla
 from gnb.core.wyjatki import BladGnb, BladTrwaly, PrzekroczonoLimit
 from gnb.core.youtube import rozpoznaj
 from gnb.extractors.bazowy import Ekstraktor, RejestrEkstraktorow, domyslny_rejestr
+from gnb.extractors.dane_strukturalne import (
+    KLUCZ_ROZBIEZNOSCI,
+    odczytaj_json_ld,
+    scal_metadane,
+)
 from gnb.extractors.strona_www import KOMUNIKAT_WYMAGA_SKRYPTOW, czy_wymaga_skryptow
 from gnb.extractors.youtube import KOMUNIKAT_NAPISY_BEZ_TRESCI
 from gnb.extractors.youtube import zbuduj_dokument as zbuduj_dokument_z_napisow
@@ -72,6 +82,7 @@ from gnb.logging_pl.dziennik import (
     NAZWA_LOGU_SZCZEGOLOWEGO,
     NAZWA_LOGU_WAZNEGO,
     ZDARZENIE_CHECKPOINT_ZAPISANY,
+    ZDARZENIE_JAKOSC_PODEJRZANA,
     ZDARZENIE_MANIFEST_ZAPISANY,
     ZDARZENIE_NAPISY_INNY_JEZYK,
     ZDARZENIE_NAPISY_WYBRANE,
@@ -97,7 +108,26 @@ from gnb.output.manifest import (
     WpisZrodla,
     zapisz_manifest,
 )
+from gnb.output.naglowek_metadanych import (
+    ETYKIETA_ADRES,
+    ETYKIETA_AUTOR,
+    ETYKIETA_DATA_IMPORTU,
+    ETYKIETA_DATA_PUBLIKACJI,
+    ETYKIETA_DLUGOSC,
+    ETYKIETA_IDENTYFIKATOR,
+    ETYKIETA_JEZYK_NAPISOW,
+    ETYKIETA_KANAL,
+    ETYKIETA_PLIK,
+    ETYKIETA_RODZAJ_NAPISOW,
+    ETYKIETA_TYP,
+    ETYKIETA_TYTUL,
+    opis_dlugosci,
+    opis_typu_zrodla,
+    zbuduj_naglowek,
+)
+from gnb.output.ocena_jakosci import OCENA_PODEJRZANA, OcenaJakosci, ocen_jakosc
 from gnb.output.raport import (
+    MaterialDoSprawdzenia,
     PodsumowanieProjektu,
     ZrodloNieprzetworzone,
     zapisz_raport,
@@ -123,6 +153,10 @@ _STATUSY_KONCOWE = frozenset(
 _ROZSZERZENIE_ORYGINALU_TEKSTU = "txt"
 _ROZSZERZENIE_ORYGINALU_NAPISOW = "json"
 
+# Typy źródeł, dla których treść powstaje przez rozpoznanie, a nie przez odczyt
+# wejścia, więc podlegają ocenie jakości ekstrakcji.
+_TYPY_OCENIANE = frozenset({TypZrodla.STRONA_WWW, TypZrodla.YOUTUBE})
+
 # Wynik fazy pobrania dla jednego adresu: treść, świadome pominięcie albo błąd.
 WynikFazyPobrania = OdpowiedzPobrania | PominietePobranie | BladGnb
 
@@ -147,6 +181,8 @@ class _PrzygotowanyDokument:
     tekst_txt: str | None
     stan_pobrania: StanPobrania | None
     metadane: dict[str, str]
+    tekst_zrodla: str | None = None
+    tresc_porownawcza: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,7 +259,16 @@ def przetworz_projekt(
             pozycje, konfiguracja, checkpoint, log, transport_http, pobieracz_youtube
         )
         wykonanie = _Wykonanie(
-            uklad, konfiguracja, checkpoint, dziennik_wazny, log, rejestr, zegar, pobrane, filmy
+            uklad,
+            konfiguracja,
+            checkpoint,
+            dziennik_wazny,
+            log,
+            rejestr,
+            zegar,
+            zegar_lokalny,
+            pobrane,
+            filmy,
         )
         for pozycja in pozycje:
             wykonanie.przetworz(pozycja)
@@ -271,6 +316,7 @@ class _Wykonanie:
         log: logging.Logger,
         rejestr: RejestrEkstraktorow,
         zegar: Callable[[], datetime],
+        zegar_lokalny: Callable[[], datetime],
         pobrane: dict[str, WynikFazyPobrania] | None = None,
         filmy: dict[str, WynikFazyFilmu] | None = None,
     ) -> None:
@@ -281,6 +327,7 @@ class _Wykonanie:
         self._log = log
         self._rejestr = rejestr
         self._zegar = zegar
+        self._zegar_lokalny = zegar_lokalny
         self._pobrane: dict[str, WynikFazyPobrania] = pobrane if pobrane is not None else {}
         self._filmy: dict[str, WynikFazyFilmu] = filmy if filmy is not None else {}
 
@@ -391,6 +438,41 @@ class _Wykonanie:
             f"{oczekiwane}, pobrano {wynik.napisy.jezyk}"
         )
 
+    def _naglowek(
+        self,
+        pozycja: PozycjaWejsciowa,
+        zrodlo: Zrodlo,
+        dokument: DokumentWyekstrahowany,
+        metadane: dict[str, str],
+    ) -> str:
+        """Buduje nagłówek metadanych dopisywany na początku plików wynikowych.
+
+        Pola nieobecne dla danego źródła są pomijane. Adres dotyczy źródeł
+        sieciowych i jest adresem pobierania, a nie postacią kanoniczną, żeby
+        dało się go wkleić do przeglądarki wprost. Plik dotyczy źródeł lokalnych.
+        Data importu jest zapisywana w czasie lokalnym, bo nagłówek czyta
+        człowiek.
+        """
+        pola: dict[str, str] = {
+            ETYKIETA_TYTUL: dokument.tytul or "",
+            ETYKIETA_TYP: opis_typu_zrodla(zrodlo.typ_zrodla),
+            ETYKIETA_AUTOR: metadane.get("autor", ""),
+            ETYKIETA_DATA_PUBLIKACJI: metadane.get("data_publikacji", ""),
+            ETYKIETA_KANAL: metadane.get("kanal", ""),
+            ETYKIETA_DLUGOSC: _opis_dlugosci_z_metadanych(metadane),
+            ETYKIETA_JEZYK_NAPISOW: metadane.get("jezyk_napisow", ""),
+            ETYKIETA_RODZAJ_NAPISOW: _opis_rodzaju_napisow(metadane),
+            ETYKIETA_DATA_IMPORTU: self._zegar_lokalny().strftime("%Y-%m-%d"),
+            ETYKIETA_IDENTYFIKATOR: zrodlo.identyfikator_zrodla,
+        }
+
+        if pozycja.wejscie.typ_wejscia is TypWejscia.URL:
+            pola[ETYKIETA_ADRES] = pozycja.wejscie.wartosc
+        elif pozycja.wejscie.typ_wejscia is TypWejscia.PLIK:
+            pola[ETYKIETA_PLIK] = Path(pozycja.wejscie.wartosc).name
+
+        return zbuduj_naglowek(pola)
+
     def _przygotuj_tresc(
         self, pozycja: PozycjaWejsciowa, zrodlo: Zrodlo
     ) -> _PrzygotowanyDokument | None:
@@ -411,12 +493,39 @@ class _Wykonanie:
             self._pomin(zrodlo, pozycja, KOMUNIKAT_WYMAGA_SKRYPTOW)
             return None
 
+        czy_strona = zrodlo.typ_zrodla is TypZrodla.STRONA_WWW
+        strukturalne = odczytaj_json_ld(tekst) if czy_strona else None
+        metadane = (
+            scal_metadane(dict(dokument.metadane), strukturalne)
+            if strukturalne is not None
+            else dict(dokument.metadane)
+        )
+        self._odnotuj_rozbieznosc(identyfikator, metadane)
+
         return _PrzygotowanyDokument(
             dokument=dokument,
             suma_kontrolna=suma_kontrolna,
             tekst_txt=self._tekst_dla_wersji_txt(ekstraktor, dokument.tekst),
             stan_pobrania=stan_pobrania,
-            metadane={},
+            metadane=metadane,
+            tekst_zrodla=tekst if czy_strona else None,
+            tresc_porownawcza=strukturalne.tresc_porownawcza if strukturalne else None,
+        )
+
+    def _odnotuj_rozbieznosc(self, identyfikator: str, metadane: dict[str, str]) -> None:
+        """Zapisuje w logu szczegółowym rozbieżność metadanych, o ile wystąpiła.
+
+        Obie sprzeczne wartości są już w manifeście. Log dopisuje samą informację
+        o tym, których pól dotyczy różnica, żeby nie trzeba było jej wyszukiwać.
+        """
+        rozbiezne = metadane.get(KLUCZ_ROZBIEZNOSCI)
+        if not rozbiezne:
+            return
+        self._loguj(
+            logging.WARNING,
+            identyfikator,
+            f"Metadane z danych strukturalnych różnią się od wyniku ekstraktora "
+            f"w polach: {rozbiezne}. Obie wartości są w manifeście.",
         )
 
     def _zapisz_dokument(
@@ -441,6 +550,8 @@ class _Wykonanie:
                 identyfikator,
             )
 
+        ocena = self._ocen_jakosc(zrodlo, dokument, znormalizowany.tekst, przygotowane)
+
         decyzja = regula_md.ocen(dokument)
         nazwa_bazowa = nazwa_pliku_wynikowego(dokument.tytul, identyfikator)
         pliki = zapisz_wyniki(
@@ -451,6 +562,7 @@ class _Wykonanie:
             decyzja,
             formaty_wlaczone=self._konfiguracja.formaty_wynikowe,
             tekst_txt=przygotowane.tekst_txt,
+            naglowek=self._naglowek(pozycja, zrodlo, dokument, przygotowane.metadane),
         )
 
         wyniki_stanu = [
@@ -458,7 +570,7 @@ class _Wykonanie:
                 sciezka_wzgledna=plik.sciezka.relative_to(self._uklad.katalog_projektu).as_posix(),
                 format=plik.format.value,
                 liczba_slow=plik.liczba_slow,
-                liczba_znakow=plik.liczba_znakow,
+                liczba_znakow_pliku=plik.liczba_znakow,
                 rozmiar_bajtow=plik.rozmiar_bajtow,
                 checksum=plik.checksum,
             )
@@ -479,6 +591,8 @@ class _Wykonanie:
             uzasadnienie_md=list(decyzja.spelnione_warunki),
             pobranie=stan_pobrania,
             metadane=dict(przygotowane.metadane),
+            ocena_jakosci=ocena.ocena if ocena is not None else None,
+            powody_oceny=list(ocena.powody) if ocena is not None else [],
         )
         self._zapisz_checkpoint()
         self._dziennik_wazny.zapisz(ZDARZENIE_ZRODLO_PRZYJETE)
@@ -489,6 +603,47 @@ class _Wykonanie:
             identyfikator,
             f"Zapisano {len(pliki)} plików wynikowych, wersja MD: "
             f"{'tak' if decyzja.generuj_md else 'nie'}.",
+        )
+
+    def _ocen_jakosc(
+        self,
+        zrodlo: Zrodlo,
+        dokument: DokumentWyekstrahowany,
+        tekst: str,
+        przygotowane: _PrzygotowanyDokument,
+    ) -> OcenaJakosci | None:
+        """Ocenia jakość wyniku dla źródeł, w których treść powstaje przez ekstrakcję.
+
+        Strona i film przechodzą przez rozpoznawanie treści, więc mogą stracić jej
+        część po cichu i dlatego są oceniane. Tekst wklejony oraz plik TXT i MD nie
+        są oceniane, bo ich treść jest dokładnie tym, co podał użytkownik. Ocena
+        „podejrzana” dla krótkiej notatki byłaby ostrzeżeniem, którego nie da się
+        naprawić, a ostrzeżenie bez znaczenia uczy pomijać wszystkie ostrzeżenia.
+        """
+        if zrodlo.typ_zrodla not in _TYPY_OCENIANE:
+            return None
+        ocena = ocen_jakosc(
+            tekst,
+            tytul=dokument.tytul,
+            tekst_zrodla=przygotowane.tekst_zrodla,
+            tresc_porownawcza=przygotowane.tresc_porownawcza,
+        )
+        if ocena.czy_podejrzana:
+            self._odnotuj_podejrzana_jakosc(zrodlo, ocena.powody)
+        return ocena
+
+    def _odnotuj_podejrzana_jakosc(self, zrodlo: Zrodlo, powody: tuple[str, ...]) -> None:
+        """Zapisuje podejrzany wynik ekstrakcji w obu logach.
+
+        Źródło jest zapisywane normalnie i nie jest kasowane. Wpis w logu ważnym
+        istnieje po to, żeby użytkownik dowiedział się o sprawie w trakcie pracy,
+        a nie dopiero z raportu końcowego.
+        """
+        self._dziennik_wazny.zapisz(f"{ZDARZENIE_JAKOSC_PODEJRZANA}: {zrodlo.pochodzenie}")
+        self._loguj(
+            logging.WARNING,
+            zrodlo.identyfikator_zrodla,
+            "Wynik ekstrakcji wygląda podejrzanie. Powody: " + "; ".join(powody),
         )
 
     def _tresc_zrodla(
@@ -658,6 +813,20 @@ class _Wykonanie:
 
     def _loguj(self, poziom: int, identyfikator: str, komunikat: str) -> None:
         self._log.log(poziom, komunikat, extra={"identyfikator_zrodla": identyfikator})
+
+
+def _opis_dlugosci_z_metadanych(metadane: dict[str, str]) -> str:
+    """Zamienia zapisaną w metadanych długość w sekundach na czytelny opis."""
+    surowa = metadane.get("dlugosc_sekundy", "")
+    if not surowa.isdigit():
+        return ""
+    return opis_dlugosci(int(surowa))
+
+
+def _opis_rodzaju_napisow(metadane: dict[str, str]) -> str:
+    """Zwraca rodzaj napisów w postaci przeznaczonej dla człowieka."""
+    typ = metadane.get("typ_napisow", "")
+    return opis_typu_napisow(typ) if typ else ""
 
 
 def _pobierz_strony(
@@ -945,12 +1114,45 @@ def _zdekoduj_odpowiedz(odpowiedz: OdpowiedzPobrania) -> tuple[str, str]:
 
 
 def _wygeneruj_nazwe_projektu(pozycje: Sequence[PozycjaWejsciowa]) -> str:
+    """Buduje nazwę projektu z pierwszego wejścia, gdy użytkownik jej nie podał.
+
+    Nazwa podana opcją `--projekt` ma zawsze pierwszeństwo i ta funkcja w ogóle
+    wtedy nie jest wywoływana.
+    """
     if not pozycje:
         return wygeneruj_nazwe_projektu("")
     pierwsza = pozycje[0]
     if pierwsza.wejscie.typ_wejscia is TypWejscia.PLIK:
         return wygeneruj_nazwe_projektu(Path(pierwsza.wejscie.wartosc).stem)
+    if pierwsza.wejscie.typ_wejscia is TypWejscia.URL:
+        return wygeneruj_nazwe_projektu(_podstawa_nazwy_z_adresu(pierwsza))
     return wygeneruj_nazwe_projektu(pierwsza.wejscie.wartosc[:_MAKSYMALNA_PODSTAWA_NAZWY])
+
+
+def _podstawa_nazwy_z_adresu(pozycja: PozycjaWejsciowa) -> str:
+    """Buduje krótką podstawę nazwy projektu z adresu źródła.
+
+    Cały adres w nazwie katalogu jest nieczytelny przy odsłuchu: czytnik ekranu
+    odczytuje go w całości, razem z każdym podkreśleniem, przy każdym przejściu
+    przez katalog Dokumenty. Dlatego film daje nazwę złożoną z członu „youtube”
+    i identyfikatora filmu, a strona nazwę hosta bez przedrostka „www” wraz
+    z początkiem sumy kontrolnej źródła, który rozróżnia dwa artykuły z tego
+    samego serwisu.
+
+    Właściwa nazwa, budowana z tytułu źródła, wymagałaby znajomości tytułu przed
+    utworzeniem katalogu. Powody, dla których na razie tego nie robimy, opisuje
+    sekcja osiemnasta e CLAUDE.md.
+    """
+    kanoniczny = pozycja.adres_kanoniczny or pozycja.wejscie.wartosc
+
+    if pozycja.format_zrodla == FORMAT_YOUTUBE:
+        rozpoznanie = rozpoznaj(pozycja.wejscie.wartosc)
+        if rozpoznanie.identyfikator_filmu is not None:
+            return f"youtube {rozpoznanie.identyfikator_filmu}"
+
+    host = (urlsplit(kanoniczny).hostname or "").removeprefix("www.")
+    identyfikator = identyfikator_adresu(typ_zrodla_dla_formatu(pozycja.format_zrodla), kanoniczny)
+    return f"{host} {skrot_z_identyfikatora(identyfikator)}"
 
 
 def _nowy_checkpoint(
@@ -992,6 +1194,8 @@ def _zbuduj_manifest(uklad: UkladProjektu, checkpoint: Checkpoint) -> Manifest:
                 komunikat_bledu=stan.komunikat_bledu,
                 pobranie=_wpis_pobrania(stan.pobranie),
                 metadane=dict(stan.metadane),
+                ocena_jakosci=stan.ocena_jakosci,
+                powody_oceny=tuple(stan.powody_oceny),
             )
         )
         for wynik in stan.wyniki:
@@ -1001,7 +1205,7 @@ def _zbuduj_manifest(uklad: UkladProjektu, checkpoint: Checkpoint) -> Manifest:
                     format=wynik.format,
                     liczba_zrodel=1,
                     liczba_slow=wynik.liczba_slow,
-                    liczba_znakow=wynik.liczba_znakow,
+                    liczba_znakow_pliku=wynik.liczba_znakow_pliku,
                     rozmiar_bajtow=wynik.rozmiar_bajtow,
                     checksum=wynik.checksum,
                     status=StatusZrodla.SPAKOWANE.value,
@@ -1062,6 +1266,7 @@ def _zbuduj_podsumowanie(
         laczna_liczba_slow=laczna_liczba_slow,
         czas_pracy_sekundy=czas_pracy_sekundy,
         zrodla_nieprzetworzone=_zrodla_nieprzetworzone(checkpoint),
+        materialy_do_sprawdzenia=_materialy_do_sprawdzenia(checkpoint),
     )
 
 
@@ -1077,6 +1282,19 @@ def _zrodla_nieprzetworzone(checkpoint: Checkpoint) -> tuple[ZrodloNieprzetworzo
         )
         for stan in checkpoint.zrodla.values()
         if stan.status in statusy_nieprzetworzone
+    )
+
+
+def _materialy_do_sprawdzenia(checkpoint: Checkpoint) -> tuple[MaterialDoSprawdzenia, ...]:
+    """Zbiera źródła zapisane poprawnie, ale o podejrzanym wyniku ekstrakcji."""
+    return tuple(
+        MaterialDoSprawdzenia(
+            identyfikator=stan.identyfikator,
+            pochodzenie=stan.pochodzenie,
+            powody=tuple(stan.powody_oceny),
+        )
+        for stan in checkpoint.zrodla.values()
+        if stan.ocena_jakosci == OCENA_PODEJRZANA
     )
 
 

@@ -97,6 +97,10 @@ pliku wynikowego.
   Zbiera też odnośniki zewnętrzne i dopisuje na końcu treści ich ponumerowany
   wykaz, a w samym zdaniu zostawia sam tekst odnośnika.
 
+- `gnb/extractors/dane_strukturalne.py` — odczyt metadanych artykułu z bloku
+  JSON-LD strony oraz scalanie ich z metadanymi ekstraktora, z zachowaniem obu
+  wartości przy rozbieżności.
+
 ## Pakiet gnb.normalization
 
 - `gnb/normalization/kodowanie.py` — wykrywanie kodowania i dekodowanie bajtów.
@@ -111,12 +115,18 @@ pliku wynikowego.
   z zachowaną strukturą, używane do wersji TXT źródeł markdownowych.
 - `gnb/output/manifest.py` — `manifest.json` jako źródło prawdy i `manifest.txt`
   jako czytelny widok.
+- `gnb/output/ocena_jakosci.py` — heurystyczna ocena jakości ekstrakcji dla
+  źródeł rozpoznawanych, czyli stron i filmów. Zwraca ocenę wraz z listą powodów
+  i nigdy nie usuwa źródła.
 - `gnb/output/raport.py` — raport końcowy jako zwykły tekst, wraz z wykazem
-  źródeł pominiętych i błędnych oraz powodem każdego z nich.
+  źródeł pominiętych i błędnych oraz powodem każdego z nich, a także z sekcją
+  „Materiały do sprawdzenia” dla źródeł o podejrzanym wyniku ekstrakcji.
 
 ## Pakiet gnb.persistence
 
-- `gnb/persistence/projekt.py` — układ katalogów projektu: materiały źródłowe,
+- `gnb/persistence/projekt.py` — układ katalogów projektu, z nazwą katalogu
+  wyznaczaną z nazwy podanej przez użytkownika, a w jej braku z pierwszego źródła:
+  materiały źródłowe,
   wyniki pośrednie, pliki wynikowe, logi, manifest, checkpoint.
 - `gnb/persistence/cache.py` — wspólna dla projektów pamięć podręczna pobranych
   zasobów, oparta na SQLite, z trybem WAL i numerem wersji schematu.

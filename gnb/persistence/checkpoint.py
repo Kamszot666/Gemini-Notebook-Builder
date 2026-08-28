@@ -21,19 +21,25 @@ from typing import Any
 
 from gnb.core.wyjatki import BladTrwaly
 
-WERSJA_SCHEMATU = 3
+WERSJA_SCHEMATU = 4
 _SUFIKS_TYMCZASOWY = ".tmp"
 _SUFIKS_KOPII = ".bak"
 
 
 @dataclass
 class StanWyniku:
-    """Zapisany w checkpoincie opis jednego pliku wynikowego źródła."""
+    """Zapisany w checkpoincie opis jednego pliku wynikowego źródła.
+
+    Pole `liczba_znakow_pliku` liczy zawartość zapisanego pliku, więc obejmuje
+    też końcowy znak nowej linii. Liczba znaków źródła, zapisana przy wpisie
+    źródła, liczy sam tekst dokumentu i jest zawsze o ten jeden znak mniejsza.
+    Dwie różne miary noszą różne nazwy, żeby nie dało się ich pomylić.
+    """
 
     sciezka_wzgledna: str
     format: str
     liczba_slow: int
-    liczba_znakow: int
+    liczba_znakow_pliku: int
     rozmiar_bajtow: int
     checksum: str
 
@@ -74,6 +80,8 @@ class StanZrodla:
     komunikat_bledu: str | None = None
     pobranie: StanPobrania | None = None
     metadane: dict[str, str] = field(default_factory=dict)
+    ocena_jakosci: str | None = None
+    powody_oceny: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -171,6 +179,8 @@ def _stan_do_slownika(stan: StanZrodla) -> dict[str, Any]:
         "komunikat_bledu": stan.komunikat_bledu,
         "pobranie": _pobranie_do_slownika(stan.pobranie),
         "metadane": dict(stan.metadane),
+        "ocena_jakosci": stan.ocena_jakosci,
+        "powody_oceny": list(stan.powody_oceny),
     }
 
 
@@ -192,7 +202,7 @@ def _wynik_do_slownika(wynik: StanWyniku) -> dict[str, Any]:
         "sciezka_wzgledna": wynik.sciezka_wzgledna,
         "format": wynik.format,
         "liczba_slow": wynik.liczba_slow,
-        "liczba_znakow": wynik.liczba_znakow,
+        "liczba_znakow_pliku": wynik.liczba_znakow_pliku,
         "rozmiar_bajtow": wynik.rozmiar_bajtow,
         "checksum": wynik.checksum,
     }
@@ -237,6 +247,8 @@ def _stan_ze_slownika(dane: Any) -> StanZrodla:
         komunikat_bledu=_opcjonalny_tekst(dane.get("komunikat_bledu")),
         pobranie=_pobranie_ze_slownika(dane.get("pobranie")),
         metadane=_metadane_ze_slownika(dane.get("metadane")),
+        ocena_jakosci=_opcjonalny_tekst(dane.get("ocena_jakosci")),
+        powody_oceny=[str(element) for element in dane.get("powody_oceny", [])],
     )
 
 
@@ -270,7 +282,7 @@ def _wynik_ze_slownika(dane: Any) -> StanWyniku:
         sciezka_wzgledna=str(dane["sciezka_wzgledna"]),
         format=str(dane["format"]),
         liczba_slow=int(dane["liczba_slow"]),
-        liczba_znakow=int(dane["liczba_znakow"]),
+        liczba_znakow_pliku=int(dane["liczba_znakow_pliku"]),
         rozmiar_bajtow=int(dane["rozmiar_bajtow"]),
         checksum=str(dane["checksum"]),
     )

@@ -64,3 +64,19 @@ def test_opis_pliku_zawiera_zgodne_liczniki_i_sume_kontrolna(tmp_path: Path) -> 
     assert wynik.liczba_slow == len(dane.decode("utf-8").split())
     assert wynik.identyfikatory_zrodel == ["plik_tekstowy-1"]
     assert len(wynik.checksum) == 64
+
+
+def test_liczba_znakow_pliku_jest_wieksza_o_koncowy_znak_nowej_linii(tmp_path: Path) -> None:
+    """Dwie miary liczą co innego, dlatego noszą różne nazwy.
+
+    Liczba znaków źródła liczy sam tekst dokumentu i służy do sprawdzania limitu
+    notatnika. Liczba znaków pliku liczy jego zawartość, więc obejmuje też znak
+    nowej linii dopisywany na końcu każdego pliku wynikowego.
+    """
+    (wynik,) = zapisz_wyniki(tmp_path, "notatka", "plik_tekstowy-1", _DOKUMENT, _decyzja(False))
+
+    tresc = (tmp_path / "notatka.txt").read_text(encoding="utf-8")
+    assert tresc.endswith("\n")
+    assert wynik.liczba_znakow == len(tresc)
+    assert wynik.liczba_znakow == len(_DOKUMENT.tekst) + 1
+    assert wynik.liczba_slow == _DOKUMENT.liczba_slow

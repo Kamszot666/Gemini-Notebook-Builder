@@ -1,7 +1,12 @@
 """Przyjmowanie wejść użytkownika, walidacja i tworzenie źródeł.
 
-Po etapie drugim obsługiwane są trzy rodzaje wejścia: tekst wklejony
-bezpośrednio, plik lokalny w formacie TXT lub MD oraz adres strony internetowej.
+Obsługiwane są cztery rodzaje wejścia: tekst wklejony bezpośrednio, plik
+lokalny, adres strony internetowej oraz adres filmu z serwisu YouTube. Plik
+lokalny dostaje jeden z dwóch typów źródła w zależności od formatu: TXT i MD
+są plikami tekstowymi, a HTML, CSV, SRT, VTT, PDF, DOCX i EPUB dokumentami.
+Rozróżnienie decyduje później o wyborze ekstraktora oraz o tym, czy plik jest
+oceniany pod względem jakości ekstrakcji, zgodnie z `gnb.potok`.
+
 Moduł zamienia wejście na `PozycjaWejsciowa`, a następnie na zwalidowane
 `Zrodlo` z deterministycznym identyfikatorem i pełną sumą kontrolną.
 
@@ -36,7 +41,24 @@ from gnb.core.wyjatki import BladTrwaly, FormatNieobslugiwany, PrzekroczonoLimit
 from gnb.core.youtube import czy_adres_youtube, rozpoznaj
 from gnb.normalization.kodowanie import zdekoduj
 
-FORMATY_PLIKOW = frozenset({"txt", "md"})
+# Formaty plików tekstowych, dostępne też jako tekst wklejony: rozkodowywane
+# wprost jako tekst, bez dalszego rozpoznawania struktury dokumentu.
+FORMATY_PLIKOW_TEKSTOWYCH = frozenset({"txt", "md"})
+
+# Formaty plików dokumentowych z etapu czwartego. HTML, CSV, SRT i VTT są
+# tekstowe i rozkodowywane tak samo jak pliki tekstowe, tylko z innym typem
+# źródła. PDF, DOCX i EPUB są kontenerami binarnymi i wymagają odczytu bajtów
+# z pominięciem rozkodowania tekstu, patrz `FORMATY_PLIKOW_BINARNYCH`.
+FORMATY_PLIKOW_DOKUMENTOW = frozenset(
+    {"html", "htm", "xhtml", "csv", "srt", "vtt", "pdf", "docx", "epub"}
+)
+
+# Formaty binarne wśród plików dokumentowych. Nie da się ich rozkodować jako
+# tekst, bo to kontenery ze swoją wewnętrzną strukturą, a próba dekodowania
+# przez wykrywanie kodowania znakowego dałaby bezużyteczny wynik.
+FORMATY_PLIKOW_BINARNYCH = frozenset({"pdf", "docx", "epub"})
+
+FORMATY_PLIKOW = FORMATY_PLIKOW_TEKSTOWYCH | FORMATY_PLIKOW_DOKUMENTOW
 FORMATY_TEKSTU_WKLEJONEGO = frozenset({"txt", "md"})
 FORMAT_STRONY_WWW = "html"
 FORMAT_YOUTUBE = "youtube"
@@ -210,7 +232,7 @@ def _zrodlo_z_pliku(
     if pozycja.format_zrodla not in FORMATY_PLIKOW:
         raise FormatNieobslugiwany(
             f"Nieobsługiwany format pliku: „{pozycja.format_zrodla or 'brak rozszerzenia'}”. "
-            "Etap pierwszy obsługuje TXT i MD."
+            "Obsługiwane są: txt, md, html, htm, xhtml, csv, srt, vtt, pdf, docx, epub."
         )
     rozmiar = sciezka.stat().st_size
     limit_bajtow = konfiguracja.bezpieczny_limit_mb * _BAJTOW_W_MEGABAJCIE
@@ -220,15 +242,28 @@ def _zrodlo_z_pliku(
             f"{limit_bajtow} bajtów. Podział zbyt dużego źródła to zadanie etapu szóstego."
         )
     suma = suma_kontrolna_pliku(sciezka)
+    typ = typ_zrodla_dla_pliku(pozycja.format_zrodla)
     return Zrodlo(
-        identyfikator_zrodla=identyfikator_zrodla(TypZrodla.PLIK_TEKSTOWY, suma),
-        typ_zrodla=TypZrodla.PLIK_TEKSTOWY,
+        identyfikator_zrodla=identyfikator_zrodla(typ, suma),
+        typ_zrodla=typ,
         pochodzenie=sciezka.name,
         checksum=suma,
         status=StatusZrodla.OCZEKUJE,
         utworzono=moment,
         zaktualizowano=moment,
     )
+
+
+def typ_zrodla_dla_pliku(format_zrodla: str) -> TypZrodla:
+    """Zwraca typ źródła odpowiadający formatowi pliku lokalnego."""
+    if format_zrodla in FORMATY_PLIKOW_TEKSTOWYCH:
+        return TypZrodla.PLIK_TEKSTOWY
+    return TypZrodla.PLIK_DOKUMENT
+
+
+def czy_format_binarny(format_zrodla: str) -> bool:
+    """Rozstrzyga, czy plik lokalny wymaga odczytu bajtów zamiast dekodowania tekstu."""
+    return format_zrodla in FORMATY_PLIKOW_BINARNYCH
 
 
 def _zrodlo_z_url(pozycja: PozycjaWejsciowa, moment: datetime) -> Zrodlo:

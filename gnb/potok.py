@@ -43,7 +43,12 @@ from gnb.core.nazwy import (
 from gnb.core.stale import StatusZrodla, TypWejscia, TypZrodla
 from gnb.core.wyjatki import BladGnb, BladTrwaly, PrzekroczonoLimit
 from gnb.core.youtube import rozpoznaj
-from gnb.extractors.bazowy import Ekstraktor, RejestrEkstraktorow, domyslny_rejestr
+from gnb.extractors.bazowy import (
+    RejestrEkstraktorow,
+    RejestrEkstraktorowBinarnych,
+    domyslny_rejestr,
+    domyslny_rejestr_binarny,
+)
 from gnb.extractors.dane_strukturalne import (
     KLUCZ_ROZBIEZNOSCI,
     odczytaj_json_ld,
@@ -62,6 +67,7 @@ from gnb.ingestion.pobieranie import (
 from gnb.ingestion.wejscie import (
     FORMAT_YOUTUBE,
     PozycjaWejsciowa,
+    czy_format_binarny,
     identyfikator_adresu,
     identyfikator_awaryjny,
     typ_zrodla_dla_formatu,
@@ -153,9 +159,24 @@ _STATUSY_KONCOWE = frozenset(
 _ROZSZERZENIE_ORYGINALU_TEKSTU = "txt"
 _ROZSZERZENIE_ORYGINALU_NAPISOW = "json"
 
-# Typy źródeł, dla których treść powstaje przez rozpoznanie, a nie przez odczyt
-# wejścia, więc podlegają ocenie jakości ekstrakcji.
-_TYPY_OCENIANE = frozenset({TypZrodla.STRONA_WWW, TypZrodla.YOUTUBE})
+# Formaty plików dokumentowych, dla których tytuł i podział na akapity są
+# naturalną cechą prozy, więc ich brak jest sygnałem utraty treści, a nie
+# właściwością formatu. CSV, SRT i VTT celowo nie są tutaj wymienione.
+_FORMATY_DOKUMENTOW_OCENIANE = frozenset({"pdf", "docx", "epub", "html", "htm", "xhtml"})
+
+
+def _czy_ocenic_jakosc(typ_zrodla: TypZrodla, format_zrodla: str) -> bool:
+    """Rozstrzyga, czy źródło podlega ocenie jakości ekstrakcji.
+
+    Strona i film mają treść powstającą przez rozpoznanie niezależnie od
+    formatu, więc są oceniane zawsze. Plik dokumentowy jest oceniany tylko dla
+    formatów prozy — PDF, DOCX, EPUB i HTML lokalny — bo CSV oraz napisy SRT
+    i VTT z natury formatu nie mają tytułu ani akapitów.
+    """
+    if typ_zrodla in (TypZrodla.STRONA_WWW, TypZrodla.YOUTUBE):
+        return True
+    return typ_zrodla is TypZrodla.PLIK_DOKUMENT and format_zrodla in _FORMATY_DOKUMENTOW_OCENIANE
+
 
 # Wynik fazy pobrania dla jednego adresu: treść, świadome pominięcie albo błąd.
 WynikFazyPobrania = OdpowiedzPobrania | PominietePobranie | BladGnb
@@ -213,6 +234,7 @@ def przetworz_projekt(
     zegar: Callable[[], datetime] = _teraz_utc,
     zegar_lokalny: Callable[[], datetime] = teraz_lokalny,
     rejestr: RejestrEkstraktorow | None = None,
+    rejestr_binarny: RejestrEkstraktorowBinarnych | None = None,
     transport_http: httpx.AsyncBaseTransport | None = None,
     pobieracz_youtube: PobieraczYouTube | None = None,
 ) -> WynikPrzetwarzania:
@@ -228,6 +250,7 @@ def przetworz_projekt(
     cały potok bez korzystania z sieci.
     """
     rejestr = rejestr or domyslny_rejestr(konfiguracja.zachowuj_odnosniki)
+    rejestr_binarny = rejestr_binarny or domyslny_rejestr_binarny()
     czas_startu = zegar()
 
     nazwa = nazwa_projektu or _wygeneruj_nazwe_projektu(pozycje)
@@ -265,6 +288,7 @@ def przetworz_projekt(
             dziennik_wazny,
             log,
             rejestr,
+            rejestr_binarny,
             zegar,
             zegar_lokalny,
             pobrane,
@@ -315,6 +339,7 @@ class _Wykonanie:
         dziennik_wazny: DziennikWazny,
         log: logging.Logger,
         rejestr: RejestrEkstraktorow,
+        rejestr_binarny: RejestrEkstraktorowBinarnych,
         zegar: Callable[[], datetime],
         zegar_lokalny: Callable[[], datetime],
         pobrane: dict[str, WynikFazyPobrania] | None = None,
@@ -326,6 +351,7 @@ class _Wykonanie:
         self._dziennik_wazny = dziennik_wazny
         self._log = log
         self._rejestr = rejestr
+        self._rejestr_binarny = rejestr_binarny
         self._zegar = zegar
         self._zegar_lokalny = zegar_lokalny
         self._pobrane: dict[str, WynikFazyPobrania] = pobrane if pobrane is not None else {}
@@ -477,6 +503,11 @@ class _Wykonanie:
         self, pozycja: PozycjaWejsciowa, zrodlo: Zrodlo
     ) -> _PrzygotowanyDokument | None:
         """Buduje dokument ze źródła tekstowego, plikowego albo strony internetowej."""
+        if pozycja.wejscie.typ_wejscia is TypWejscia.PLIK and czy_format_binarny(
+            pozycja.format_zrodla
+        ):
+            return self._przygotuj_tresc_binarna(pozycja, zrodlo)
+
         identyfikator = zrodlo.identyfikator_zrodla
         tresc = self._tresc_zrodla(pozycja, zrodlo)
         if tresc is None:
@@ -505,11 +536,44 @@ class _Wykonanie:
         return _PrzygotowanyDokument(
             dokument=dokument,
             suma_kontrolna=suma_kontrolna,
-            tekst_txt=self._tekst_dla_wersji_txt(ekstraktor, dokument.tekst),
+            tekst_txt=self._tekst_dla_wersji_txt(
+                ekstraktor.tekst_zawiera_znaczniki, dokument.tekst
+            ),
             stan_pobrania=stan_pobrania,
             metadane=metadane,
             tekst_zrodla=tekst if czy_strona else None,
             tresc_porownawcza=strukturalne.tresc_porownawcza if strukturalne else None,
+        )
+
+    def _przygotuj_tresc_binarna(
+        self, pozycja: PozycjaWejsciowa, zrodlo: Zrodlo
+    ) -> _PrzygotowanyDokument:
+        """Buduje dokument z pliku binarnego: PDF, DOCX albo EPUB.
+
+        Format binarny nie przechodzi przez rozkodowanie tekstu, bo próba
+        wykrycia kodowania znakowego na jego bajtach dałaby bezużyteczny wynik.
+        Nie przechodzi też przez odczyt danych strukturalnych JSON-LD, bo ten
+        dotyczy wyłącznie stron internetowych.
+        """
+        identyfikator = zrodlo.identyfikator_zrodla
+        bajty = Path(pozycja.wejscie.wartosc).read_bytes()
+
+        self._zachowaj_oryginal(pozycja, zrodlo, "", bajty)
+        self._loguj(logging.INFO, identyfikator, f"Źródło {identyfikator}, plik binarny.")
+
+        ekstraktor = self._rejestr_binarny.dobierz(zrodlo.typ_zrodla, pozycja.format_zrodla)
+        dokument = ekstraktor.wyekstrahuj(identyfikator, bajty)
+
+        return _PrzygotowanyDokument(
+            dokument=dokument,
+            suma_kontrolna=zrodlo.checksum or "",
+            tekst_txt=self._tekst_dla_wersji_txt(
+                ekstraktor.tekst_zawiera_znaczniki, dokument.tekst
+            ),
+            stan_pobrania=None,
+            metadane=dict(dokument.metadane),
+            tekst_zrodla=None,
+            tresc_porownawcza=None,
         )
 
     def _odnotuj_rozbieznosc(self, identyfikator: str, metadane: dict[str, str]) -> None:
@@ -550,7 +614,7 @@ class _Wykonanie:
                 identyfikator,
             )
 
-        ocena = self._ocen_jakosc(zrodlo, dokument, znormalizowany.tekst, przygotowane)
+        ocena = self._ocen_jakosc(zrodlo, pozycja, dokument, znormalizowany.tekst, przygotowane)
 
         decyzja = regula_md.ocen(dokument)
         nazwa_bazowa = nazwa_pliku_wynikowego(dokument.tytul, identyfikator)
@@ -608,19 +672,23 @@ class _Wykonanie:
     def _ocen_jakosc(
         self,
         zrodlo: Zrodlo,
+        pozycja: PozycjaWejsciowa,
         dokument: DokumentWyekstrahowany,
         tekst: str,
         przygotowane: _PrzygotowanyDokument,
     ) -> OcenaJakosci | None:
         """Ocenia jakość wyniku dla źródeł, w których treść powstaje przez ekstrakcję.
 
-        Strona i film przechodzą przez rozpoznawanie treści, więc mogą stracić jej
-        część po cichu i dlatego są oceniane. Tekst wklejony oraz plik TXT i MD nie
-        są oceniane, bo ich treść jest dokładnie tym, co podał użytkownik. Ocena
-        „podejrzana” dla krótkiej notatki byłaby ostrzeżeniem, którego nie da się
-        naprawić, a ostrzeżenie bez znaczenia uczy pomijać wszystkie ostrzeżenia.
+        Strona, film, PDF, DOCX, EPUB i plik HTML lokalny przechodzą przez
+        rozpoznawanie treści, więc mogą stracić jej część po cichu i dlatego są
+        oceniane. Tekst wklejony oraz pliki TXT i MD nie są oceniane, bo ich
+        treść jest dokładnie tym, co podał użytkownik. Plik CSV oraz napisy SRT
+        i VTT też są wyłączone: z natury formatu nie mają tytułu ani podziału na
+        akapity, więc dostałyby nienaprawialne ostrzeżenie przy każdym pliku.
+        Ocena „podejrzana” dla materiału, którego nie da się poprawić, byłaby
+        ostrzeżeniem bez znaczenia, a takie uczy pomijać wszystkie ostrzeżenia.
         """
-        if zrodlo.typ_zrodla not in _TYPY_OCENIANE:
+        if not _czy_ocenic_jakosc(zrodlo.typ_zrodla, pozycja.format_zrodla):
             return None
         ocena = ocen_jakosc(
             tekst,
@@ -683,16 +751,17 @@ class _Wykonanie:
         )
         return tekst, kodowanie, wynik.tresc, stan_pobrania, suma_kontrolna_bajtow(wynik.tresc)
 
-    def _tekst_dla_wersji_txt(self, ekstraktor: Ekstraktor, tekst: str) -> str | None:
+    def _tekst_dla_wersji_txt(self, zawiera_znaczniki: bool, tekst: str) -> str | None:
         """Zwraca treść wersji TXT, gdy ma się różnić od treści wersji MD.
 
         Dla ekstraktora zwracającego tekst ze znacznikami wersja TXT powstaje
         przez przepisanie dokumentu bez znaczników, a jej treść jest ponownie
         normalizowana, żeby oba pliki wynikowe przechodziły te same reguły.
         Dla tekstu już czystego zwracana jest wartość pusta, co oznacza „użyj
-        tekstu znormalizowanego bez zmian”.
+        tekstu znormalizowanego bez zmian”. Argument `zawiera_znaczniki` to
+        `tekst_zawiera_znaczniki` użytego ekstraktora, tekstowego albo binarnego.
         """
-        if not ekstraktor.tekst_zawiera_znaczniki:
+        if not zawiera_znaczniki:
             return None
         return znormalizuj(zamien_markdown_na_tekst(tekst))
 

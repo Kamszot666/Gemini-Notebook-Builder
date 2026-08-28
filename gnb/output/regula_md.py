@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 from gnb.core.model import BlokTresci, DokumentWyekstrahowany
 from gnb.core.stale import PoziomPewnosciStruktury, RodzajBloku
+from gnb.extractors.bloki_markdown import czy_tabela_zapisywalna_bez_utraty
 
 MINIMALNA_LICZBA_SPELNIONYCH_WARUNKOW = 2
 MINIMALNA_LICZBA_NAGLOWKOW = 3
@@ -25,7 +26,7 @@ OPIS_WARUNKU_NAGLOWKI = "co najmniej trzy nagłówki tworzące hierarchię co na
 OPIS_WARUNKU_LISTY = (
     "co najmniej dwie listy, w tym przynajmniej jedna z co najmniej trzema elementami"
 )
-OPIS_WARUNKU_TABELA = "co najmniej jedna tabela"
+OPIS_WARUNKU_TABELA = "co najmniej jedna tabela dająca się zapisać bez utraty znaczenia"
 OPIS_WARUNKU_KOD = "blok kodu lub zapis techniczny, w którym formatowanie niesie znaczenie"
 
 _WYSTARCZAJACE_POZIOMY_PEWNOSCI = frozenset(
@@ -99,7 +100,17 @@ def _liczba_elementow(blok: BlokTresci) -> int:
 
 
 def _warunek_tabela(bloki: Sequence[BlokTresci]) -> bool:
-    return any(blok.rodzaj is RodzajBloku.TABELA for blok in bloki)
+    """Prawda, gdy jest tabela, którą da się zapisać w Markdown bez utraty znaczenia.
+
+    Sama obecność bloku tabeli nie wystarcza. Tabela o wierszach różnej długości
+    straci przy zapisie komórki albo dostanie puste, więc nie spełnia warunku
+    trzeciego z sekcji ósmej CLAUDE.md, który mówi o tabeli dającej się zapisać
+    bez utraty znaczenia.
+    """
+    return any(
+        blok.rodzaj is RodzajBloku.TABELA and czy_tabela_zapisywalna_bez_utraty(blok)
+        for blok in bloki
+    )
 
 
 def _warunek_kod(bloki: Sequence[BlokTresci]) -> bool:

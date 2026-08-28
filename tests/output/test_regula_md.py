@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gnb.core.stale import PoziomPewnosciStruktury
+from gnb.core.model import BlokTresci, DokumentWyekstrahowany
+from gnb.core.stale import PoziomPewnosciStruktury, RodzajBloku
 from gnb.extractors.markdown import EkstraktorMarkdown
 from gnb.extractors.tekst import EkstraktorTekstu
 from gnb.output import regula_md
+from gnb.output.regula_md import OPIS_WARUNKU_TABELA
 
 KATALOG_DANYCH = Path(__file__).resolve().parents[1] / "dane"
 
@@ -55,3 +57,41 @@ def test_jeden_spelniony_warunek_to_za_malo() -> None:
 
     assert decyzja.spelnione_warunki == (regula_md.OPIS_WARUNKU_TABELA,)
     assert decyzja.generuj_md is False
+
+
+def test_tabela_o_wierszach_roznej_dlugosci_nie_zalicza_warunku() -> None:
+    """Tabela, której nie da się zapisać wiernie, nie spełnia warunku trzeciego.
+
+    Tabela Markdown ma stałą liczbę kolumn wyznaczoną przez nagłówek, więc wiersz
+    o innej liczbie komórek albo straci nadmiarowe komórki, albo dostanie puste.
+    Sekcja ósma CLAUDE.md wymaga tabeli dającej się zapisać bez utraty znaczenia.
+    """
+    dokument = DokumentWyekstrahowany(
+        identyfikator_zrodla="zrodlo-1",
+        tekst="",
+        poziom_pewnosci_struktury=PoziomPewnosciStruktury.WYSOKI,
+        metoda_ekstrakcji="test",
+        bloki=[
+            BlokTresci(rodzaj=RodzajBloku.TABELA, poziom=0, tresc="A\tB\nc\td\te"),
+        ],
+    )
+
+    decyzja = regula_md.ocen(dokument)
+
+    assert OPIS_WARUNKU_TABELA not in decyzja.spelnione_warunki
+
+
+def test_tabela_o_rownych_wierszach_zalicza_warunek() -> None:
+    dokument = DokumentWyekstrahowany(
+        identyfikator_zrodla="zrodlo-2",
+        tekst="",
+        poziom_pewnosci_struktury=PoziomPewnosciStruktury.WYSOKI,
+        metoda_ekstrakcji="test",
+        bloki=[
+            BlokTresci(rodzaj=RodzajBloku.TABELA, poziom=0, tresc="A\tB\nc\td"),
+        ],
+    )
+
+    decyzja = regula_md.ocen(dokument)
+
+    assert OPIS_WARUNKU_TABELA in decyzja.spelnione_warunki

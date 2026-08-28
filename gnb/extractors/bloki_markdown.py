@@ -9,8 +9,11 @@ więc mieszka ono w jednym miejscu, zamiast być powtórzone w każdym z nich.
 
 Format wewnętrzny bloku tabeli jest ustalony: wiersze rozdzielone znakiem nowej
 linii, komórki wewnątrz wiersza rozdzielone tabulatorem, pierwszy wiersz jest
-nagłówkiem. Format bloku listy: elementy rozdzielone znakiem nowej linii,
-`poziom` równy jeden oznacza listę numerowaną, a zero listę wypunktowaną.
+nagłówkiem. Ten moduł jest jedynym miejscem, które ten format rozumie, więc tu
+mieszka też sprawdzenie, czy daną tabelę da się zapisać bez utraty znaczenia.
+
+Format bloku listy: elementy rozdzielone znakiem nowej linii, `poziom` równy
+jeden oznacza listę numerowaną, a zero listę wypunktowaną.
 """
 
 from __future__ import annotations
@@ -52,15 +55,49 @@ def _markdown_listy(blok: BlokTresci) -> str:
 
 def _markdown_tabeli(blok: BlokTresci) -> str:
     """Zapisuje tabelę jako tabelę Markdown z wierszem rozdzielającym."""
-    wiersze = [wiersz for wiersz in blok.tresc.split("\n") if wiersz]
+    wiersze = wiersze_tabeli(blok)
     if not wiersze:
         return ""
-    naglowek = wiersze[0].split("\t")
+    naglowek = wiersze[0]
     zapis = [
-        "| " + " | ".join(naglowek) + " |",
+        "| " + " | ".join(_komorka_markdown(komorka) for komorka in naglowek) + " |",
         "| " + " | ".join("---" for _ in naglowek) + " |",
     ]
-    for wiersz in wiersze[1:]:
-        komorki = wiersz.split("\t")
-        zapis.append("| " + " | ".join(komorki) + " |")
+    for komorki in wiersze[1:]:
+        zapis.append("| " + " | ".join(_komorka_markdown(komorka) for komorka in komorki) + " |")
     return "\n".join(zapis)
+
+
+def _komorka_markdown(komorka: str) -> str:
+    """Przygotowuje treść komórki do zapisu w tabeli Markdown.
+
+    Pionowa kreska rozdziela komórki w zapisie tabeli, więc kreska występująca
+    w treści komórki musi zostać poprzedzona odwrotnym ukośnikiem. Bez tego
+    komórka o treści „a | b” rozbijała tabelę na dodatkową kolumnę i psuła
+    strukturę całego wiersza.
+    """
+    return komorka.replace("\\", "\\\\").replace("|", r"\|")
+
+
+def wiersze_tabeli(blok: BlokTresci) -> list[list[str]]:
+    """Rozkłada wewnętrzny format bloku tabeli na wiersze i komórki."""
+    return [wiersz.split("\t") for wiersz in blok.tresc.split("\n") if wiersz]
+
+
+def czy_tabela_zapisywalna_bez_utraty(blok: BlokTresci) -> bool:
+    """Rozstrzyga, czy tabelę da się zapisać jako tabelę Markdown bez utraty znaczenia.
+
+    Tabela Markdown ma stałą liczbę kolumn, wyznaczoną przez wiersz nagłówka.
+    Wiersz o innej liczbie komórek albo straci nadmiarowe komórki, albo dostanie
+    puste, więc taka tabela nie da się zapisać wiernie. Sekcja ósma CLAUDE.md
+    wymaga przy warunku trzecim reguły MD tabeli, którą da się zapisać bez utraty
+    znaczenia, a nie tabeli jakiejkolwiek.
+
+    Sama pionowa kreska w treści komórki nie przeszkadza, ponieważ zapis ją
+    escapuje.
+    """
+    wiersze = wiersze_tabeli(blok)
+    if not wiersze:
+        return False
+    liczba_kolumn = len(wiersze[0])
+    return all(len(wiersz) == liczba_kolumn for wiersz in wiersze)

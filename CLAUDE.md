@@ -184,6 +184,7 @@ Zasady obsługi błędów sieciowych i pominięć:
 1. Każde żądanie sieciowe ma timeout, ograniczoną liczbę ponowień i rosnący odstęp między próbami.
 2. `BladPrzejsciowy` podlega ponowieniu, `BladTrwaly` nigdy. Zaklasyfikowanie błędu do niewłaściwej kategorii jest błędem projektowym, bo albo zapętla ponowienia, albo przedwcześnie porzuca sprawne źródło.
 3. Każdy pominięty element trafia jednocześnie do logu szczegółowego, do manifestu i do raportu końcowego. Element pominięty po cichu jest gorszy niż błąd, bo użytkownik nie ma jak się o nim dowiedzieć.
+4. Ostrzeżenie zgłoszone przez ekstraktor w polu `ostrzezenia` kontraktu `DokumentWyekstrahowany` przechodzi tę samą drogę co pominięcie: trafia jednocześnie do logu szczegółowego, do manifestu i do raportu końcowego. Mechanizm ostrzeżeń, który nie dociera do użytkownika, jest gorszy niż jego brak, bo daje fałszywe poczucie, że utrata treści zostałaby zauważona.
 
 ## 8. Pipeline i reguła TXT kontra MD
 
@@ -318,6 +319,7 @@ Checkpoint:
 2. Zapis atomowy: plik tymczasowy w tym samym katalogu, następnie `os.replace`. Zachowaj jedną kopię zapasową.
 3. Zawartość: wersja schematu, identyfikator i nazwa projektu, konfiguracja, lista wejść, status każdego źródła, checksumy, wyniki etapów, stan deduplikacji, stan pakowania, lista wyników, błędy, czas ostatniej zmiany.
 4. Po starcie wykrywaj niedokończone projekty i pozwól wznowić albo zacząć nowy. Nie przetwarzaj ponownie ukończonych etapów.
+5. Zmiana schematu checkpointu, manifestu albo pamięci podręcznej wymaga trzech rzeczy naraz, nie jednej. Po pierwsze, podniesienia numeru wersji. Po drugie, napisania migracji ze starej wersji na nową. Po trzecie, jawnego rozgałęzienia po numerze wersji przy odczycie. Numer wersji, który jest wczytywany i z niczym nieporównany, jest ozdobą i nie chroni przed niczym. Plik w wersji nowszej niż obsługiwana ma kończyć się błędem trwałym z komunikatem po polsku, nigdy surowym śladem stosu. Test migracji musi operować na tekście starego pliku napisanym ręcznie, nie wygenerowanym przez bieżący kod. Dodanie nowego pola z bezpieczną wartością domyślną, które starszy plik wczytuje poprawnie bez zmian w kodzie, nie jest zmianą łamiącą odczyt i nie wymaga tej procedury — dotyczy ona zmiany nazwy pola, zmiany jego znaczenia albo jego usunięcia.
 
 Cache: lokalny, oparty na SQLite. Klucz opiera się na kanonicznym URL lub checksumie pliku, dodatkowo wykorzystuj nagłówki HTTP `ETag` i `Last-Modified`, jeżeli są dostępne. Jeżeli źródło się nie zmieniło, nie pobieraj go ponownie.
 
@@ -497,6 +499,8 @@ Sprawy zauważone w trakcie pracy, świadomie odłożone, żeby nie ruszać ich 
 ## 19. Kryterium ukończenia funkcji
 
 Funkcja jest ukończona, gdy jednocześnie: jest zaimplementowana, ma testy sprawdzające rzeczywiste działanie oraz jest opisana w dokumentacji. Dokumentacja nie może opisywać funkcji, których aplikacja nie posiada.
+
+Test liczy się wtedy, gdy może nie przejść. Kryterium sprawdzenia jest praktyczne: wyłącz albo zepsuj kod, który dany test ma chronić, i uruchom test ponownie. Jeżeli nadal przechodzi, test niczego nie chroni i trzeba go napisać od nowa. Szczególnie dotyczy to testów zgodności wstecznej, które łatwo napisać tak, że budują dane wejściowe bieżącym kodem i sprawdzają wyłącznie to, co same ustawiły.
 
 Dokumentacja utrzymywana w `docs/`: `README.md`, `INSTALL.md`, `CONFIGURATION.md`, `FORMATS.md`, `ACCESSIBILITY.md`, `TROUBLESHOOTING.md`, `ARCHITECTURE.md`. Wszystko po polsku.
 

@@ -205,7 +205,17 @@ def wczytaj_tresc_zrodla(pozycja: PozycjaWejsciowa) -> tuple[str, str]:
             "Treść strony internetowej pochodzi z fazy pobrania, a nie z odczytu wejścia."
         )
     if pozycja.wejscie.typ_wejscia is TypWejscia.PLIK:
-        dane = Path(pozycja.wejscie.wartosc).read_bytes()
+        sciezka = Path(pozycja.wejscie.wartosc)
+        try:
+            dane = sciezka.read_bytes()
+        except OSError as blad:
+            # Plik usunięty, przeniesiony albo zablokowany przez inny program
+            # między walidacją a odczytem. Bez tego opakowania surowy OSError
+            # wywracał cały przebieg razem z poprawnymi źródłami.
+            raise BladTrwaly(
+                f"Nie udało się odczytać pliku {sciezka.name}. Plik mógł zostać usunięty, "
+                f"przeniesiony albo zablokowany przez inny program. Szczegóły: {blad.strerror}."
+            ) from blad
         return zdekoduj(dane)
     tekst = pozycja.wejscie.wartosc
     if tekst.startswith(_ZNAK_BOM):

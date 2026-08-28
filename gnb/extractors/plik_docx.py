@@ -13,6 +13,10 @@ dwie osobne listy i traci przez to układ dokumentu. Kolejne akapity o tym samym
 stylu listy są sklejane w jeden blok listy, zgodnie z wewnętrznym formatem
 bloku ustalonym dla całego projektu.
 
+Plik uszkodzony albo niebędący dokumentem Worda kończy się błędem trwałym
+z czytelnym komunikatem, a nie surowym wyjątkiem biblioteki. Jedno uszkodzone
+źródło nie może zatrzymać całego projektu.
+
 Ekstraktor nie rozpoznaje bloków kodu, ponieważ DOCX nie ma dla nich
 standardowego stylu — zgadywanie po nazwie czcionki byłoby heurystyką bez
 pewności, a projekt nie zgaduje struktury tam, gdzie nie da się jej stwierdzić
@@ -23,19 +27,32 @@ from __future__ import annotations
 
 import io
 import re
+import zipfile
 
 from docx import Document
 from docx.document import Document as DokumentDocx
+from docx.opc.exceptions import OpcError
 from docx.oxml.ns import qn
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 
 from gnb.core.model import BlokTresci, DokumentWyekstrahowany
 from gnb.core.stale import PoziomPewnosciStruktury, RodzajBloku, TypZrodla
+from gnb.core.wyjatki import BladTrwaly
 from gnb.extractors.bloki_markdown import zapisz_bloki_jako_markdown
 
 METODA_EKSTRAKCJI = "docx"
 FORMATY_DOCX = frozenset({"docx"})
+
+KOMUNIKAT_USZKODZONY = (
+    "Plik DOCX jest uszkodzony albo nie jest dokumentem programu Word: nie dało "
+    "się odczytać jego archiwum ani zawartości."
+)
+
+# Wyjątki, którymi biblioteka zgłasza plik nienadający się do odczytu. Błąd
+# klucza pojawia się dla poprawnego archiwum zip pozbawionego pliku
+# „[Content_Types].xml”, czyli dla archiwum, które nie jest dokumentem DOCX.
+_BLEDY_ODCZYTU_DOCX = (OpcError, zipfile.BadZipFile, KeyError, ValueError, OSError)
 
 _WZORZEC_NAGLOWKA = re.compile(r"^Heading (\d+)$")
 _FORMAT_DATY = "%Y-%m-%d"
@@ -52,7 +69,11 @@ class EkstraktorDocx:
 
     def wyekstrahuj(self, identyfikator_zrodla: str, bajty: bytes) -> DokumentWyekstrahowany:
         """Odczytuje dokument DOCX zachowując nagłówki, listy i tabele w kolejności."""
-        dokument_docx = Document(io.BytesIO(bajty))
+        try:
+            dokument_docx = Document(io.BytesIO(bajty))
+        except _BLEDY_ODCZYTU_DOCX as blad:
+            raise BladTrwaly(KOMUNIKAT_USZKODZONY, identyfikator_zrodla) from blad
+
         bloki = _bloki_z_dokumentu(dokument_docx)
         tytul = _tytul(dokument_docx, bloki)
         return DokumentWyekstrahowany(

@@ -16,6 +16,11 @@ i `article` jest przechodzone rekurencyjnie, żeby treść owinięta w takie
 elementy, co jest typowe dla plików EPUB generowanych automatycznie, nie
 zginęła.
 
+Plik uszkodzony albo niebędący książką EPUB kończy się błędem trwałym
+z czytelnym komunikatem, a nie surowym wyjątkiem biblioteki. Jedno uszkodzone
+źródło nie może zatrzymać całego projektu. Rozdział, którego nie da się
+sparsować, jest pomijany, ale zgłasza ostrzeżenie, więc nie znika po cichu.
+
 Blok kodu nie jest tu rozpoznawany osobno od bloku cytatu ponad to, co
 odwzorowuje znacznik `pre`, ponieważ nuty i notacja techniczna w e-bookach są
 rzadkością, a rozbudowana obsługa niosłaby ryzyko błędów bez realnej potrzeby.
@@ -25,6 +30,7 @@ from __future__ import annotations
 
 import io
 import re
+import zipfile
 from datetime import datetime
 
 from ebooklib import ITEM_DOCUMENT, epub
@@ -32,13 +38,29 @@ from lxml import etree, html
 
 from gnb.core.model import BlokTresci, DokumentWyekstrahowany
 from gnb.core.stale import PoziomPewnosciStruktury, RodzajBloku, TypZrodla
+from gnb.core.wyjatki import BladTrwaly
 from gnb.extractors.bloki_markdown import zapisz_bloki_jako_markdown
 
 METODA_EKSTRAKCJI = "epub"
 FORMATY_EPUB = frozenset({"epub"})
 
+KOMUNIKAT_USZKODZONY = (
+    "Plik EPUB jest uszkodzony albo nie jest książką EPUB: nie dało się odczytać "
+    "jego archiwum ani spisu zawartości."
+)
+KOMUNIKAT_ROZDZIAL_NIEODCZYTANY = (
+    "Rozdziału {nazwa} nie dało się sparsować, więc jego treść nie znalazła się "
+    "w wyniku. Pozostałe rozdziały zostały odczytane normalnie."
+)
+
+# Wyjątki, którymi biblioteki zgłaszają plik nienadający się do odczytu. Błąd
+# klucza pojawia się dla poprawnego archiwum zip pozbawionego pliku
+# „META-INF/container.xml”, czyli dla archiwum, które nie jest książką EPUB.
+_BLEDY_ODCZYTU_EPUB = (epub.EpubException, zipfile.BadZipFile, KeyError, OSError)
+
 _ZNACZNIKI_NAGLOWKOW = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
 _ZNACZNIKI_KONTENEROW = frozenset({"div", "section", "article", "main", "body"})
+_ZNACZNIKI_KOMOREK = frozenset({"td", "th"})
 _BIALE_ZNAKI = re.compile(r"\s+")
 
 
@@ -53,10 +75,24 @@ class EkstraktorEpub:
 
     def wyekstrahuj(self, identyfikator_zrodla: str, bajty: bytes) -> DokumentWyekstrahowany:
         """Czyta rozdziały EPUB w kolejności lektury i zamienia je na bloki treści."""
-        ksiazka = epub.read_epub(io.BytesIO(bajty))
+        try:
+            ksiazka = epub.read_epub(io.BytesIO(bajty))
+        except _BLEDY_ODCZYTU_EPUB as blad:
+            raise BladTrwaly(KOMUNIKAT_USZKODZONY, identyfikator_zrodla) from blad
+
         bloki: list[BlokTresci] = []
+        ostrzezenia: list[str] = []
         for rozdzial in _rozdzialy_w_kolejnosci(ksiazka):
-            bloki.extend(_bloki_z_elementu(_korzen_html(rozdzial.get_content())))
+            korzen = _korzen_html(rozdzial.get_content())
+            if korzen is None:
+                # Rozdział, którego nie da się sparsować, znikał wcześniej
+                # w całości i bez śladu. Cała książka nie może przez to przepaść,
+                # ale użytkownik musi się dowiedzieć, czego w wyniku nie ma.
+                ostrzezenia.append(
+                    KOMUNIKAT_ROZDZIAL_NIEODCZYTANY.format(nazwa=rozdzial.get_name())
+                )
+                continue
+            bloki.extend(_bloki_z_elementu(korzen))
 
         return DokumentWyekstrahowany(
             identyfikator_zrodla=identyfikator_zrodla,
@@ -66,6 +102,7 @@ class EkstraktorEpub:
             tytul=_pierwsza_wartosc(ksiazka, "title"),
             bloki=bloki,
             metadane=_metadane(ksiazka),
+            ostrzezenia=ostrzezenia,
         )
 
 
@@ -144,15 +181,28 @@ def _blok_listy(element: html.HtmlElement, *, numerowana: bool) -> BlokTresci | 
 
 
 def _wiersze_tabeli(element: html.HtmlElement) -> list[str]:
-    """Zwraca wiersze tabeli, z komórkami rozdzielonymi tabulatorem."""
+    """Zwraca wiersze tabeli, z komórkami rozdzielonymi tabulatorem.
+
+    Komórki są zbierane w kolejności ich wystąpienia w dokumencie, niezależnie
+    od tego, czy są komórką nagłówkową, czy zwykłą. Wcześniej były to wyniki
+    dwóch osobnych wyszukiwań sklejone jedno po drugim, przez co wiersz
+    zawierający oba rodzaje komórek dostawał odwróconą kolejność kolumn.
+    """
     wiersze: list[str] = []
     for wiersz in element.findall(".//tr"):
-        komorki = [
-            _tekst_elementu(komorka) for komorka in wiersz.findall("td") + wiersz.findall("th")
-        ]
+        komorki = [_tekst_elementu(komorka) for komorka in _komorki_wiersza(wiersz)]
         if any(komorki):
             wiersze.append("\t".join(komorki))
     return wiersze
+
+
+def _komorki_wiersza(wiersz: html.HtmlElement) -> list[html.HtmlElement]:
+    """Zwraca komórki wiersza tabeli w kolejności ich wystąpienia w dokumencie."""
+    return [
+        dziecko
+        for dziecko in wiersz
+        if isinstance(dziecko.tag, str) and dziecko.tag in _ZNACZNIKI_KOMOREK
+    ]
 
 
 def _tekst_elementu(element: html.HtmlElement) -> str:

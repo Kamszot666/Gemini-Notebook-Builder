@@ -562,7 +562,7 @@ class _Wykonanie:
         dotyczy wyłącznie stron internetowych.
         """
         identyfikator = zrodlo.identyfikator_zrodla
-        bajty = Path(pozycja.wejscie.wartosc).read_bytes()
+        bajty = _odczytaj_bajty_pliku(Path(pozycja.wejscie.wartosc), identyfikator)
 
         self._zachowaj_oryginal(pozycja, zrodlo, "", bajty)
         self._loguj(logging.INFO, identyfikator, f"Źródło {identyfikator}, plik binarny.")
@@ -915,6 +915,24 @@ class _Wykonanie:
 
     def _loguj(self, poziom: int, identyfikator: str, komunikat: str) -> None:
         self._log.log(poziom, komunikat, extra={"identyfikator_zrodla": identyfikator})
+
+
+def _odczytaj_bajty_pliku(sciezka: Path, identyfikator: str) -> bytes:
+    """Odczytuje zawartość pliku, zamieniając awarię odczytu na błąd trwały.
+
+    Plik usunięty, przeniesiony albo zablokowany przez inny program między
+    walidacją wejścia a odczytem podnosi ``OSError``, który nie jest wyjątkiem
+    projektu. Bez tego opakowania wywracał cały przebieg razem ze wszystkimi
+    poprawnymi źródłami z tej samej partii.
+    """
+    try:
+        return sciezka.read_bytes()
+    except OSError as blad:
+        raise BladTrwaly(
+            f"Nie udało się odczytać pliku {sciezka.name}. Plik mógł zostać usunięty, "
+            f"przeniesiony albo zablokowany przez inny program. Szczegóły: {blad.strerror}.",
+            identyfikator,
+        ) from blad
 
 
 def _opis_dlugosci_z_metadanych(metadane: dict[str, str]) -> str:

@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import io
+import zipfile
 from pathlib import Path
 
 import docx
+import pytest
 
 from gnb.core.stale import PoziomPewnosciStruktury, RodzajBloku, TypZrodla
+from gnb.core.wyjatki import BladTrwaly
 from gnb.extractors.plik_docx import EkstraktorDocx
 
 KATALOG_DANYCH = Path(__file__).resolve().parents[1] / "dane"
@@ -105,3 +108,27 @@ def test_plik_testowy_ma_naglowki_akapity_i_liste() -> None:
     assert RodzajBloku.AKAPIT in rodzaje
     assert RodzajBloku.LISTA in rodzaje
     assert dokument.tytul == "Jak przygotować bazę wiedzy dla asystenta AI"
+
+
+def _archiwum_zip_bez_dokumentu() -> bytes:
+    """Buduje poprawne archiwum zip, które nie jest dokumentem DOCX."""
+    bufor = io.BytesIO()
+    with zipfile.ZipFile(bufor, "w") as archiwum:
+        archiwum.writestr("cokolwiek.txt", "to nie jest dokument")
+    return bufor.getvalue()
+
+
+def test_uszkodzony_plik_konczy_sie_bledem_trwalym() -> None:
+    """Plik, który nie jest archiwum zip, nie może wywrócić całego przebiegu.
+
+    Biblioteka zgłasza tu wyjątek spoza taksonomii projektu, więc potok go nie
+    łapał i poprawne źródła z tej samej partii nie były przetwarzane.
+    """
+    with pytest.raises(BladTrwaly, match="uszkodzony"):
+        EkstraktorDocx().wyekstrahuj("plik_dokument-20", b"to nie jest plik DOCX")
+
+
+def test_archiwum_bez_zawartosci_dokumentu_konczy_sie_bledem_trwalym() -> None:
+    """Poprawne archiwum zip bez pliku Content_Types też jest błędem trwałym."""
+    with pytest.raises(BladTrwaly, match="uszkodzony"):
+        EkstraktorDocx().wyekstrahuj("plik_dokument-21", _archiwum_zip_bez_dokumentu())

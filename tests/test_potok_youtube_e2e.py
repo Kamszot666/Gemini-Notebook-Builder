@@ -243,7 +243,8 @@ def test_wlaczone_znaczniki_czasu_pojawiaja_sie_w_pliku(tmp_path: Path) -> None:
     (plik,) = katalog.iterdir()
     tresc = plik.read_text(encoding="utf-8")
 
-    assert tresc.startswith("[00:00] ")
+    _, _, po_naglowku = tresc.partition("\n\n")
+    assert po_naglowku.startswith("[00:00] ")
 
 
 def test_film_bez_napisow_jest_pomijany_z_odeslaniem_do_etapu_dziewiatego(
@@ -496,3 +497,19 @@ def test_playlista_daje_nazwe_z_hosta_bo_nie_ma_identyfikatora_filmu(tmp_path: P
     )
 
     assert wynik.nazwa_projektu.startswith("youtube_com_")
+
+
+def test_naglowek_filmu_zawiera_kanal_dlugosc_i_opis_napisow(tmp_path: Path) -> None:
+    wynik = _uruchom(tmp_path, nazwa="Test nagłówka filmu")
+
+    (plik_txt,) = (
+        wynik.katalog_projektu / "pliki_wynikowe"  # type: ignore[attr-defined]
+    ).glob("*.txt")
+    naglowek, _, _ = plik_txt.read_text(encoding="utf-8").partition("\n\n")
+
+    assert "Typ źródła: film z serwisu YouTube" in naglowek
+    assert "Kanał: Kanał testowy" in naglowek
+    assert "Długość: 15 minut 30 sekund" in naglowek
+    assert "Język napisów: pl" in naglowek
+    assert "Rodzaj napisów: tworzone ręcznie" in naglowek
+    assert f"Adres: {_ADRES}" in naglowek

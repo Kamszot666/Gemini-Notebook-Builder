@@ -322,6 +322,40 @@ Przepisanie nie może gubić treści. Sprawdza to test
 `tests/dane/dokument_strukturalny.md` i wymaga, żeby w wersji TXT znalazł się
 każdy wiersz treści i każda komórka tabeli.
 
+## Nagłówek metadanych pliku wynikowego
+
+Każdy plik wynikowy zaczyna się nagłówkiem metadanych źródła. Sama treść nie
+mówi, skąd pochodzi: transkrypcja filmu bez tytułu i adresu jest w notatniku
+materiałem bez kontekstu, a artykuł bez daty publikacji bywa różnicą między
+informacją a dezinformacją.
+
+Każdy wiersz nagłówka ma postać etykieta, dwukropek, spacja, wartość. Kolejność
+pól jest stała:
+
+1. Tytuł.
+2. Typ źródła.
+3. Adres, dla źródeł sieciowych. Jest to adres pobierania, a nie postać
+   kanoniczna, żeby dało się go wkleić do przeglądarki wprost.
+4. Plik, dla źródeł lokalnych. Jest to nazwa pliku wejściowego.
+5. Autor.
+6. Data publikacji.
+7. Kanał, wyłącznie dla filmu.
+8. Długość, wyłącznie dla filmu, zapisana słownie, na przykład „20 minut 3 sekundy”.
+9. Język napisów, wyłącznie dla filmu z pobranymi napisami.
+10. Rodzaj napisów, wyłącznie dla filmu z pobranymi napisami.
+11. Data importu, w czasie lokalnym.
+12. Identyfikator źródła.
+
+Pole nieobecne dla danego źródła jest pomijane w całości, a nie drukowane z pustą
+wartością. Pola „Adres” i „Plik” wykluczają się wzajemnie, a tekst wklejony nie ma
+żadnego z nich.
+
+Nagłówek jest oddzielony od treści dokładnie jednym pustym wierszem. Nie ma linii
+ozdobnych ani separatorów ze znaków. Do wersji MD trafia w identycznej postaci
+zwykłego tekstu, bez składni Markdown, ponieważ są to metadane strukturalne,
+a nie treść artykułu, i nie mogą stać się nagłówkiem sekcji ani trafić do
+automatycznego spisu treści notatnika.
+
 ## Dwie miary liczby znaków
 
 W manifeście występują dwie liczby znaków i mierzą co innego, dlatego noszą różne
@@ -335,6 +369,11 @@ nazwy.
 
 Liczby słów są w obu miejscach takie same, bo znak nowej linii nie tworzy nowego
 słowa.
+
+Obie liczby przy pliku wynikowym obejmują nagłówek metadanych, ponieważ dotyczą
+zawartości pliku. Limity notatnika są natomiast sprawdzane na samej treści
+dokumentu, bez nagłówka: limit słów i limit rozmiaru mówią o tym, ile materiału
+niesie źródło, a nagłówek jest informacją o źródle, a nie jego treścią.
 
 ## Nazwy plików wynikowych
 

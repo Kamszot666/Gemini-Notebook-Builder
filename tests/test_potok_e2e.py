@@ -50,6 +50,16 @@ def _pozycje() -> list[PozycjaWejsciowa]:
     ]
 
 
+def _tresc_po_naglowku(tresc_pliku: str) -> str:
+    """Zwraca treść pliku wynikowego bez nagłówka metadanych.
+
+    Nagłówek jest oddzielony od treści jednym pustym wierszem, więc wystarczy
+    odciąć wszystko do pierwszego pustego wiersza.
+    """
+    _, _, tresc = tresc_pliku.partition("\n\n")
+    return tresc
+
+
 def test_potok_przetwarza_rozne_zrodla_i_stosuje_regule_md(tmp_path: Path) -> None:
     konfiguracja = Konfiguracja(katalog_wynikow=tmp_path)
     wynik = przetworz_projekt(
@@ -85,8 +95,8 @@ def test_wersja_txt_zrodla_markdown_nie_jest_kopia_wersji_md(tmp_path: Path) -> 
     tresc_md = plik_md.read_text(encoding="utf-8")
 
     assert tresc_txt != tresc_md
-    assert tresc_md.startswith("# Jak przygotować bazę wiedzy dla asystenta AI")
-    assert tresc_txt.startswith("Jak przygotować bazę wiedzy dla asystenta AI")
+    assert _tresc_po_naglowku(tresc_md).startswith("# Jak przygotować bazę wiedzy")
+    assert _tresc_po_naglowku(tresc_txt).startswith("Jak przygotować bazę wiedzy")
     assert "#" not in tresc_txt
     assert "|" not in tresc_txt
     assert "Metoda: MinHash" in tresc_txt
@@ -279,3 +289,95 @@ def test_wlaczone_zachowywanie_oryginalow_zapisuje_materialy_zrodlowe(tmp_path: 
 
     materialy = wynik.katalog_projektu / "materialy_zrodlowe"
     assert len(list(materialy.iterdir())) == 4
+
+
+def _naglowek_pliku(sciezka: Path) -> str:
+    """Zwraca sam nagłówek metadanych z pliku wynikowego."""
+    naglowek, _, _ = sciezka.read_text(encoding="utf-8").partition("\n\n")
+    return naglowek
+
+
+def test_naglowek_metadanych_jest_na_poczatku_pliku_zrodla_plikowego(tmp_path: Path) -> None:
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path)
+    wynik = przetworz_projekt(
+        [
+            przyjmij_plik(
+                KATALOG_DANYCH / "dokument_strukturalny.md", datetime(2026, 8, 26, tzinfo=UTC)
+            )
+        ],
+        konfiguracja,
+        nazwa_projektu="Test nagłówka",
+        zegar=_zegar_krokowy(),
+    )
+
+    (plik_txt,) = (wynik.katalog_projektu / "pliki_wynikowe").glob("*.txt")
+    naglowek = _naglowek_pliku(plik_txt)
+
+    assert "Tytuł: Jak przygotować bazę wiedzy dla asystenta AI" in naglowek
+    assert "Typ źródła: plik tekstowy" in naglowek
+    assert "Plik: dokument_strukturalny.md" in naglowek
+    assert "Identyfikator źródła: plik_tekstowy-" in naglowek
+    assert "Adres:" not in naglowek
+
+
+def test_naglowek_jest_identyczny_w_wersji_txt_i_md(tmp_path: Path) -> None:
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path)
+    wynik = przetworz_projekt(
+        [
+            przyjmij_plik(
+                KATALOG_DANYCH / "dokument_strukturalny.md", datetime(2026, 8, 26, tzinfo=UTC)
+            )
+        ],
+        konfiguracja,
+        nazwa_projektu="Test zgodności nagłówka",
+        zegar=_zegar_krokowy(),
+    )
+
+    katalog = wynik.katalog_projektu / "pliki_wynikowe"
+    (plik_txt,) = katalog.glob("*.txt")
+    (plik_md,) = katalog.glob("*.md")
+
+    assert _naglowek_pliku(plik_txt) == _naglowek_pliku(plik_md)
+    assert not _naglowek_pliku(plik_md).startswith("#")
+
+
+def test_tekst_wklejony_nie_ma_ani_adresu_ani_pliku_w_naglowku(tmp_path: Path) -> None:
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path)
+    wynik = przetworz_projekt(
+        [
+            przyjmij_tekst(
+                "Krótka notatka do sprawdzenia nagłówka.", datetime(2026, 8, 26, tzinfo=UTC)
+            )
+        ],
+        konfiguracja,
+        nazwa_projektu="Test tekstu wklejonego",
+        zegar=_zegar_krokowy(),
+    )
+
+    (plik_txt,) = (wynik.katalog_projektu / "pliki_wynikowe").glob("*.txt")
+    naglowek = _naglowek_pliku(plik_txt)
+
+    assert "Typ źródła: tekst wklejony" in naglowek
+    assert "Adres:" not in naglowek
+    assert "Plik:" not in naglowek
+
+
+def test_limit_slow_jest_liczony_bez_naglowka_metadanych(tmp_path: Path) -> None:
+    """Nagłówek jest informacją o źródle, nie jego treścią, więc nie wchodzi do limitu."""
+    tresc = "Zdanie z dokładnie dziesięcioma słowami, policzonymi bez nagłówka metadanych."
+    liczba_slow = len(tresc.split())
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path, bezpieczny_limit_slow=liczba_slow)
+
+    wynik = przetworz_projekt(
+        [przyjmij_tekst(tresc, datetime(2026, 8, 26, tzinfo=UTC))],
+        konfiguracja,
+        nazwa_projektu="Test limitu bez nagłówka",
+        zegar=_zegar_krokowy(),
+    )
+
+    assert wynik.liczba_przetworzonych == 1
+    assert wynik.liczba_pominietych == 0
+
+    (plik_txt,) = (wynik.katalog_projektu / "pliki_wynikowe").glob("*.txt")
+    slowa_w_pliku = len(plik_txt.read_text(encoding="utf-8").split())
+    assert slowa_w_pliku > liczba_slow, "plik z nagłówkiem ma więcej słów niż sama treść"

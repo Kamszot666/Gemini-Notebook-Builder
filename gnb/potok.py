@@ -102,6 +102,23 @@ from gnb.output.manifest import (
     WpisZrodla,
     zapisz_manifest,
 )
+from gnb.output.naglowek_metadanych import (
+    ETYKIETA_ADRES,
+    ETYKIETA_AUTOR,
+    ETYKIETA_DATA_IMPORTU,
+    ETYKIETA_DATA_PUBLIKACJI,
+    ETYKIETA_DLUGOSC,
+    ETYKIETA_IDENTYFIKATOR,
+    ETYKIETA_JEZYK_NAPISOW,
+    ETYKIETA_KANAL,
+    ETYKIETA_PLIK,
+    ETYKIETA_RODZAJ_NAPISOW,
+    ETYKIETA_TYP,
+    ETYKIETA_TYTUL,
+    opis_dlugosci,
+    opis_typu_zrodla,
+    zbuduj_naglowek,
+)
 from gnb.output.raport import (
     PodsumowanieProjektu,
     ZrodloNieprzetworzone,
@@ -228,7 +245,16 @@ def przetworz_projekt(
             pozycje, konfiguracja, checkpoint, log, transport_http, pobieracz_youtube
         )
         wykonanie = _Wykonanie(
-            uklad, konfiguracja, checkpoint, dziennik_wazny, log, rejestr, zegar, pobrane, filmy
+            uklad,
+            konfiguracja,
+            checkpoint,
+            dziennik_wazny,
+            log,
+            rejestr,
+            zegar,
+            zegar_lokalny,
+            pobrane,
+            filmy,
         )
         for pozycja in pozycje:
             wykonanie.przetworz(pozycja)
@@ -276,6 +302,7 @@ class _Wykonanie:
         log: logging.Logger,
         rejestr: RejestrEkstraktorow,
         zegar: Callable[[], datetime],
+        zegar_lokalny: Callable[[], datetime],
         pobrane: dict[str, WynikFazyPobrania] | None = None,
         filmy: dict[str, WynikFazyFilmu] | None = None,
     ) -> None:
@@ -286,6 +313,7 @@ class _Wykonanie:
         self._log = log
         self._rejestr = rejestr
         self._zegar = zegar
+        self._zegar_lokalny = zegar_lokalny
         self._pobrane: dict[str, WynikFazyPobrania] = pobrane if pobrane is not None else {}
         self._filmy: dict[str, WynikFazyFilmu] = filmy if filmy is not None else {}
 
@@ -396,6 +424,38 @@ class _Wykonanie:
             f"{oczekiwane}, pobrano {wynik.napisy.jezyk}"
         )
 
+    def _naglowek(
+        self, pozycja: PozycjaWejsciowa, zrodlo: Zrodlo, dokument: DokumentWyekstrahowany
+    ) -> str:
+        """Buduje nagłówek metadanych dopisywany na początku plików wynikowych.
+
+        Pola nieobecne dla danego źródła są pomijane. Adres dotyczy źródeł
+        sieciowych i jest adresem pobierania, a nie postacią kanoniczną, żeby
+        dało się go wkleić do przeglądarki wprost. Plik dotyczy źródeł lokalnych.
+        Data importu jest zapisywana w czasie lokalnym, bo nagłówek czyta
+        człowiek.
+        """
+        metadane = dokument.metadane
+        pola: dict[str, str] = {
+            ETYKIETA_TYTUL: dokument.tytul or "",
+            ETYKIETA_TYP: opis_typu_zrodla(zrodlo.typ_zrodla),
+            ETYKIETA_AUTOR: metadane.get("autor", ""),
+            ETYKIETA_DATA_PUBLIKACJI: metadane.get("data_publikacji", ""),
+            ETYKIETA_KANAL: metadane.get("kanal", ""),
+            ETYKIETA_DLUGOSC: _opis_dlugosci_z_metadanych(metadane),
+            ETYKIETA_JEZYK_NAPISOW: metadane.get("jezyk_napisow", ""),
+            ETYKIETA_RODZAJ_NAPISOW: _opis_rodzaju_napisow(metadane),
+            ETYKIETA_DATA_IMPORTU: self._zegar_lokalny().strftime("%Y-%m-%d"),
+            ETYKIETA_IDENTYFIKATOR: zrodlo.identyfikator_zrodla,
+        }
+
+        if pozycja.wejscie.typ_wejscia is TypWejscia.URL:
+            pola[ETYKIETA_ADRES] = pozycja.wejscie.wartosc
+        elif pozycja.wejscie.typ_wejscia is TypWejscia.PLIK:
+            pola[ETYKIETA_PLIK] = Path(pozycja.wejscie.wartosc).name
+
+        return zbuduj_naglowek(pola)
+
     def _przygotuj_tresc(
         self, pozycja: PozycjaWejsciowa, zrodlo: Zrodlo
     ) -> _PrzygotowanyDokument | None:
@@ -456,6 +516,7 @@ class _Wykonanie:
             decyzja,
             formaty_wlaczone=self._konfiguracja.formaty_wynikowe,
             tekst_txt=przygotowane.tekst_txt,
+            naglowek=self._naglowek(pozycja, zrodlo, dokument),
         )
 
         wyniki_stanu = [
@@ -663,6 +724,20 @@ class _Wykonanie:
 
     def _loguj(self, poziom: int, identyfikator: str, komunikat: str) -> None:
         self._log.log(poziom, komunikat, extra={"identyfikator_zrodla": identyfikator})
+
+
+def _opis_dlugosci_z_metadanych(metadane: dict[str, str]) -> str:
+    """Zamienia zapisaną w metadanych długość w sekundach na czytelny opis."""
+    surowa = metadane.get("dlugosc_sekundy", "")
+    if not surowa.isdigit():
+        return ""
+    return opis_dlugosci(int(surowa))
+
+
+def _opis_rodzaju_napisow(metadane: dict[str, str]) -> str:
+    """Zwraca rodzaj napisów w postaci przeznaczonej dla człowieka."""
+    typ = metadane.get("typ_napisow", "")
+    return opis_typu_napisow(typ) if typ else ""
 
 
 def _pobierz_strony(

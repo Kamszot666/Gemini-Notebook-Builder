@@ -500,3 +500,22 @@ def test_nazwa_podana_wprost_ma_pierwszenstwo(tmp_path: Path) -> None:
     )
 
     assert wynik.nazwa_projektu == "Moja własna nazwa"
+
+
+def test_naglowek_zrodla_sieciowego_zawiera_adres_pobierania(tmp_path: Path) -> None:
+    serwer = _Serwer()
+    wynik = przetworz_projekt(
+        _pozycje(_ADRES_ARTYKULU + "?utm_source=newsletter"),
+        _konfiguracja(tmp_path),
+        nazwa_projektu="Test nagłówka strony",
+        zegar=_zegar_krokowy(),
+        transport_http=serwer.transport(),
+    )
+
+    (plik_txt,) = (wynik.katalog_projektu / "pliki_wynikowe").glob("*.txt")
+    naglowek, _, _ = plik_txt.read_text(encoding="utf-8").partition("\n\n")
+
+    assert "Typ źródła: strona internetowa" in naglowek
+    assert f"Adres: {_ADRES_ARTYKULU}" in naglowek
+    assert "utm_source" not in naglowek
+    assert "Plik:" not in naglowek

@@ -14,8 +14,11 @@ authors = [{ name = "Kamszot666" }]
 
 dependencies = [
     "charset-normalizer>=3.3",
+    "EbookLib>=0.18",
     "httpx>=0.27",
     "markdown-it-py>=3.0",
+    "pypdf>=5.0",
+    "python-docx>=1.1",
     "trafilatura>=2.0",
     "yt-dlp>=2025.1.1",
     "youtube-transcript-api>=1.0",
@@ -50,11 +53,11 @@ python_version = "3.12"
 packages = ["gnb"]
 strict = true
 
-# Biblioteka yt-dlp nie dostarcza informacji o typach ani znacznika py.typed.
-# Nasz kod opakowuje ją wąskim adapterem z własnymi typami, więc brak jej typów
-# nie rozlewa się na resztę pakietu.
+# Biblioteki yt-dlp oraz ebooklib nie dostarczają informacji o typach ani
+# znacznika py.typed. Nasz kod opakowuje je wąskim adapterem z własnymi typami,
+# więc brak ich typów nie rozlewa się na resztę pakietu.
 [[tool.mypy.overrides]]
-module = ["yt_dlp.*"]
+module = ["yt_dlp.*", "ebooklib.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

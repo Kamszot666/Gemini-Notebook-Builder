@@ -6,14 +6,13 @@ Testy nie korzystają z sieci. Napisy są przygotowane w kodzie.
 from __future__ import annotations
 
 from gnb.core.stale import PoziomPewnosciStruktury
-from gnb.extractors.youtube import (
+from gnb.extractors.napisy_wspolne import (
     MINIMALNA_DLUGOSC_AKAPITU,
     Akapit,
-    usun_atrybucje,
     zapisz_akapity,
     zbuduj_akapity,
-    zbuduj_dokument,
 )
+from gnb.extractors.youtube import usun_atrybucje, zbuduj_dokument
 from gnb.ingestion.youtube import (
     TYP_NAPISOW_AUTOMATYCZNE,
     TYP_NAPISOW_RECZNE,

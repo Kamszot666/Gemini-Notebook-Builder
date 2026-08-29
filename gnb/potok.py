@@ -186,8 +186,9 @@ WynikFazyPobrania = OdpowiedzPobrania | PominietePobranie | BladGnb
 WynikFazyFilmu = WynikYouTube | PominietyFilm | BladGnb
 
 KOMUNIKAT_PLIK_BEZ_TRESCI = (
-    "Plik wynikowy zawiera wyłącznie nagłówek metadanych, bez treści źródła. "
-    "Ekstrakcja niczego nie odczytała, więc ten plik nie wniesie nic do notatnika."
+    "Ekstrakcja niczego nie odczytała, więc wynik zawierałby wyłącznie nagłówek "
+    "metadanych, bez treści źródła. Źródło zostało pominięte, żeby pusty plik nie "
+    "zajmował miejsca w limicie źródeł notatnika."
 )
 
 _TYP_ZAWARTOSCI_NAPISOW = "application/json"
@@ -621,7 +622,19 @@ class _Wykonanie:
             )
 
         ocena = self._ocen_jakosc(zrodlo, pozycja, dokument, znormalizowany.tekst, przygotowane)
-        ostrzezenia = self._zbierz_ostrzezenia(zrodlo, dokument, znormalizowany.tekst)
+
+        if ocena is None and not znormalizowany.tekst.strip():
+            # Format celowo pominięty przez ocenę jakości, na przykład CSV albo
+            # napisy SRT i VTT, nie ma żadnej treści: wynik zawierałby wyłącznie
+            # nagłówek metadanych i nie wniesie nic do notatnika. Źródło jest
+            # pomijane tak samo jak przekroczenie limitu słów, zamiast zajmować
+            # slot notatnika pustą treścią. Format oceniany, na przykład skan PDF
+            # bez warstwy tekstowej, zamiast tego trafia niżej do oceny jakości
+            # jako podejrzany i zostaje zapisany do ręcznego sprawdzenia.
+            self._pomin(zrodlo, pozycja, KOMUNIKAT_PLIK_BEZ_TRESCI)
+            return
+
+        ostrzezenia = self._zbierz_ostrzezenia(zrodlo, dokument)
 
         decyzja = regula_md.ocen(dokument)
         nazwa_bazowa = nazwa_pliku_wynikowego(dokument.tytul, identyfikator)
@@ -677,23 +690,19 @@ class _Wykonanie:
             f"{'tak' if decyzja.generuj_md else 'nie'}.",
         )
 
-    def _zbierz_ostrzezenia(
-        self, zrodlo: Zrodlo, dokument: DokumentWyekstrahowany, tekst_znormalizowany: str
-    ) -> list[str]:
-        """Zbiera ostrzeżenia dotyczące źródła i odnotowuje je w obu logach.
+    def _zbierz_ostrzezenia(self, zrodlo: Zrodlo, dokument: DokumentWyekstrahowany) -> list[str]:
+        """Zbiera ostrzeżenia zgłoszone przez ekstraktor i odnotowuje je w obu logach.
 
-        Do ostrzeżeń zgłoszonych przez ekstraktor dochodzi ostrzeżenie potoku
-        o pliku wynikowym bez treści. Tamto wykrycie musi być tutaj, a nie
-        w ocenie jakości, ponieważ ocena celowo pomija CSV oraz napisy SRT i VTT,
-        a to właśnie pusty plik CSV i pusty plik napisów przechodziły dotąd jako
-        źródła poprawne.
+        Źródło bez żadnej znormalizowanej treści, dla formatu celowo wyłączonego
+        z oceny jakości, jest pomijane wcześniej, w `_zapisz_dokument`, i tutaj
+        w ogóle nie dociera. Format oceniany, na przykład skan PDF bez warstwy
+        tekstowej, dociera tutaj nawet z pustą treścią, bo jego pusty wynik
+        obsługuje ocena jakości, a nie to miejsce.
 
         Ostrzeżenie nie zmienia statusu źródła. Źródło jest zapisywane normalnie,
         a ostrzeżenie trafia do checkpointu, a stąd do manifestu i do raportu.
         """
         ostrzezenia = list(dokument.ostrzezenia)
-        if not tekst_znormalizowany.strip():
-            ostrzezenia.append(KOMUNIKAT_PLIK_BEZ_TRESCI)
         if not ostrzezenia:
             return []
 

@@ -13,10 +13,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from gnb.core.konfiguracja import Konfiguracja
-from gnb.extractors.napisy import KOMUNIKAT_BRAK_TRESCI
-from gnb.extractors.plik_csv import KOMUNIKAT_BRAK_DANYCH
+from gnb.extractors.napisy import KOMUNIKAT_POMINIETE_BLOKI
 from gnb.extractors.plik_pdf import KOMUNIKAT_BEZ_WARSTWY_TEKSTOWEJ
 from gnb.ingestion.wejscie import PozycjaWejsciowa, przyjmij_plik
+from gnb.logging_pl.dziennik import ZDARZENIE_ZRODLO_POMINIETE
 from gnb.output.raport import NAGLOWEK_MATERIALOW_DO_SPRAWDZENIA
 from gnb.potok import KOMUNIKAT_PLIK_BEZ_TRESCI, przetworz_projekt
 
@@ -146,14 +146,14 @@ def test_naglowek_pliku_binarnego_ma_pole_plik_a_nie_adres(tmp_path: Path) -> No
     assert "Adres:" not in naglowek
 
 
-def test_ostrzezenie_ekstraktora_dociera_do_manifestu_i_raportu(tmp_path: Path) -> None:
-    """Ostrzeżenie zgłoszone przez ekstraktor przechodzi tę samą drogę co pominięcie.
+def test_plik_bez_zadnej_tresci_zostaje_pominiety(tmp_path: Path) -> None:
+    """Plik napisów i plik CSV bez żadnej treści nie zajmują slotu notatnika.
 
-    Pusty plik napisów i pusty plik CSV kończyły się wcześniej statusem
-    „spakowane”, plikiem zawierającym sam nagłówek metadanych i raportem
-    mówiącym, że oba źródła są poprawne. Ostrzeżenie ekstraktora nie było
-    odczytywane przez nikogo, czyli mechanizm ostrzeżeń nie docierał do
-    użytkownika wcale.
+    Wcześniej takie źródła kończyły się statusem „spakowane”, plikiem
+    zawierającym sam nagłówek metadanych, i raportem mówiącym, że oba źródła są
+    poprawne — mimo że ekstrakcja niczego nie odczytała. Ocena jakości celowo
+    pomija formaty CSV, SRT i VTT, więc to potok, a nie ocena, musi wykryć pustą
+    treść i pominąć źródło, tak samo jak przy przekroczeniu limitu słów.
     """
     katalog_wejsc = tmp_path / "wejscia"
     katalog_wejsc.mkdir()
@@ -170,30 +170,75 @@ def test_ostrzezenie_ekstraktora_dociera_do_manifestu_i_raportu(tmp_path: Path) 
     wynik = przetworz_projekt(
         pozycje,
         Konfiguracja(katalog_wynikow=tmp_path / "wyniki"),
+        nazwa_projektu="Test pustych plików",
+        zegar=_zegar_krokowy(),
+    )
+
+    assert wynik.liczba_przetworzonych == 0
+    assert wynik.liczba_pominietych == 2
+
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    zrodla = {Path(zrodlo["pochodzenie"]).name: zrodlo for zrodlo in manifest["zrodla"]}
+    assert zrodla["puste.srt"]["status"] == "pominiete"
+    assert zrodla["puste.csv"]["status"] == "pominiete"
+    assert KOMUNIKAT_PLIK_BEZ_TRESCI in zrodla["puste.srt"]["komunikat_bledu"]
+    assert KOMUNIKAT_PLIK_BEZ_TRESCI in zrodla["puste.csv"]["komunikat_bledu"]
+
+    katalog_wynikow = wynik.katalog_projektu / "pliki_wynikowe"
+    assert not katalog_wynikow.exists() or not any(katalog_wynikow.iterdir())
+
+    raport = wynik.sciezka_raportu.read_text(encoding="utf-8")
+    assert "Źródła nieprzetworzone" in raport
+    assert KOMUNIKAT_PLIK_BEZ_TRESCI in raport
+    assert "puste.srt" in raport
+    assert "puste.csv" in raport
+
+    log_wazne = (wynik.katalog_projektu / "logi" / "log_wazne.txt").read_text(encoding="utf-8")
+    assert log_wazne.count(ZDARZENIE_ZRODLO_POMINIETE) == 2
+
+
+def test_ostrzezenie_ekstraktora_dociera_do_manifestu_i_raportu(tmp_path: Path) -> None:
+    """Ostrzeżenie zgłoszone przez ekstraktor przechodzi tę samą drogę co pominięcie.
+
+    Plik napisów z jednym poprawnym segmentem i jednym blokiem bez treści pod
+    znacznikiem czasu ma treść niepustą, więc dociera dalej niż nowe pominięcie
+    pustego pliku, i to na nim sprawdzane jest samo przenoszenie ostrzeżenia do
+    manifestu, logu i raportu. Ostrzeżenie ekstraktora nie było wcześniej
+    odczytywane przez nikogo, czyli mechanizm ostrzeżeń nie docierał do
+    użytkownika wcale.
+    """
+    katalog_wejsc = tmp_path / "wejscia"
+    katalog_wejsc.mkdir()
+    (katalog_wejsc / "z_lukami.srt").write_text(
+        "1\n00:00:01,000 --> 00:00:02,000\nWitaj świecie\n\n2\n00:00:03,000 --> 00:00:04,000\n\n",
+        encoding="utf-8",
+    )
+    moment = datetime(2026, 8, 28, 9, 0, tzinfo=UTC)
+    pozycje = [przyjmij_plik(katalog_wejsc / "z_lukami.srt", moment)]
+
+    wynik = przetworz_projekt(
+        pozycje,
+        Konfiguracja(katalog_wynikow=tmp_path / "wyniki"),
         nazwa_projektu="Test ostrzeżeń",
         zegar=_zegar_krokowy(),
     )
 
+    assert wynik.liczba_przetworzonych == 1
+
     manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
     zrodla = {Path(zrodlo["pochodzenie"]).name: zrodlo for zrodlo in manifest["zrodla"]}
-    assert KOMUNIKAT_BRAK_TRESCI in zrodla["puste.srt"]["ostrzezenia"]
-    assert KOMUNIKAT_BRAK_DANYCH in zrodla["puste.csv"]["ostrzezenia"]
-    # Plik złożony z samego nagłówka metadanych jest wykrywany niezależnie od
-    # ekstraktora, bo ocena jakości celowo pomija formaty CSV, SRT i VTT.
-    assert KOMUNIKAT_PLIK_BEZ_TRESCI in zrodla["puste.srt"]["ostrzezenia"]
-    assert KOMUNIKAT_PLIK_BEZ_TRESCI in zrodla["puste.csv"]["ostrzezenia"]
+    assert zrodla["z_lukami.srt"]["status"] == "spakowane"
+    assert KOMUNIKAT_POMINIETE_BLOKI.format(liczba=1) in zrodla["z_lukami.srt"]["ostrzezenia"]
 
     raport = wynik.sciezka_raportu.read_text(encoding="utf-8")
     assert NAGLOWEK_MATERIALOW_DO_SPRAWDZENIA in raport
-    assert KOMUNIKAT_BRAK_TRESCI in raport
-    assert KOMUNIKAT_BRAK_DANYCH in raport
-    assert "puste.srt" in raport
-    assert "puste.csv" in raport
+    assert KOMUNIKAT_POMINIETE_BLOKI.format(liczba=1) in raport
+    assert "z_lukami.srt" in raport
 
     log_szczegolowy = (wynik.katalog_projektu / "logi" / "log_szczegolowy.txt").read_text(
         encoding="utf-8"
     )
-    assert KOMUNIKAT_BRAK_DANYCH in log_szczegolowy
+    assert KOMUNIKAT_POMINIETE_BLOKI.format(liczba=1) in log_szczegolowy
 
     # Widok tekstowy manifestu też musi wymieniać ostrzeżenie, bo to jego czyta
     # użytkownik, a nie postać JSON.

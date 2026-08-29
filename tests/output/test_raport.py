@@ -89,3 +89,24 @@ def test_raport_wymienia_materialy_do_sprawdzenia_wraz_z_powodami() -> None:
     assert "Źródło: https://przyklad.pl/artykul" in tekst
     assert "  Identyfikator: abc123" in tekst
     assert "    - źródło nie ma tytułu" in tekst
+
+
+def test_raport_wymienia_mozliwe_duplikaty_do_rozstrzygniecia() -> None:
+    podsumowanie = replace(
+        _PODSUMOWANIE,
+        materialy_do_sprawdzenia=(
+            MaterialDoSprawdzenia(
+                identyfikator="przedruk1",
+                pochodzenie="artykul_przedruk.html",
+                mozliwe_duplikaty=(
+                    "Możliwy duplikat źródła plik_dokument-abc: podobieństwo 0.81, metoda SimHash.",
+                ),
+            ),
+        ),
+    )
+
+    tekst = zbuduj_raport("Projekt testowy", podsumowanie)
+
+    assert "Materiały do sprawdzenia, liczba: 1" in tekst
+    assert "  Możliwe duplikaty do rozstrzygnięcia:" in tekst
+    assert "    - Możliwy duplikat źródła plik_dokument-abc: podobieństwo 0.81" in tekst

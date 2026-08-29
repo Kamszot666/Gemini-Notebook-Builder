@@ -1,18 +1,19 @@
-"""Konfiguracja aplikacji w zakresie obsługiwanym przez etapy pierwszy i drugi.
+"""Konfiguracja aplikacji w zakresie obsługiwanym przez etapy od pierwszego do piątego.
 
 Moduł buduje konfigurację z trzech źródeł, w kolejności rosnącego pierwszeństwa:
 wartości domyślne zapisane w kodzie, plik TOML oraz zmienne środowiskowe
 z prefiksem ``GNB_``. Brak pliku konfiguracji nie jest błędem — obowiązują
 wtedy wartości domyślne.
 
-Obsługiwane są pola potrzebne w etapach pierwszym i drugim: katalog nadrzędny
+Obsługiwane są pola potrzebne w dotychczasowych etapach: katalog nadrzędny
 wyników, limit liczby źródeł, bezpieczny limit słów, bezpieczny limit megabajtów,
 lista formatów wynikowych, zachowywanie oryginałów źródeł, ustawienia pobierania
 stron: nazwa klienta, limit czasu, ponowienia, odstępy, liczba połączeń na
 domenę, respektowanie pliku robots, pamięć podręczna i dodatkowe parametry
-śledzące, a także ustawienia napisów filmów: języki, zgoda na napisy
-automatyczne i tłumaczone oraz znaczniki czasu. Pozostałe pola wymienione
-w sekcji jedenastej a pliku CLAUDE.md dojdą w kolejnych etapach.
+śledzące, ustawienia napisów filmów: języki, zgoda na napisy automatyczne
+i tłumaczone oraz znaczniki czasu, a także włączenie i progi kolejnych etapów
+deduplikacji. Pozostałe pola wymienione w sekcji jedenastej a pliku CLAUDE.md
+dojdą w kolejnych etapach.
 """
 
 from __future__ import annotations

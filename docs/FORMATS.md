@@ -600,23 +600,28 @@ pliku, a przeoczona utrata treści kosztuje wiarygodność całej bazy wiedzy.
 Ocena jakości jest heurystyką, czyli przypuszczeniem. Obok niej działa drugi,
 niezależny mechanizm: ostrzeżenie zgłoszone wprost przez ekstraktor. Ostrzeżenie
 nie jest przypuszczeniem, tylko stwierdzeniem — na przykład że plik PDF nie ma
-warstwy tekstowej, że plik CSV nie zawiera żadnego wiersza z danymi, że rozdziału
-EPUB nie dało się sparsować albo że w pliku napisów pominięto bloki bez znacznika
-czasu.
+warstwy tekstowej, że rozdziału EPUB nie dało się sparsować albo że w pliku
+napisów pominięto bloki bez znacznika czasu.
 
 Ostrzeżenie przechodzi tę samą drogę co pominięcie. Trafia jednocześnie do
 checkpointu, do manifestu w obu postaciach, do logu szczegółowego, do logu
 ważnego oraz do sekcji „Materiały do sprawdzenia” raportu końcowego. Wykaz
 w raporcie rozdziela ostrzeżenia ekstrakcji od powodów podejrzenia, żeby nie
-trzeba było zgadywać, które zdanie jest faktem, a które heurystyką.
+trzeba było zgadywać, które zdanie jest faktem, a które heurystyką. Ostrzeżenie
+nie zmienia statusu źródła: źródło jest zapisywane normalnie i nie jest
+kasowane. Tak dzieje się jednak tylko wtedy, gdy wynik ekstrakcji ma jakąkolwiek
+treść — dotyczy to na przykład skanu PDF bez warstwy tekstowej, bo ocena jakości
+i tak ocenia ten format i oznacza go jako podejrzany.
 
-Osobnym ostrzeżeniem, zgłaszanym przez potok, a nie przez ekstraktor, jest plik
-wynikowy zawierający wyłącznie nagłówek metadanych, bez treści źródła. To
-wykrycie działa dla każdego formatu, także dla CSV oraz napisów SRT i VTT, które
-świadomie nie podlegają ocenie jakości.
-
-Ostrzeżenie nie zmienia statusu źródła. Źródło jest zapisywane normalnie i nie
-jest kasowane.
+Osobnym mechanizmem, obsługiwanym przez potok, a nie przez ekstraktor, jest
+wykrycie wyniku bez żadnej treści merytorycznej dla formatu celowo wyłączonego
+z oceny jakości, czyli CSV oraz napisów SRT i VTT. Plik CSV bez wiersza danych
+albo plik napisów bez żadnego tekstu dałby plik wynikowy zawierający wyłącznie
+nagłówek metadanych, a taki plik nie wniesie nic do notatnika. Takie źródło
+dostaje status „pominiete” zamiast „spakowane”, plik wynikowy dla niego nie
+powstaje, a powód trafia do checkpointu, do manifestu, do obu logów oraz do
+wykazu źródeł nieprzetworzonych w raporcie końcowym — tak samo jak przy
+przekroczeniu limitu słów.
 
 ## Dwie miary liczby znaków
 

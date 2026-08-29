@@ -332,6 +332,8 @@ Podstawa czasu jest rozdzielona świadomie. Plik `log_wazne.txt` prowadź w czas
 
 Manifest: `manifest.json` jest źródłem prawdy, `manifest.txt` jest generowanym z niego czytelnym widokiem dla użytkownika. Dla każdego źródła zapisuj identyfikator, typ, URL lub nazwę pliku, checksum, status, informację o duplikacie, OCR, transkrypcji, konwersji, kondensacji oraz plik wynikowy. Dla każdego wyniku zapisuj ścieżkę, typ, rozmiar, liczbę słów, liczbę znaków, liczbę źródeł, checksum i status.
 
+Status `pominiete` obejmuje nie tylko przekroczenie limitu, ale też wynik ekstrakcji bez żadnej treści merytorycznej, czyli plik, który zawierałby wyłącznie nagłówek metadanych: taki plik nie dostaje statusu `spakowane` i nie powstaje, żeby pusty plik nie zajmował slotu notatnika.
+
 Raport końcowy: po zakończeniu projektu pokaż jako zwykły tekst liczbę wejść, liczbę prawidłowych źródeł, liczbę pominiętych, liczbę błędów, liczbę wykrytych duplikatów, liczbę źródeł po deduplikacji, liczbę plików TXT, MD i PDF, procent wykorzystania limitu źródeł, największy plik wynikowy, łączną liczbę słów oraz czas pracy. Raport ma być czytelny liniowo, bez tabel, i zapisany do pliku obok manifestu.
 
 ## 15. Uwagi dziedzinowe, które łatwo przeoczyć

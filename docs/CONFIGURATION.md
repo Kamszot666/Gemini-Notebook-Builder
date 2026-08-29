@@ -142,6 +142,40 @@ Nazwa pola w pliku TOML, odpowiadająca zmienna środowiskowa oraz znaczenie:
    ułatwiają odnalezienie fragmentu w filmie, ale przy odsłuchu czytnikiem
    ekranu przeszkadzają, dlatego nie są domyślne.
 
+## Pola deduplikacji
+
+Deduplikacja porównuje znormalizowaną treść wszystkich źródeł i usuwa z wyników
+te, które są pewnym powtórzeniem innego źródła. Kolejność etapów opisuje sekcja
+szesnasta `CLAUDE.md`. Podobieństwo semantyczne, czyli embeddingi lokalne, nigdy
+nie usuwa źródła samo z siebie i w tym wydaniu nie jest jeszcze zaimplementowane.
+
+1. `deduplikacja_hash_wlaczona`, zmienna `GNB_DEDUPLIKACJA_HASH_WLACZONA`. Etap
+   pierwszy: wykrycie tekstów dokładnie identycznych po normalizacji. Domyślnie
+   włączony.
+2. `deduplikacja_kosmetyczna_wlaczona`, zmienna
+   `GNB_DEDUPLIKACJA_KOSMETYCZNA_WLACZONA`. Etap drugi: wykrycie tekstów
+   różniących się wyłącznie interpunkcją, odstępami i wielkością liter. Domyślnie
+   włączony.
+3. `deduplikacja_podobienstwo_wlaczone`, zmienna
+   `GNB_DEDUPLIKACJA_PODOBIENSTWO_WLACZONE`. Etap trzeci: podobieństwo klasyczne,
+   SimHash dla tekstów dłuższych i porównanie sekwencyjne dla krótszych.
+   Domyślnie włączony.
+4. `deduplikacja_embeddingi_wlaczone`, zmienna
+   `GNB_DEDUPLIKACJA_EMBEDDINGI_WLACZONE`. Etap czwarty: embeddingi lokalne.
+   Domyślnie wyłączony. Włączenie w tym wydaniu tylko dopisuje informację do logu
+   szczegółowego i nie zmienia wyniku, bo ten etap nie jest jeszcze
+   zaimplementowany.
+5. `deduplikacja_prog_duplikatu`, zmienna `GNB_DEDUPLIKACJA_PROG_DUPLIKATU`. Próg
+   podobieństwa etapu trzeciego, od którego para jest pewnym duplikatem, a
+   dublujące źródło znika z wyników. Liczba od zera wyłącznie do jednego włącznie.
+   Domyślnie 0,9.
+6. `deduplikacja_prog_do_przegladu`, zmienna
+   `GNB_DEDUPLIKACJA_PROG_DO_PRZEGLADU`. Niższy próg etapu trzeciego. Para o
+   podobieństwie między tym progiem a progiem pewnego duplikatu zostaje w całości,
+   oba źródła są zapisywane, a para trafia do sekcji „Materiały do sprawdzenia”
+   w raporcie. Musi być nie wyższa niż `deduplikacja_prog_duplikatu`. Domyślnie
+   0,75.
+
 ## Pamięć podręczna pobranych stron
 
 Pamięć podręczna jest wspólna dla wszystkich projektów i leży w katalogu danych
@@ -216,6 +250,13 @@ napisy_automatyczne = true
 napisy_tlumaczone = false
 awaryjny_dowolny_jezyk = true
 znaczniki_czasu = false
+
+deduplikacja_hash_wlaczona = true
+deduplikacja_kosmetyczna_wlaczona = true
+deduplikacja_podobienstwo_wlaczone = true
+deduplikacja_embeddingi_wlaczone = false
+deduplikacja_prog_duplikatu = 0.9
+deduplikacja_prog_do_przegladu = 0.75
 
 uzywaj_cache = true
 maksymalny_wiek_cache_dni = 30

@@ -416,7 +416,7 @@ Realizuj etapami. Nie zaczynaj kolejnego, zanim poprzedni nie ma testów i nie d
 4. Etap trzeci: YouTube i napisy.
 5. Etap czwarty A: metadane strukturalne z danych JSON-LD, ocena jakości ekstrakcji, nagłówek metadanych w plikach wynikowych. Ukończony, scalony pull requestami 10 i 11.
 6. Etap czwarty: dokumenty, czyli PDF tekstowy, DOCX, HTML, EPUB, CSV, SRT i VTT.
-7. Etap piąty: deduplikacja wielopoziomowa wraz z audytem.
+7. Etap piąty: deduplikacja wielopoziomowa wraz z audytem. Ukończony, scalony pull requestem 16.
 8. Etap szósty: pakowanie, grupowanie tematyczne, podział według trzech limitów.
 9. Etap siódmy: dostępny interfejs WWW z postępem, wznowieniem, polem instrukcji systemowej i polem promptu wyszukiwania.
 10. Etap ósmy: obrazy, OCR, PDF skanowany, tematyczne PDF z opisami.
@@ -497,6 +497,8 @@ Sprawy zauważone w trakcie pracy, świadomie odłożone, żeby nie ruszać ich 
    Właściwe rozstrzygnięcie, czyli nazwa budowana z tytułu źródła, pozostaje otwarte. Wymagałoby ono znajomości tytułu przed utworzeniem katalogu, a tytuł jest znany dopiero po pobraniu. Wariant polegający na odłożeniu nazwy do czasu pobrania pierwszego źródła został rozważony i odrzucony: katalog projektu powstaje dziś od pierwszej sekundy, bo od razu piszą do niego log ważny, log szczegółowy i checkpoint. Odłożenie nazwy wymagałoby albo zapisu do katalogu tymczasowego i przeniesienia go po pobraniu, albo trzymania logów w pamięci. Obie drogi dotykają wznawiania, a możliwość wznowienia pracy stoi w hierarchii priorytetów wyżej niż czytelność nazwy katalogu.
 
    Waga tego zagadnienia spadła po wprowadzeniu nagłówka metadanych: tytuł źródła jest widoczny w samym pliku wynikowym, więc nazwa katalogu przestała być jedynym miejscem, w którym można go odczytać.
+
+2. Pole `zachowane_fragmenty_unikalne` z sekcji szesnastej jest w praktyce zawsze puste w zakresie etapu piątego. Objaw: kontrakt `DecyzjaDeduplikacji` i schemat manifestu mają pole na fragmenty obecne tylko w jednym z dwóch podobnych źródeł, ale po etapie piątym nigdy nie jest ono wypełniane. Przyczyna: pełne oznaczenie duplikatu, czyli usunięcie źródła z wyników, zachodzi wyłącznie przy wyniku skrajnym — identycznej treści albo podobieństwie powyżej wysokiego progu. Przy takim wyniku z założenia nie ma sensownej treści unikalnej do ocalenia, a automatyczne wycinanie części wspólnej z dwóch tekstów jest zawodne i mogłoby uszkodzić treść. Para o podobieństwie w paśmie środkowym nie jest usuwana wcale: oba źródła zostają w wynikach w całości, więc fragment unikalny jest zachowany przez zachowanie całego źródła, a nie przez to pole. Propozycja do rozważenia: wypełnianie tego pola miałoby sens dopiero razem z etapem kondensacji z sekcji ósmej, gdzie i tak trzeba będzie porównywać treść zdanie po zdaniu. Do tego czasu pole pozostaje w schemacie jako miejsce zarezerwowane, a nie martwe: schemat nie wymaga zmiany, gdy zacznie być używane.
 
 ## 19. Kryterium ukończenia funkcji
 

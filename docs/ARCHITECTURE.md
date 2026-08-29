@@ -1,14 +1,14 @@
-# Architektura — stan po etapie czwartym
+# Architektura — stan po etapie piątym
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
-zakończeniu etapu czwartego. Pełny docelowy podział na pakiety opisuje sekcja
+zakończeniu etapu piątego. Pełny docelowy podział na pakiety opisuje sekcja
 szósta `CLAUDE.md`.
 
 ## Potok przetwarzania
 
 Punkt wejścia to funkcja `przetworz_projekt` w `gnb/potok.py`. Uruchamia ona
 etapy w stałej kolejności z sekcji ósmej `CLAUDE.md`, w części obsługiwanej przez
-etapy od pierwszego do czwartego:
+etapy od pierwszego do piątego:
 
 1. Wejście i walidacja — `gnb/ingestion/wejscie.py`, `gnb/ingestion/lista_url.py`.
 2. Pobranie stron i napisów oraz import treści i wykrycie kodowania —
@@ -18,14 +18,35 @@ etapy od pierwszego do czwartego:
 4. Normalizacja i liczenie słów — `gnb/normalization/normalizacja.py`,
    `gnb/core/liczenie_slow.py`.
 5. Klasyfikacja TXT kontra MD — `gnb/output/regula_md.py`.
-6. Zapis plików wynikowych — `gnb/output/zapis.py`.
-7. Manifest — `gnb/output/manifest.py`.
-8. Checkpoint — `gnb/persistence/checkpoint.py`.
-9. Raport końcowy — `gnb/output/raport.py`.
+6. Deduplikacja — `gnb/deduplication/`.
+7. Zapis plików wynikowych — `gnb/output/zapis.py`.
+8. Manifest — `gnb/output/manifest.py`.
+9. Checkpoint — `gnb/persistence/checkpoint.py`.
+10. Raport końcowy — `gnb/output/raport.py`.
 
-Etapy deduplikacji, kondensacji i grupowania są pominięte, ale ich miejsce
+Etapy kondensacji i grupowania tematycznego są pominięte, ale ich miejsce
 w kolejności jest zachowane. Jedno uszkodzone wejście nie zatrzymuje pozostałych;
 kończy się kontrolowanym błędem zapisanym w logu, manifeście i raporcie.
+
+### Podział na fazy przez deduplikację
+
+Deduplikacja porównuje wszystkie źródła naraz, więc potok jest podzielony na trzy
+fazy w `_Wykonanie`:
+
+1. Faza normalizacji — dla każdego wejścia po kolei: pobranie lub import,
+   ekstrakcja, normalizacja, ocena jakości, reguła MD. Znormalizowany tekst trafia
+   do podkatalogu `wyniki_posrednie`, a źródło dostaje status `znormalizowane`.
+   Plik wynikowy jeszcze nie powstaje.
+2. Faza deduplikacji — `deduplikuj` zestawia znormalizowane teksty, oznacza pewne
+   duplikaty statusem `duplikat`, a pary o średnim podobieństwie zostawia w całości
+   i wpisuje do materiałów do sprawdzenia. Decyzje trafiają do checkpointu,
+   manifestu i raportu. Faza wykonuje się raz, co zapisuje znacznik
+   `deduplikacja.wykonana` w checkpoincie.
+3. Faza zapisu — dla każdego źródła, które przeżyło deduplikację, powstają pliki
+   wynikowe TXT i warunkowo MD, a status zmienia się na `spakowane`.
+
+Ten podział jest też podziałem wznowienia: przerwanie w trakcie deduplikacji albo
+zapisu nie wymaga ponownej ekstrakcji, bo znormalizowany tekst jest już na dysku.
 
 Pobranie adresów oraz pobranie napisów są osobnymi fazami, wykonywanymi przed
 pętlą po źródłach. Strony pobierają się równolegle, a filmy po kolei, ponieważ
@@ -144,14 +165,39 @@ pliku wynikowego.
   Zwraca ocenę wraz z listą powodów i nigdy nie usuwa źródła.
 - `gnb/output/raport.py` — raport końcowy jako zwykły tekst, wraz z wykazem
   źródeł pominiętych i błędnych oraz powodem każdego z nich, a także z sekcją
-  „Materiały do sprawdzenia” dla źródeł o podejrzanym wyniku ekstrakcji.
+  „Materiały do sprawdzenia” dla źródeł o podejrzanym wyniku ekstrakcji, źródeł
+  z ostrzeżeniem ekstraktora oraz źródeł, które deduplikacja uznała za możliwy
+  duplikat i zostawiła do rozstrzygnięcia.
+
+## Pakiet gnb.deduplication
+
+Wieloetapowa deduplikacja z sekcji szesnastej `CLAUDE.md`. Wejściem jest lista
+`ZrodloDoDeduplikacji` ze znormalizowanym tekstem, wyjściem `WynikDeduplikacjiZbioru`:
+lista decyzji `DecyzjaDeduplikacji` wraz z podziałem źródeł na pewne duplikaty
+i pary do rozstrzygnięcia. Źródła są porównywane w stałej kolejności rosnących
+identyfikatorów, więc wynik jest powtarzalny między uruchomieniami.
+
+- `gnb/deduplication/hasze.py` — etap pierwszy i drugi: suma kontrolna
+  znormalizowanego tekstu oraz suma kontrolna tekstu sprowadzonego do samych liter
+  i cyfr, która pomija różnice w interpunkcji, odstępach i wielkości liter.
+- `gnb/deduplication/simhash.py` — etap trzeci: SimHash na zachodzących na siebie
+  trójkach słów, z powtarzalną funkcją skrótu `blake2b`, oraz porównanie
+  sekwencyjne z `difflib` dla tekstów krótszych niż próg słów krótkiego tekstu,
+  gdzie SimHash jest niestabilny.
+- `gnb/deduplication/orkiestrator.py` — łączy etapy, stosuje progi pewnego
+  duplikatu i rozstrzygnięcia, buduje audytowalne decyzje. Etap embeddingów
+  lokalnych nie jest realizowany; jest domyślnie wyłączony i poza zakresem etapu
+  piątego. Pole zachowanych fragmentów unikalnych w tym zakresie pozostaje puste,
+  co wyjaśnia sekcja osiemnasta e `CLAUDE.md`.
 
 ## Pakiet gnb.persistence
 
 - `gnb/persistence/projekt.py` — układ katalogów projektu, z nazwą katalogu
   wyznaczaną z nazwy podanej przez użytkownika, a w jej braku z pierwszego źródła:
-  materiały źródłowe,
-  wyniki pośrednie, pliki wynikowe, logi, manifest, checkpoint.
+  materiały źródłowe, wyniki pośrednie, pliki wynikowe, logi, manifest, checkpoint.
+  Podkatalog `wyniki_posrednie` trzyma znormalizowany tekst każdego źródła
+  zapisany w fazie normalizacji, dzięki czemu wznowienie po deduplikacji nie
+  wymaga ponownej ekstrakcji.
 - `gnb/persistence/cache.py` — wspólna dla projektów pamięć podręczna pobranych
   zasobów, oparta na SQLite, z trybem WAL i numerem wersji schematu.
 - `gnb/persistence/checkpoint.py` — `checkpoint.json` z zapisem atomowym przez
@@ -161,7 +207,9 @@ pliku wynikowego.
   więc katalog projektu założony poprzednią wersją aplikacji nadal daje się
   wznowić. Plik w wersji nowszej niż obsługiwana, plik bez numeru wersji oraz plik
   bez spodziewanego pola kończą się błędem trwałym z komunikatem po polsku,
-  a nie surowym śladem stosu.
+  a nie surowym śladem stosu. Stan deduplikacji, nagłówek metadanych źródła oraz
+  wskazanie źródła głównego duplikatu są polami addytywnymi z bezpieczną wartością
+  domyślną, więc plik starszej wersji wczytuje się bez zmiany numeru schematu.
 
 ## Pakiet gnb.logging_pl
 
@@ -182,9 +230,9 @@ wspólnej pamięci podręcznej i pozwala ją wyczyścić.
 
 ## Pozostałe pakiety
 
-Pakiety `gnb.deduplication`, `gnb.packing`, `gnb.documents`, `gnb.audio`,
-`gnb.images`, `gnb.music`, `gnb.ui`, `gnb.hotkeys` istnieją jako puste,
-importowalne pakiety z docstringiem. Logika powstanie w kolejnych etapach.
+Pakiety `gnb.packing`, `gnb.documents`, `gnb.audio`, `gnb.images`, `gnb.music`,
+`gnb.ui`, `gnb.hotkeys` istnieją jako puste, importowalne pakiety z docstringiem.
+Logika powstanie w kolejnych etapach.
 
 ## Testy
 
@@ -200,6 +248,13 @@ Test `tests/test_potok_url_e2e.py` przeprowadza pełny przebieg dla adresów str
 w tym pominięcie zakazane przez `robots.txt`, błąd 404, zasób innego typu,
 wznowienie bez ponownego pobrania oraz oszczędność pobrania dzięki pamięci
 podręcznej.
+
+Test `tests/test_potok_deduplikacja_e2e.py` przeprowadza pełny przebieg dla
+deduplikacji: pewny duplikat znika z wyników i zwalnia slot, para o średnim
+podobieństwie zostaje w całości wraz z akapitem unikalnym i trafia do materiałów
+do sprawdzenia, wznowienie nie zmienia decyzji ani plików, a wyłączenie wszystkich
+etapów w konfiguracji realnie zatrzymuje deduplikację. Testy pakietu
+`gnb.deduplication` są w `tests/deduplication/`.
 
 Testy są zbierane w trybie importu `importlib`, ustawionym w `pyproject.toml`.
 Dzięki temu pliki testowe o tej samej nazwie mogą leżeć w różnych katalogach,

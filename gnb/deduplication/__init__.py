@@ -7,3 +7,19 @@ jest lista `DecyzjaDeduplikacji`. Ten pakiet nigdy nie usuwa treści
 automatycznie na podstawie podobieństwa semantycznego — może ją jedynie
 oznaczyć do decyzji użytkownika.
 """
+
+from __future__ import annotations
+
+from gnb.deduplication.orkiestrator import (
+    UstawieniaDeduplikacji,
+    WynikDeduplikacjiZbioru,
+    ZrodloDoDeduplikacji,
+    deduplikuj,
+)
+
+__all__ = [
+    "UstawieniaDeduplikacji",
+    "WynikDeduplikacjiZbioru",
+    "ZrodloDoDeduplikacji",
+    "deduplikuj",
+]

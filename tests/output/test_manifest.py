@@ -9,6 +9,7 @@ from pathlib import Path
 from gnb.output.manifest import (
     WERSJA_SCHEMATU,
     Manifest,
+    WpisDeduplikacji,
     WpisWyniku,
     WpisZrodla,
     zapisz_manifest,
@@ -83,6 +84,53 @@ def test_manifest_txt_jest_czytelny_liniowo_bez_tabel(tmp_path: Path) -> None:
     assert "Komunikat błędu: Plik nie istnieje." in tekst
     assert "|" not in tekst
     assert "---" not in tekst
+
+
+def test_manifest_zapisuje_decyzje_deduplikacji_w_json_i_w_widoku_tekstowym(
+    tmp_path: Path,
+) -> None:
+    manifest = replace(
+        _MANIFEST,
+        zrodla=(
+            replace(
+                _MANIFEST.zrodla[0], status="duplikat", duplikat="duplikat źródła plik_tekstowy-9"
+            ),
+            _MANIFEST.zrodla[1],
+        ),
+        deduplikacja=(
+            WpisDeduplikacji(
+                identyfikator_zrodla_glownego="plik_tekstowy-9",
+                identyfikator_duplikatu="plik_tekstowy-1111",
+                metoda="SimHash",
+                wynik_podobienstwa=0.94,
+                decyzja="duplikat",
+                uzasadnienie="Podobieństwo 0.94 osiągnęło próg pewnego duplikatu 0.90.",
+            ),
+        ),
+    )
+
+    zapisz_manifest(tmp_path / "manifest.json", tmp_path / "manifest.txt", manifest)
+
+    dane = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert dane["deduplikacja"][0]["identyfikator_duplikatu"] == "plik_tekstowy-1111"
+    assert dane["deduplikacja"][0]["metoda"] == "SimHash"
+    assert dane["zrodla"][0]["duplikat"] == "duplikat źródła plik_tekstowy-9"
+
+    tekst = (tmp_path / "manifest.txt").read_text(encoding="utf-8")
+    assert "Decyzje deduplikacji, liczba: 1" in tekst
+    assert "Źródło główne: plik_tekstowy-9" in tekst
+    assert "Podobieństwo: 0.94" in tekst
+    assert "Duplikat: duplikat źródła plik_tekstowy-9" in tekst
+
+
+def test_manifest_bez_deduplikacji_ma_pusta_liste(tmp_path: Path) -> None:
+    zapisz_manifest(tmp_path / "manifest.json", tmp_path / "manifest.txt", _MANIFEST)
+
+    dane = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert dane["deduplikacja"] == []
+    assert "Decyzje deduplikacji, liczba: 0" in (tmp_path / "manifest.txt").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_manifest_zapisuje_ocene_jakosci_wraz_z_powodami(tmp_path: Path) -> None:

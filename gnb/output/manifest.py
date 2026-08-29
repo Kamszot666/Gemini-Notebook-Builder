@@ -57,6 +57,24 @@ class WpisZrodla:
 
 
 @dataclass(frozen=True, slots=True)
+class WpisDeduplikacji:
+    """Audytowalna decyzja deduplikacji zapisana w manifeście.
+
+    Odpowiada kontraktowi `gnb.core.model.DecyzjaDeduplikacji`. Pole zachowanych
+    fragmentów unikalnych jest w schemacie, ale w zakresie etapu piątego zostaje
+    puste, co wyjaśnia sekcja osiemnasta e CLAUDE.md.
+    """
+
+    identyfikator_zrodla_glownego: str
+    identyfikator_duplikatu: str
+    metoda: str
+    wynik_podobienstwa: float
+    decyzja: str
+    uzasadnienie: str
+    zachowane_fragmenty_unikalne: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class WpisWyniku:
     """Wiersz manifestu opisujący jeden plik wynikowy.
 
@@ -84,6 +102,7 @@ class Manifest:
     nazwa_projektu: str
     zrodla: tuple[WpisZrodla, ...]
     wyniki: tuple[WpisWyniku, ...]
+    deduplikacja: tuple[WpisDeduplikacji, ...] = ()
 
 
 def zapisz_manifest(sciezka_json: Path, sciezka_txt: Path, manifest: Manifest) -> None:
@@ -133,6 +152,18 @@ def _do_slownika(manifest: Manifest) -> dict[str, Any]:
                 "status": wpis.status,
             }
             for wpis in manifest.wyniki
+        ],
+        "deduplikacja": [
+            {
+                "identyfikator_zrodla_glownego": wpis.identyfikator_zrodla_glownego,
+                "identyfikator_duplikatu": wpis.identyfikator_duplikatu,
+                "metoda": wpis.metoda,
+                "wynik_podobienstwa": wpis.wynik_podobienstwa,
+                "decyzja": wpis.decyzja,
+                "uzasadnienie": wpis.uzasadnienie,
+                "zachowane_fragmenty_unikalne": list(wpis.zachowane_fragmenty_unikalne),
+            }
+            for wpis in manifest.deduplikacja
         ],
     }
 
@@ -206,6 +237,22 @@ def zbuduj_widok_tekstowy(manifest: Manifest) -> str:
         wiersze.append(f"  Rozmiar w bajtach: {wpis_wyniku.rozmiar_bajtow}")
         wiersze.append(f"  Suma kontrolna, skrót: {_skrocona_suma(wpis_wyniku.checksum)}")
         wiersze.append(f"  Status: {wpis_wyniku.status}")
+        wiersze.append("")
+
+    wiersze.append(f"Decyzje deduplikacji, liczba: {len(manifest.deduplikacja)}")
+    wiersze.append("")
+    for wpis_dedup in manifest.deduplikacja:
+        wiersze.append(f"Duplikat: {wpis_dedup.identyfikator_duplikatu}")
+        wiersze.append(f"  Źródło główne: {wpis_dedup.identyfikator_zrodla_glownego}")
+        wiersze.append(f"  Metoda: {wpis_dedup.metoda}")
+        wiersze.append(f"  Podobieństwo: {wpis_dedup.wynik_podobienstwa:.2f}")
+        wiersze.append(f"  Decyzja: {wpis_dedup.decyzja}")
+        wiersze.append(f"  Uzasadnienie: {wpis_dedup.uzasadnienie}")
+        if wpis_dedup.zachowane_fragmenty_unikalne:
+            wiersze.append("  Zachowane fragmenty unikalne:")
+            wiersze.extend(
+                f"    - {fragment}" for fragment in wpis_dedup.zachowane_fragmenty_unikalne
+            )
         wiersze.append("")
 
     return "\n".join(wiersze).rstrip("\n") + "\n"

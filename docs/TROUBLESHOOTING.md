@@ -16,6 +16,8 @@ ozdobników, a polecenia do wpisania są w osobnych blokach.
 4. Ponowne uruchomienie kończy się wznowieniem i niczego nie przetwarza.
 5. Źródło jest w wynikach, ale plik zawiera sam nagłówek metadanych.
 6. Projekt z poprzedniej wersji aplikacji nie daje się wznowić.
+7. Źródło zniknęło z wyników jako duplikat, choć nie jest identyczne.
+8. Podkatalog wyników pośrednich został usunięty w trakcie pracy.
 
 ## 1. Windows blokuje plik wykonywalny narzędzia deweloperskiego
 
@@ -162,3 +164,45 @@ Przy komunikacie o uszkodzonym pliku sprawdź, czy obok niego leży plik
 komunikat mimo to się pojawił, uszkodzone są oba pliki. Wtedy jedynym wyjściem
 jest utworzenie projektu pod nową nazwą. Pliki wynikowe z poprzedniego przebiegu
 pozostają w katalogu i nadal nadają się do wgrania do notatnika.
+
+## 7. Źródło zniknęło z wyników jako duplikat, choć nie jest identyczne
+
+Objaw. Dla jednego z podanych źródeł nie powstał plik wynikowy. W pliku
+`manifest.txt` źródło ma status `duplikat`, a w sekcji „Decyzje deduplikacji”
+jest wpis z metodą i wynikiem podobieństwa.
+
+Przyczyna. Trzeci etap deduplikacji porównuje treść i uznaje za pewny duplikat
+także źródła bardzo podobne, na przykład ten sam artykuł w dwóch serwisach albo
+w dwóch formatach. Próg jest ustawiony wysoko, ale przedruk z jednym
+przeredagowanym zdaniem zwykle nadal przekracza próg pewnego duplikatu. Przy
+takim wyniku aplikacja nie zachowuje osobno fragmentów obecnych tylko w jednej
+wersji; wyjaśnia to sekcja osiemnasta e `CLAUDE.md`.
+
+Co zrobić. Pełny opis decyzji jest w pliku `manifest.json`, w tablicy
+`deduplikacja`: identyfikator źródła zachowanego, identyfikator usuniętego,
+metoda, wynik podobieństwa i uzasadnienie. Znormalizowany tekst usuniętego
+źródła zostaje w podkatalogu `wyniki_posrednie`, w pliku o nazwie
+`identyfikator.znormalizowany.txt`, więc da się go obejrzeć i porównać ręcznie.
+Jeżeli chcesz zachować oba źródła, podnieś w konfiguracji
+`deduplikacja_prog_duplikatu` bliżej jedynki albo wyłącz
+`deduplikacja_podobienstwo_wlaczone` i przetwórz projekt pod nową nazwą.
+
+## 8. Podkatalog wyników pośrednich został usunięty w trakcie pracy
+
+Objaw. Część źródeł kończy się statusem `blad` z komunikatem o braku pliku wyniku
+pośredniego.
+
+Przyczyna. Po fazie normalizacji, a przed zapisem plików wynikowych,
+znormalizowany tekst każdego źródła leży w podkatalogu `wyniki_posrednie`.
+Usunięcie zawartości tego podkatalogu w trakcie pracy, między fazą normalizacji a
+fazą zapisu, zabiera aplikacji dane potrzebne do zbudowania pliku wynikowego bez
+ponownej ekstrakcji. Aplikacja nie próbuje wtedy zgadywać treści: zapisuje
+kontrolowany błąd i przechodzi dalej.
+
+Co zrobić. Jeżeli praca została tylko przerwana, a nie dokończona, wznów projekt
+tą samą listą źródeł i tą samą nazwą. Źródła, które nie zdążyły dostać statusu
+`duplikat` ani `spakowane`, zostaną przetworzone od nowa: strony pobiorą się
+ponownie, pliki lokalne zostaną odczytane raz jeszcze. Źródła oznaczone już jako
+`blad` nie są ponawiane, więc jeśli status `blad` z tym komunikatem pojawił się
+przy dokończonym projekcie, przetwórz go pod nową nazwą. Najprościej: nie usuwaj
+podkatalogu `wyniki_posrednie` przed komunikatem „Projekt zakończony”.

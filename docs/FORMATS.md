@@ -1,4 +1,4 @@
-# Obsługiwane formaty — stan po etapie czwartym
+# Obsługiwane formaty — stan po etapie piątym
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
 Kolejne formaty, czyli ODT, PPTX, obrazy oraz materiały nutowe, dojdą
@@ -390,8 +390,8 @@ jego treść jest identyczna na każdej z nich. Numer strony jest wykrywany
 wzorcem w rodzaju „Strona 3” albo „Page 3 of 10”, bo jego treść zmienia się na
 każdej stronie i porównanie tekstu by go nie złapało. Żaden inny wiersz nie
 jest ruszany, więc treść merytoryczna nie ginie nawet wtedy, gdy przypadkiem
-powtarza się między stronami — to zadanie deduplikacji z etapu piątego, a nie
-ekstrakcji.
+powtarza się między stronami — powtórzeniami między źródłami zajmuje się
+deduplikacja, opisana niżej, a nie ekstrakcja.
 
 PDF nie ma niezawodnie odtwarzalnej struktury dokumentu: format zapisuje tekst
 jako pozycjonowane fragmenty na stronie, a nie jako drzewo nagłówków
@@ -622,6 +622,41 @@ dostaje status „pominiete” zamiast „spakowane”, plik wynikowy dla niego 
 powstaje, a powód trafia do checkpointu, do manifestu, do obu logów oraz do
 wykazu źródeł nieprzetworzonych w raporcie końcowym — tak samo jak przy
 przekroczeniu limitu słów.
+
+## Deduplikacja
+
+Po normalizacji, a przed zapisem plików wynikowych, potok porównuje znormalizowany
+tekst wszystkich źródeł i usuwa z wyników te, które są powtórzeniem innego źródła.
+Etapy są trzy i można je wyłączać osobno w konfiguracji.
+
+1. Hash treści — wykrywa teksty dokładnie identyczne po normalizacji.
+2. Porównanie kosmetyczne — wykrywa teksty różniące się wyłącznie interpunkcją,
+   odstępami i wielkością liter, na przykład ten sam artykuł zapisany raz z
+   cudzysłowami prostymi, a raz drukarskimi.
+3. Podobieństwo klasyczne — dla tekstów dłuższych SimHash na trójkach słów, dla
+   krótszych porównanie sekwencyjne. Ma dwa progi. Powyżej progu pewnego duplikatu
+   dublujące źródło znika z wyników. Między progiem niższym a progiem pewnego
+   duplikatu oba źródła zostają, a para trafia do sekcji „Materiały do
+   sprawdzenia” raportu, do rozstrzygnięcia przez człowieka.
+
+Źródła są porównywane w kolejności rosnących identyfikatorów, więc przy grupie
+powtórzeń zawsze zostaje to samo źródło, niezależnie od kolejności podania na
+liście. Źródło uznane za pewny duplikat dostaje status „duplikat”, nie powstaje
+dla niego plik wynikowy i nie liczy się do limitu źródeł notatnika. Jego oryginał
+oraz znormalizowany tekst zostają na dysku: oryginał w podkatalogu materiałów
+źródłowych, znormalizowany tekst w podkatalogu wyników pośrednich.
+
+Każda decyzja jest audytowalna. Plik `manifest.json` zawiera tablicę
+`deduplikacja` z identyfikatorem źródła zachowanego, identyfikatorem usuniętego,
+metodą, wynikiem podobieństwa i uzasadnieniem. Plik `manifest.txt` pokazuje to
+samo w sekcji „Decyzje deduplikacji”. Raport końcowy podaje liczbę wykrytych
+duplikatów i liczbę źródeł po deduplikacji.
+
+W tym wydaniu deduplikacja nie wycina osobno fragmentów obecnych tylko w jednej
+z dwóch bardzo podobnych wersji: pole zachowanych fragmentów unikalnych zostaje
+puste. Powód i warunek rewizji opisuje sekcja osiemnasta e `CLAUDE.md`. Etap
+czwarty, czyli embeddingi lokalne, nie jest jeszcze zaimplementowany; jego
+włączenie w konfiguracji tylko dopisuje informację do logu.
 
 ## Dwie miary liczby znaków
 

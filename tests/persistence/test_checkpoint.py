@@ -11,6 +11,8 @@ from gnb.core.wyjatki import BladTrwaly
 from gnb.persistence.checkpoint import (
     WERSJA_SCHEMATU,
     Checkpoint,
+    DecyzjaDeduplikacjiZapis,
+    StanDeduplikacji,
     StanWyniku,
     StanZrodla,
     wczytaj,
@@ -260,6 +262,56 @@ def test_checkpoint_bez_numeru_wersji_jest_traktowany_jak_uszkodzony(tmp_path: P
 
     with pytest.raises(BladTrwaly):
         wczytaj(sciezka)
+
+
+def test_plik_bez_pola_deduplikacja_wczytuje_sie_z_pustym_stanem(tmp_path: Path) -> None:
+    """Stan deduplikacji dodano jako pole addytywne, więc starszy plik go nie ma.
+
+    Tekst pliku jest wpisany ręcznie i nie zawiera klucza „deduplikacja” ani
+    nowych pól źródła. Odczyt musi dać pusty, bezpieczny stan deduplikacji, a nie
+    błąd braku pola.
+    """
+    sciezka = tmp_path / "checkpoint.json"
+    sciezka.write_text(_CHECKPOINT_W_WERSJI_TRZECIEJ, encoding="utf-8")
+
+    odczytany = wczytaj(sciezka)
+
+    assert odczytany is not None
+    assert odczytany.deduplikacja == StanDeduplikacji()
+    assert odczytany.deduplikacja.wykonana is False
+    assert odczytany.deduplikacja.decyzje == []
+    stan = odczytany.zrodla["plik_tekstowy-1"]
+    assert stan.naglowek_metadanych is None
+    assert stan.duplikat_glowny is None
+
+
+def test_stan_deduplikacji_przezywa_zapis_i_odczyt(tmp_path: Path) -> None:
+    checkpoint = _przykladowy_checkpoint()
+    checkpoint.deduplikacja = StanDeduplikacji(
+        wykonana=True,
+        decyzje=[
+            DecyzjaDeduplikacjiZapis(
+                identyfikator_zrodla_glownego="plik_tekstowy-1",
+                identyfikator_duplikatu="plik_tekstowy-2",
+                metoda="hash treści",
+                wynik_podobienstwa=1.0,
+                decyzja="duplikat",
+                uzasadnienie="Znormalizowany tekst obu źródeł jest identyczny.",
+            )
+        ],
+    )
+    checkpoint.zrodla["plik_tekstowy-1"].naglowek_metadanych = "Tytuł: Coś\n\n"
+    checkpoint.zrodla["plik_tekstowy-1"].duplikat_glowny = "plik_tekstowy-0"
+
+    sciezka = tmp_path / "checkpoint.json"
+    zapisz(sciezka, checkpoint)
+    odczytany = wczytaj(sciezka)
+
+    assert odczytany is not None
+    assert odczytany.deduplikacja == checkpoint.deduplikacja
+    stan = odczytany.zrodla["plik_tekstowy-1"]
+    assert stan.naglowek_metadanych == "Tytuł: Coś\n\n"
+    assert stan.duplikat_glowny == "plik_tekstowy-0"
 
 
 def test_starszy_checkpoint_wczytuje_sie_takze_z_kopii_zapasowej(tmp_path: Path) -> None:

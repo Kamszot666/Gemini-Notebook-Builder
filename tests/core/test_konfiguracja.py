@@ -87,3 +87,40 @@ def test_niepoprawna_wartosc_logiczna_konczy_sie_bledem(tmp_path: Path) -> None:
     plik.write_text('zachowuj_oryginaly = "moze"\n', encoding="utf-8")
     with pytest.raises(BladTrwaly, match="wartością logiczną"):
         wczytaj_konfiguracje(plik, {})
+
+
+def test_deduplikacja_ma_domyslne_wlaczenie_i_progi(tmp_path: Path) -> None:
+    konfiguracja = wczytaj_konfiguracje(tmp_path / "nie_ma.toml", srodowisko={})
+
+    assert konfiguracja.deduplikacja_hash_wlaczona is True
+    assert konfiguracja.deduplikacja_kosmetyczna_wlaczona is True
+    assert konfiguracja.deduplikacja_podobienstwo_wlaczone is True
+    assert konfiguracja.deduplikacja_embeddingi_wlaczone is False
+    assert konfiguracja.deduplikacja_prog_duplikatu == 0.9
+    assert konfiguracja.deduplikacja_prog_do_przegladu == 0.75
+
+
+def test_progi_deduplikacji_da_sie_ustawic_z_pliku_i_srodowiska(tmp_path: Path) -> None:
+    plik = tmp_path / "konfiguracja.toml"
+    plik.write_text("deduplikacja_prog_duplikatu = 0.95\n", encoding="utf-8")
+    assert wczytaj_konfiguracje(plik, {}).deduplikacja_prog_duplikatu == 0.95
+
+    z_srodowiska = wczytaj_konfiguracje(plik, {"GNB_DEDUPLIKACJA_PROG_DUPLIKATU": "0,8"})
+    assert z_srodowiska.deduplikacja_prog_duplikatu == 0.8
+
+
+def test_prog_deduplikacji_spoza_przedzialu_konczy_sie_bledem(tmp_path: Path) -> None:
+    with pytest.raises(BladTrwaly, match="od zera do jednego"):
+        wczytaj_konfiguracje(
+            tmp_path / "nie_ma.toml", srodowisko={"GNB_DEDUPLIKACJA_PROG_DUPLIKATU": "1.5"}
+        )
+
+
+def test_prog_do_przegladu_wyzszy_niz_prog_duplikatu_konczy_sie_bledem(tmp_path: Path) -> None:
+    plik = tmp_path / "konfiguracja.toml"
+    plik.write_text(
+        "deduplikacja_prog_duplikatu = 0.7\ndeduplikacja_prog_do_przegladu = 0.9\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(BladTrwaly, match="nie może być wyższe"):
+        wczytaj_konfiguracje(plik, {})

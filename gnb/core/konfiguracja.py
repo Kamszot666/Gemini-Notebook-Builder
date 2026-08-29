@@ -72,6 +72,18 @@ DOMYSLNE_NAPISY_TLUMACZONE = False
 DOMYSLNY_AWARYJNY_DOWOLNY_JEZYK = True
 DOMYSLNE_ZNACZNIKI_CZASU = False
 
+# Ustawienia deduplikacji. Etapy pierwszy, drugi i trzeci z sekcji szesnastej
+# CLAUDE.md są domyślnie włączone. Etap embeddingów lokalnych jest domyślnie
+# wyłączony i pozostaje poza zakresem etapu piątego. Próg pewnego duplikatu i
+# niższy próg do ręcznego rozstrzygnięcia dotyczą wyłącznie etapu trzeciego,
+# bo etapy pierwszy i drugi porównują treść dokładnie.
+DOMYSLNA_DEDUPLIKACJA_HASH_WLACZONA = True
+DOMYSLNA_DEDUPLIKACJA_KOSMETYCZNA_WLACZONA = True
+DOMYSLNA_DEDUPLIKACJA_PODOBIENSTWO_WLACZONE = True
+DOMYSLNE_DEDUPLIKACJA_EMBEDDINGI_WLACZONE = False
+DOMYSLNY_DEDUPLIKACJA_PROG_DUPLIKATU = 0.9
+DOMYSLNY_DEDUPLIKACJA_PROG_DO_PRZEGLADU = 0.75
+
 NAZWA_KATALOGU_APLIKACJI_WINDOWS = "Gemini Notebook Builder"
 NAZWA_KATALOGU_APLIKACJI_XDG = "gemini-notebook-builder"
 NAZWA_PLIKU_KONFIGURACJI = "konfiguracja.toml"
@@ -114,6 +126,12 @@ _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
     PREFIKS_ZMIENNYCH + "NAPISY_TLUMACZONE": "napisy_tlumaczone",
     PREFIKS_ZMIENNYCH + "AWARYJNY_DOWOLNY_JEZYK": "awaryjny_dowolny_jezyk",
     PREFIKS_ZMIENNYCH + "ZNACZNIKI_CZASU": "znaczniki_czasu",
+    PREFIKS_ZMIENNYCH + "DEDUPLIKACJA_HASH_WLACZONA": "deduplikacja_hash_wlaczona",
+    PREFIKS_ZMIENNYCH + "DEDUPLIKACJA_KOSMETYCZNA_WLACZONA": "deduplikacja_kosmetyczna_wlaczona",
+    PREFIKS_ZMIENNYCH + "DEDUPLIKACJA_PODOBIENSTWO_WLACZONE": "deduplikacja_podobienstwo_wlaczone",
+    PREFIKS_ZMIENNYCH + "DEDUPLIKACJA_EMBEDDINGI_WLACZONE": "deduplikacja_embeddingi_wlaczone",
+    PREFIKS_ZMIENNYCH + "DEDUPLIKACJA_PROG_DUPLIKATU": "deduplikacja_prog_duplikatu",
+    PREFIKS_ZMIENNYCH + "DEDUPLIKACJA_PROG_DO_PRZEGLADU": "deduplikacja_prog_do_przegladu",
 }
 _ZNANE_POLA = frozenset(_ZMIENNE_SRODOWISKOWE.values())
 
@@ -171,6 +189,12 @@ class Konfiguracja:
     napisy_tlumaczone: bool = DOMYSLNE_NAPISY_TLUMACZONE
     awaryjny_dowolny_jezyk: bool = DOMYSLNY_AWARYJNY_DOWOLNY_JEZYK
     znaczniki_czasu: bool = DOMYSLNE_ZNACZNIKI_CZASU
+    deduplikacja_hash_wlaczona: bool = DOMYSLNA_DEDUPLIKACJA_HASH_WLACZONA
+    deduplikacja_kosmetyczna_wlaczona: bool = DOMYSLNA_DEDUPLIKACJA_KOSMETYCZNA_WLACZONA
+    deduplikacja_podobienstwo_wlaczone: bool = DOMYSLNA_DEDUPLIKACJA_PODOBIENSTWO_WLACZONE
+    deduplikacja_embeddingi_wlaczone: bool = DOMYSLNE_DEDUPLIKACJA_EMBEDDINGI_WLACZONE
+    deduplikacja_prog_duplikatu: float = DOMYSLNY_DEDUPLIKACJA_PROG_DUPLIKATU
+    deduplikacja_prog_do_przegladu: float = DOMYSLNY_DEDUPLIKACJA_PROG_DO_PRZEGLADU
 
 
 def sciezka_pliku_konfiguracji(srodowisko: Mapping[str, str] | None = None) -> Path:
@@ -208,7 +232,7 @@ def wczytaj_konfiguracje(
     scalone: dict[str, object] = {**z_pliku, **ze_srodowiska}
 
     domyslna = Konfiguracja()
-    return Konfiguracja(
+    konfiguracja = Konfiguracja(
         katalog_wynikow=(
             Path(str(scalone["katalog_wynikow"]))
             if "katalog_wynikow" in scalone
@@ -280,7 +304,35 @@ def wczytaj_konfiguracje(
             scalone, "awaryjny_dowolny_jezyk", domyslna.awaryjny_dowolny_jezyk
         ),
         znaczniki_czasu=_jako_prawda_falsz(scalone, "znaczniki_czasu", domyslna.znaczniki_czasu),
+        deduplikacja_hash_wlaczona=_jako_prawda_falsz(
+            scalone, "deduplikacja_hash_wlaczona", domyslna.deduplikacja_hash_wlaczona
+        ),
+        deduplikacja_kosmetyczna_wlaczona=_jako_prawda_falsz(
+            scalone, "deduplikacja_kosmetyczna_wlaczona", domyslna.deduplikacja_kosmetyczna_wlaczona
+        ),
+        deduplikacja_podobienstwo_wlaczone=_jako_prawda_falsz(
+            scalone,
+            "deduplikacja_podobienstwo_wlaczone",
+            domyslna.deduplikacja_podobienstwo_wlaczone,
+        ),
+        deduplikacja_embeddingi_wlaczone=_jako_prawda_falsz(
+            scalone, "deduplikacja_embeddingi_wlaczone", domyslna.deduplikacja_embeddingi_wlaczone
+        ),
+        deduplikacja_prog_duplikatu=_jako_ulamek(
+            scalone, "deduplikacja_prog_duplikatu", domyslna.deduplikacja_prog_duplikatu
+        ),
+        deduplikacja_prog_do_przegladu=_jako_ulamek(
+            scalone, "deduplikacja_prog_do_przegladu", domyslna.deduplikacja_prog_do_przegladu
+        ),
     )
+    if konfiguracja.deduplikacja_prog_do_przegladu > konfiguracja.deduplikacja_prog_duplikatu:
+        raise BladTrwaly(
+            "Ustawienie „deduplikacja_prog_do_przegladu” "
+            f"({konfiguracja.deduplikacja_prog_do_przegladu}) nie może być wyższe niż "
+            f"„deduplikacja_prog_duplikatu” ({konfiguracja.deduplikacja_prog_duplikatu}). "
+            "Niższy próg oznacza parę do ręcznego rozstrzygnięcia, wyższy — pewny duplikat."
+        )
+    return konfiguracja
 
 
 def _wartosci_z_pliku(sciezka: Path) -> dict[str, object]:
@@ -375,6 +427,29 @@ def _jako_liczba_rzeczywista(
         raise BladTrwaly(f"Ustawienie „{pole}” musi być liczbą, a jest „{surowa}”.") from blad
     if liczba < 0 or (liczba == 0 and not dopusc_zero):
         raise BladTrwaly(f"Ustawienie „{pole}” musi być liczbą dodatnią, a jest {liczba}.")
+    return liczba
+
+
+def _jako_ulamek(scalone: Mapping[str, object], pole: str, domyslna: float) -> float:
+    """Zwraca wartość pola jako liczbę z przedziału od zera wyłącznie do jednego włącznie.
+
+    Progi deduplikacji są ułamkami podobieństwa, więc wartość spoza tego
+    przedziału jest błędem konfiguracji, a nie ostrzeżeniem do zignorowania.
+    """
+    if pole not in scalone:
+        return domyslna
+    surowa = scalone[pole]
+    if isinstance(surowa, bool) or not isinstance(surowa, (int, float, str)):
+        raise BladTrwaly(f"Ustawienie „{pole}” musi być liczbą.")
+    try:
+        liczba = float(str(surowa).strip().replace(",", "."))
+    except ValueError as blad:
+        raise BladTrwaly(f"Ustawienie „{pole}” musi być liczbą, a jest „{surowa}”.") from blad
+    if not 0 < liczba <= 1:
+        raise BladTrwaly(
+            f"Ustawienie „{pole}” musi mieścić się w przedziale od zera do jednego, "
+            f"a jest {liczba}."
+        )
     return liczba
 
 

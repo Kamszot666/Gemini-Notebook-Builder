@@ -1,11 +1,19 @@
-"""Orkiestracja potoku przetwarzania w zakresie etapów pierwszego i drugiego.
+"""Orkiestracja potoku przetwarzania od wejścia po raport końcowy.
 
-Potok uruchamia etapy w stałej kolejności z sekcji ósmej CLAUDE.md, w części
-obsługiwanej przez etapy pierwszy i drugi: wejście, walidacja i utworzenie
-źródła, pobranie lub import treści, ekstrakcja, normalizacja, klasyfikacja TXT
-kontra MD, zapis wyników, manifest, checkpoint, raport. Etapy deduplikacji,
-kondensacji i grupowania są pominięte, ale ich miejsce w kolejności jest
-zachowane.
+Potok uruchamia etapy w stałej kolejności z sekcji ósmej CLAUDE.md: wejście,
+walidacja i utworzenie źródła, pobranie lub import treści, ekstrakcja,
+normalizacja, klasyfikacja TXT kontra MD, deduplikacja, zapis wyników, manifest,
+checkpoint, raport. Etapy kondensacji i grupowania tematycznego są pominięte, ale
+ich miejsce w kolejności jest zachowane.
+
+Deduplikacja porównuje wszystkie źródła naraz, więc potok jest podzielony na
+fazy. Faza normalizacji doprowadza każde źródło do znormalizowanego tekstu,
+zapisuje ten tekst w podkatalogu wyników pośrednich i nadaje źródłu status
+„znormalizowane”. Faza deduplikacji zestawia znormalizowane teksty, oznacza
+pewne duplikaty statusem „duplikat” i zapisuje audytowalne decyzje. Faza zapisu
+tworzy pliki wynikowe wyłącznie dla źródeł, które przeżyły deduplikację. Podział
+na fazy jest też podziałem wznowienia: przerwanie w trakcie deduplikacji albo
+zapisu nie wymaga ponownej ekstrakcji, bo znormalizowany tekst jest już na dysku.
 
 Pobranie adresów jest osobną fazą, wykonywaną przed pętlą po źródłach. Dzięki
 temu strony pobierają się równolegle, z zachowaniem limitu połączeń na domenę
@@ -34,15 +42,17 @@ import httpx
 
 from gnb.core.identyfikatory import suma_kontrolna_bajtow
 from gnb.core.konfiguracja import Konfiguracja
-from gnb.core.model import DokumentWyekstrahowany, Zrodlo
+from gnb.core.model import DokumentWyekstrahowany, DokumentZnormalizowany, Zrodlo
 from gnb.core.nazwy import (
     nazwa_pliku_wynikowego,
     skrot_z_identyfikatora,
     wygeneruj_nazwe_projektu,
 )
-from gnb.core.stale import StatusZrodla, TypWejscia, TypZrodla
+from gnb.core.stale import StatusZrodla, TypWejscia, TypZrodla, WynikDeduplikacji
 from gnb.core.wyjatki import BladGnb, BladTrwaly, PrzekroczonoLimit
 from gnb.core.youtube import rozpoznaj
+from gnb.deduplication import UstawieniaDeduplikacji, ZrodloDoDeduplikacji, deduplikuj
+from gnb.deduplication.orkiestrator import WynikDeduplikacjiZbioru
 from gnb.extractors.bazowy import (
     RejestrEkstraktorow,
     RejestrEkstraktorowBinarnych,
@@ -88,8 +98,10 @@ from gnb.logging_pl.dziennik import (
     NAZWA_LOGU_SZCZEGOLOWEGO,
     NAZWA_LOGU_WAZNEGO,
     ZDARZENIE_CHECKPOINT_ZAPISANY,
+    ZDARZENIE_DEDUPLIKACJA_ZAKONCZONA,
     ZDARZENIE_JAKOSC_PODEJRZANA,
     ZDARZENIE_MANIFEST_ZAPISANY,
+    ZDARZENIE_MOZLIWY_DUPLIKAT,
     ZDARZENIE_NAPISY_INNY_JEZYK,
     ZDARZENIE_NAPISY_WYBRANE,
     ZDARZENIE_OSTRZEZENIE_EKSTRAKCJI,
@@ -98,6 +110,7 @@ from gnb.logging_pl.dziennik import (
     ZDARZENIE_PROJEKT_WZNOWIONY,
     ZDARZENIE_PROJEKT_ZAKONCZONY,
     ZDARZENIE_ZRODLO_BLAD,
+    ZDARZENIE_ZRODLO_DUPLIKAT,
     ZDARZENIE_ZRODLO_POMINIETE,
     ZDARZENIE_ZRODLO_PRZYJETE,
     DziennikSzczegolowy,
@@ -110,6 +123,7 @@ from gnb.output import regula_md
 from gnb.output.manifest import WERSJA_SCHEMATU as WERSJA_SCHEMATU_MANIFESTU
 from gnb.output.manifest import (
     Manifest,
+    WpisDeduplikacji,
     WpisPobrania,
     WpisWyniku,
     WpisZrodla,
@@ -146,6 +160,7 @@ from gnb.persistence.cache import PamiecPodreczna, WpisCache, otworz, teraz_utc
 from gnb.persistence.checkpoint import WERSJA_SCHEMATU as WERSJA_SCHEMATU_CHECKPOINTU
 from gnb.persistence.checkpoint import (
     Checkpoint,
+    DecyzjaDeduplikacjiZapis,
     StanPobrania,
     StanWyniku,
     StanZrodla,
@@ -159,6 +174,23 @@ _STATUSY_KONCOWE = frozenset(
 )
 _ROZSZERZENIE_ORYGINALU_TEKSTU = "txt"
 _ROZSZERZENIE_ORYGINALU_NAPISOW = "json"
+
+# Nazwy plików wyników pośrednich zapisywanych po normalizacji. Pierwszy trzyma
+# znormalizowany tekst dokumentu, drugi powstaje tylko dla źródeł, których
+# wersja TXT różni się od wersji MD, na przykład plików Markdown.
+_SUFIKS_TEKST_ZNORMALIZOWANY = "znormalizowany.txt"
+_SUFIKS_TEKST_WERSJI_TXT = "wersja-txt.txt"
+
+KOMUNIKAT_DUPLIKAT = (
+    "Źródło zostało uznane za duplikat źródła {glowne} (metoda: {metoda}, "
+    "podobieństwo {podobienstwo:.2f}). Nie powstaje dla niego plik wynikowy, żeby "
+    "nie zajmować miejsca w limicie źródeł notatnika. Decyzja jest w manifeście."
+)
+KOMUNIKAT_BRAK_TEKSTU_POSREDNIEGO = (
+    "Brak pliku wyniku pośredniego dla znormalizowanego źródła, więc nie da się "
+    "zapisać pliku wynikowego. Plik mógł zostać usunięty. Przetwórz projekt od "
+    "nowa albo przywróć zawartość podkatalogu wyników pośrednich."
+)
 
 # Formaty plików dokumentowych, dla których tytuł i podział na akapity są
 # naturalną cechą prozy, więc ich brak jest sygnałem utraty treści, a nie
@@ -304,6 +336,9 @@ def przetworz_projekt(
         for pozycja in pozycje:
             wykonanie.przetworz(pozycja)
 
+        wykonanie.deduplikuj()
+        wykonanie.zapisz_pliki_wynikowe()
+
         checkpoint.zakonczony = True
         checkpoint.czas_ostatniej_zmiany = zegar().isoformat()
         zapisz(uklad.checkpoint, checkpoint)
@@ -379,6 +414,24 @@ class _Wykonanie:
                 logging.INFO, identyfikator, f"Pomijam już przetworzone źródło {identyfikator}."
             )
             return
+        if istniejacy is not None and istniejacy.status == StatusZrodla.DUPLIKAT.value:
+            self._loguj(
+                logging.INFO,
+                identyfikator,
+                f"Źródło {identyfikator} jest już oznaczone jako duplikat, pomijam.",
+            )
+            return
+        if (
+            istniejacy is not None
+            and istniejacy.status == StatusZrodla.ZNORMALIZOWANE.value
+            and self._ma_tekst_posredni(identyfikator)
+        ):
+            self._loguj(
+                logging.INFO,
+                identyfikator,
+                f"Źródło {identyfikator} jest już znormalizowane, czeka na deduplikację i zapis.",
+            )
+            return
 
         if istniejacy is None and self._liczba_aktywnych() >= self._konfiguracja.limit_zrodel:
             self._pomin(
@@ -406,7 +459,7 @@ class _Wykonanie:
         )
         if przygotowane is None:
             return
-        self._zapisz_dokument(pozycja, zrodlo, przygotowane)
+        self._znormalizuj_i_odloz(pozycja, zrodlo, przygotowane)
 
     def _przygotuj_film(
         self, pozycja: PozycjaWejsciowa, zrodlo: Zrodlo
@@ -599,13 +652,19 @@ class _Wykonanie:
             f"w polach: {rozbiezne}. Obie wartości są w manifeście.",
         )
 
-    def _zapisz_dokument(
+    def _znormalizuj_i_odloz(
         self,
         pozycja: PozycjaWejsciowa,
         zrodlo: Zrodlo,
         przygotowane: _PrzygotowanyDokument,
     ) -> None:
-        """Normalizuje dokument, zapisuje pliki wynikowe i odnotowuje stan źródła."""
+        """Normalizuje dokument i odkłada go do deduplikacji, bez zapisu pliku wynikowego.
+
+        To jest pierwsza z trzech faz potoku. Znormalizowany tekst trafia do
+        podkatalogu wyników pośrednich, a źródło dostaje status „znormalizowane”.
+        Plik wynikowy powstaje dopiero w fazie zapisu, po deduplikacji, żeby nie
+        tworzyć pliku dla źródła, które za chwilę okaże się duplikatem.
+        """
         identyfikator = zrodlo.identyfikator_zrodla
         dokument = przygotowane.dokument
         stan_pobrania = przygotowane.stan_pobrania
@@ -635,21 +694,201 @@ class _Wykonanie:
             return
 
         ostrzezenia = self._zbierz_ostrzezenia(zrodlo, dokument)
-
         decyzja = regula_md.ocen(dokument)
         nazwa_bazowa = nazwa_pliku_wynikowego(dokument.tytul, identyfikator)
+        naglowek = self._naglowek(pozycja, zrodlo, dokument, przygotowane.metadane)
+
+        self._zapisz_tekst_posredni(
+            identyfikator, _SUFIKS_TEKST_ZNORMALIZOWANY, znormalizowany.tekst
+        )
+        if przygotowane.tekst_txt is not None:
+            self._zapisz_tekst_posredni(
+                identyfikator, _SUFIKS_TEKST_WERSJI_TXT, przygotowane.tekst_txt
+            )
+
+        self._checkpoint.zrodla[identyfikator] = StanZrodla(
+            identyfikator=identyfikator,
+            typ=zrodlo.typ_zrodla.value,
+            pochodzenie=zrodlo.pochodzenie,
+            checksum=suma_kontrolna,
+            format_zrodla=pozycja.format_zrodla,
+            status=StatusZrodla.ZNORMALIZOWANE.value,
+            nazwa_bazowa_wyniku=nazwa_bazowa,
+            wyniki=[],
+            liczba_slow=znormalizowany.liczba_slow,
+            liczba_znakow=znormalizowany.liczba_znakow,
+            decyzja_md=decyzja.generuj_md,
+            uzasadnienie_md=list(decyzja.spelnione_warunki),
+            pobranie=stan_pobrania,
+            metadane=dict(przygotowane.metadane),
+            ocena_jakosci=ocena.ocena if ocena is not None else None,
+            powody_oceny=list(ocena.powody) if ocena is not None else [],
+            ostrzezenia=ostrzezenia,
+            naglowek_metadanych=naglowek,
+        )
+        self._zapisz_checkpoint()
+        self._loguj(
+            logging.INFO,
+            identyfikator,
+            f"Znormalizowano źródło {identyfikator}: {znormalizowany.liczba_slow} słów, "
+            f"wersja MD: {'tak' if decyzja.generuj_md else 'nie'}.",
+        )
+
+    def deduplikuj(self) -> None:
+        """Druga faza potoku: porównuje znormalizowane źródła i oznacza duplikaty.
+
+        Faza jest wykonywana raz. Po wznowieniu pracy, gdy przerwanie nastąpiło
+        już po deduplikacji, znacznik w checkpoincie pozwala ją pominąć, żeby
+        istniejące decyzje się nie powtórzyły ani nie zmieniły.
+        """
+        if self._checkpoint.deduplikacja.wykonana:
+            self._loguj(
+                logging.INFO, "-", "Deduplikacja była już wykonana w tym projekcie, pomijam."
+            )
+            return
+
+        kandydaci = [
+            ZrodloDoDeduplikacji(
+                identyfikator=stan.identyfikator,
+                tekst=self._wczytaj_tekst_posredni(stan.identyfikator, _SUFIKS_TEKST_ZNORMALIZOWANY)
+                or "",
+                liczba_slow=stan.liczba_slow or 0,
+            )
+            for stan in self._checkpoint.zrodla.values()
+            if stan.status == StatusZrodla.ZNORMALIZOWANE.value
+        ]
+
+        wynik = deduplikuj(kandydaci, self._ustawienia_deduplikacji())
+        self._zastosuj_wynik_deduplikacji(wynik)
+
+        self._checkpoint.deduplikacja.wykonana = True
+        self._checkpoint.deduplikacja.decyzje = [
+            DecyzjaDeduplikacjiZapis(
+                identyfikator_zrodla_glownego=decyzja.identyfikator_zrodla_glownego,
+                identyfikator_duplikatu=decyzja.identyfikator_duplikatu,
+                metoda=decyzja.metoda,
+                wynik_podobienstwa=decyzja.wynik_podobienstwa,
+                decyzja=decyzja.decyzja.value,
+                uzasadnienie=decyzja.uzasadnienie,
+                zachowane_fragmenty_unikalne=list(decyzja.zachowane_fragmenty_unikalne),
+            )
+            for decyzja in wynik.decyzje
+        ]
+        self._zapisz_checkpoint()
+
+        liczba_pewnych = len(wynik.identyfikatory_duplikatow)
+        liczba_do_przegladu = len(wynik.identyfikatory_do_przegladu)
+        self._dziennik_wazny.zapisz(
+            f"{ZDARZENIE_DEDUPLIKACJA_ZAKONCZONA}: {liczba_pewnych} pewnych duplikatów, "
+            f"{liczba_do_przegladu} do rozstrzygnięcia"
+        )
+        self._loguj(
+            logging.INFO,
+            "-",
+            f"Deduplikacja zakończona: {len(kandydaci)} źródeł porównanych, "
+            f"{liczba_pewnych} pewnych duplikatów, {liczba_do_przegladu} do rozstrzygnięcia.",
+        )
+
+    def _zastosuj_wynik_deduplikacji(self, wynik: WynikDeduplikacjiZbioru) -> None:
+        """Nadaje status „duplikat” pewnym duplikatom i odnotowuje pary do przeglądu."""
+        po_identyfikatorze = {decyzja.identyfikator_duplikatu: decyzja for decyzja in wynik.decyzje}
+        for identyfikator in sorted(wynik.identyfikatory_duplikatow):
+            stan = self._checkpoint.zrodla[identyfikator]
+            decyzja = po_identyfikatorze[identyfikator]
+            stan.status = StatusZrodla.DUPLIKAT.value
+            stan.duplikat_glowny = decyzja.identyfikator_zrodla_glownego
+            stan.komunikat_bledu = KOMUNIKAT_DUPLIKAT.format(
+                glowne=decyzja.identyfikator_zrodla_glownego,
+                metoda=decyzja.metoda,
+                podobienstwo=decyzja.wynik_podobienstwa,
+            )
+            self._dziennik_wazny.zapisz(f"{ZDARZENIE_ZRODLO_DUPLIKAT}: {stan.pochodzenie}")
+            self._loguj(
+                logging.INFO,
+                identyfikator,
+                f"Źródło {identyfikator} to duplikat {decyzja.identyfikator_zrodla_glownego}, "
+                f"metoda {decyzja.metoda}, podobieństwo {decyzja.wynik_podobienstwa:.2f}.",
+            )
+        for identyfikator in sorted(wynik.identyfikatory_do_przegladu):
+            decyzja = po_identyfikatorze[identyfikator]
+            stan = self._checkpoint.zrodla[identyfikator]
+            self._dziennik_wazny.zapisz(f"{ZDARZENIE_MOZLIWY_DUPLIKAT}: {stan.pochodzenie}")
+            self._loguj(
+                logging.WARNING,
+                identyfikator,
+                f"Źródło {identyfikator} może być duplikatem "
+                f"{decyzja.identyfikator_zrodla_glownego} (podobieństwo "
+                f"{decyzja.wynik_podobienstwa:.2f}, metoda {decyzja.metoda}). Oba zostają.",
+            )
+
+    def _ustawienia_deduplikacji(self) -> UstawieniaDeduplikacji:
+        """Buduje ustawienia deduplikacji z konfiguracji projektu.
+
+        Etap embeddingów lokalnych nie jest realizowany w tym zakresie. Gdy jest
+        włączony w konfiguracji, potok dopisuje o tym czytelną informację i
+        pracuje dalej bez tego etapu, tak jak przy braku narzędzia zewnętrznego.
+        """
+        if self._konfiguracja.deduplikacja_embeddingi_wlaczone:
+            self._loguj(
+                logging.WARNING,
+                "-",
+                "Etap embeddingów lokalnych w deduplikacji jest włączony w konfiguracji, "
+                "ale nie został jeszcze zaimplementowany. Ten etap został pominięty.",
+            )
+        return UstawieniaDeduplikacji(
+            etap_hash=self._konfiguracja.deduplikacja_hash_wlaczona,
+            etap_kosmetyczny=self._konfiguracja.deduplikacja_kosmetyczna_wlaczona,
+            etap_podobienstwa=self._konfiguracja.deduplikacja_podobienstwo_wlaczone,
+            prog_duplikatu=self._konfiguracja.deduplikacja_prog_duplikatu,
+            prog_do_przegladu=self._konfiguracja.deduplikacja_prog_do_przegladu,
+        )
+
+    def zapisz_pliki_wynikowe(self) -> None:
+        """Trzecia faza potoku: zapisuje pliki wynikowe źródeł, które przeżyły deduplikację."""
+        for stan in list(self._checkpoint.zrodla.values()):
+            if stan.status != StatusZrodla.ZNORMALIZOWANE.value:
+                continue
+            self._zapisz_jeden_plik_wynikowy(stan)
+
+    def _zapisz_jeden_plik_wynikowy(self, stan: StanZrodla) -> None:
+        """Buduje pliki wynikowe jednego znormalizowanego źródła i domyka jego stan."""
+        identyfikator = stan.identyfikator
+        tekst = self._wczytaj_tekst_posredni(identyfikator, _SUFIKS_TEKST_ZNORMALIZOWANY)
+        if tekst is None:
+            stan.status = StatusZrodla.BLAD.value
+            stan.komunikat_bledu = KOMUNIKAT_BRAK_TEKSTU_POSREDNIEGO
+            self._zapisz_checkpoint()
+            self._dziennik_wazny.zapisz(ZDARZENIE_ZRODLO_BLAD)
+            self._loguj(logging.ERROR, identyfikator, KOMUNIKAT_BRAK_TEKSTU_POSREDNIEGO)
+            return
+
+        znormalizowany = DokumentZnormalizowany(
+            identyfikator_zrodla=identyfikator,
+            tekst=tekst,
+            liczba_slow=stan.liczba_slow or 0,
+            liczba_znakow=stan.liczba_znakow or 0,
+        )
+        # Pole poziomu pewności służy tu tylko odtworzeniu decyzji dla zapisu. Sam
+        # zapis czyta wyłącznie `generuj_md`, a ten jest już rozstrzygnięty.
+        decyzja = regula_md.DecyzjaFormatu(
+            generuj_md=bool(stan.decyzja_md),
+            spelnione_warunki=tuple(stan.uzasadnienie_md),
+            poziom_pewnosci_wystarczajacy=bool(stan.decyzja_md),
+        )
+        tekst_txt = self._wczytaj_tekst_posredni(identyfikator, _SUFIKS_TEKST_WERSJI_TXT)
+
         pliki = zapisz_wyniki(
             self._uklad.pliki_wynikowe,
-            nazwa_bazowa,
+            stan.nazwa_bazowa_wyniku or nazwa_pliku_wynikowego(None, identyfikator),
             identyfikator,
             znormalizowany,
             decyzja,
             formaty_wlaczone=self._konfiguracja.formaty_wynikowe,
-            tekst_txt=przygotowane.tekst_txt,
-            naglowek=self._naglowek(pozycja, zrodlo, dokument, przygotowane.metadane),
+            tekst_txt=tekst_txt,
+            naglowek=stan.naglowek_metadanych or "",
         )
 
-        wyniki_stanu = [
+        stan.wyniki = [
             StanWyniku(
                 sciezka_wzgledna=plik.sciezka.relative_to(self._uklad.katalog_projektu).as_posix(),
                 format=plik.format.value,
@@ -660,25 +899,7 @@ class _Wykonanie:
             )
             for plik in pliki
         ]
-        self._checkpoint.zrodla[identyfikator] = StanZrodla(
-            identyfikator=identyfikator,
-            typ=zrodlo.typ_zrodla.value,
-            pochodzenie=zrodlo.pochodzenie,
-            checksum=suma_kontrolna,
-            format_zrodla=pozycja.format_zrodla,
-            status=StatusZrodla.SPAKOWANE.value,
-            nazwa_bazowa_wyniku=nazwa_bazowa,
-            wyniki=wyniki_stanu,
-            liczba_slow=znormalizowany.liczba_slow,
-            liczba_znakow=znormalizowany.liczba_znakow,
-            decyzja_md=decyzja.generuj_md,
-            uzasadnienie_md=list(decyzja.spelnione_warunki),
-            pobranie=stan_pobrania,
-            metadane=dict(przygotowane.metadane),
-            ocena_jakosci=ocena.ocena if ocena is not None else None,
-            powody_oceny=list(ocena.powody) if ocena is not None else [],
-            ostrzezenia=ostrzezenia,
-        )
+        stan.status = StatusZrodla.SPAKOWANE.value
         self._zapisz_checkpoint()
         self._dziennik_wazny.zapisz(ZDARZENIE_ZRODLO_PRZYJETE)
         for _ in pliki:
@@ -687,14 +908,32 @@ class _Wykonanie:
             logging.INFO,
             identyfikator,
             f"Zapisano {len(pliki)} plików wynikowych, wersja MD: "
-            f"{'tak' if decyzja.generuj_md else 'nie'}.",
+            f"{'tak' if stan.decyzja_md else 'nie'}.",
         )
+
+    def _zapisz_tekst_posredni(self, identyfikator: str, sufiks: str, tekst: str) -> None:
+        """Zapisuje jeden plik wyniku pośredniego w UTF-8 z końcami wierszy LF."""
+        self._uklad.wyniki_posrednie.mkdir(parents=True, exist_ok=True)
+        cel = self._uklad.wyniki_posrednie / f"{identyfikator}.{sufiks}"
+        with cel.open("w", encoding="utf-8", newline="\n") as plik:
+            plik.write(tekst)
+
+    def _wczytaj_tekst_posredni(self, identyfikator: str, sufiks: str) -> str | None:
+        """Odczytuje plik wyniku pośredniego albo zwraca nic, gdy go nie ma."""
+        cel = self._uklad.wyniki_posrednie / f"{identyfikator}.{sufiks}"
+        if not cel.is_file():
+            return None
+        return cel.read_text(encoding="utf-8")
+
+    def _ma_tekst_posredni(self, identyfikator: str) -> bool:
+        cel = self._uklad.wyniki_posrednie / f"{identyfikator}.{_SUFIKS_TEKST_ZNORMALIZOWANY}"
+        return cel.is_file()
 
     def _zbierz_ostrzezenia(self, zrodlo: Zrodlo, dokument: DokumentWyekstrahowany) -> list[str]:
         """Zbiera ostrzeżenia zgłoszone przez ekstraktor i odnotowuje je w obu logach.
 
         Źródło bez żadnej znormalizowanej treści, dla formatu celowo wyłączonego
-        z oceny jakości, jest pomijane wcześniej, w `_zapisz_dokument`, i tutaj
+        z oceny jakości, jest pomijane wcześniej, w `_znormalizuj_i_odloz`, i tutaj
         w ogóle nie dociera. Format oceniany, na przykład skan PDF bez warstwy
         tekstowej, dociera tutaj nawet z pustą treścią, bo jego pusty wynik
         obsługuje ocena jakości, a nie to miejsce.
@@ -1316,7 +1555,11 @@ def _zbuduj_manifest(uklad: UkladProjektu, checkpoint: Checkpoint) -> Manifest:
                 pochodzenie=stan.pochodzenie,
                 checksum=stan.checksum,
                 status=stan.status,
-                duplikat=None,
+                duplikat=(
+                    f"duplikat źródła {stan.duplikat_glowny}"
+                    if stan.status == StatusZrodla.DUPLIKAT.value and stan.duplikat_glowny
+                    else None
+                ),
                 decyzja_md=stan.decyzja_md,
                 uzasadnienie_md=tuple(stan.uzasadnienie_md),
                 pliki_wynikowe=tuple(wynik.sciezka_wzgledna for wynik in stan.wyniki),
@@ -1347,6 +1590,18 @@ def _zbuduj_manifest(uklad: UkladProjektu, checkpoint: Checkpoint) -> Manifest:
         nazwa_projektu=uklad.nazwa_projektu,
         zrodla=tuple(wpisy_zrodel),
         wyniki=tuple(wpisy_wynikow),
+        deduplikacja=tuple(
+            WpisDeduplikacji(
+                identyfikator_zrodla_glownego=decyzja.identyfikator_zrodla_glownego,
+                identyfikator_duplikatu=decyzja.identyfikator_duplikatu,
+                metoda=decyzja.metoda,
+                wynik_podobienstwa=decyzja.wynik_podobienstwa,
+                decyzja=decyzja.decyzja,
+                uzasadnienie=decyzja.uzasadnienie,
+                zachowane_fragmenty_unikalne=tuple(decyzja.zachowane_fragmenty_unikalne),
+            )
+            for decyzja in checkpoint.deduplikacja.decyzje
+        ),
     )
 
 
@@ -1373,6 +1628,7 @@ def _zbuduj_podsumowanie(
     poprawne = _policz_status(checkpoint, StatusZrodla.SPAKOWANE)
     pominiete = _policz_status(checkpoint, StatusZrodla.POMINIETE)
     bledne = _policz_status(checkpoint, StatusZrodla.BLAD)
+    duplikaty = _policz_status(checkpoint, StatusZrodla.DUPLIKAT)
 
     wyniki = [wynik for stan in checkpoint.zrodla.values() for wynik in stan.wyniki]
     liczba_txt = sum(1 for wynik in wyniki if wynik.format == "txt")
@@ -1385,7 +1641,7 @@ def _zbuduj_podsumowanie(
         liczba_zrodel_poprawnych=poprawne,
         liczba_zrodel_pominietych=pominiete,
         liczba_zrodel_blednych=bledne,
-        liczba_duplikatow=0,
+        liczba_duplikatow=duplikaty,
         liczba_zrodel_po_deduplikacji=poprawne,
         liczba_plikow_txt=liczba_txt,
         liczba_plikow_md=liczba_md,
@@ -1418,20 +1674,44 @@ def _zrodla_nieprzetworzone(checkpoint: Checkpoint) -> tuple[ZrodloNieprzetworzo
 def _materialy_do_sprawdzenia(checkpoint: Checkpoint) -> tuple[MaterialDoSprawdzenia, ...]:
     """Zbiera źródła zapisane poprawnie, przy których coś wymaga obejrzenia.
 
-    Kwalifikuje źródło podejrzane w ocenie jakości oraz źródło z ostrzeżeniem
-    ekstraktora. Ostrzeżenie musi tu trafiać niezależnie od oceny, bo ocena
-    celowo pomija część formatów, a ostrzeżenie dotyczy każdego z nich.
+    Kwalifikuje źródło podejrzane w ocenie jakości, źródło z ostrzeżeniem
+    ekstraktora oraz źródło, które deduplikacja uznała za możliwy duplikat i
+    zostawiła obie kopie do rozstrzygnięcia. Każdy z trzech powodów musi tu
+    trafiać niezależnie od pozostałych, bo mówią o różnych rzeczach.
     """
+    mozliwe_duplikaty = _mozliwe_duplikaty_wedlug_zrodla(checkpoint)
     return tuple(
         MaterialDoSprawdzenia(
             identyfikator=stan.identyfikator,
             pochodzenie=stan.pochodzenie,
             powody=tuple(stan.powody_oceny),
             ostrzezenia=tuple(stan.ostrzezenia),
+            mozliwe_duplikaty=mozliwe_duplikaty.get(stan.identyfikator, ()),
         )
         for stan in checkpoint.zrodla.values()
-        if stan.ocena_jakosci == OCENA_PODEJRZANA or stan.ostrzezenia
+        if stan.ocena_jakosci == OCENA_PODEJRZANA
+        or stan.ostrzezenia
+        or stan.identyfikator in mozliwe_duplikaty
     )
+
+
+def _mozliwe_duplikaty_wedlug_zrodla(checkpoint: Checkpoint) -> dict[str, tuple[str, ...]]:
+    """Buduje opisy możliwych duplikatów dla każdego źródła oznaczonego do przeglądu.
+
+    Decyzja o możliwym duplikacie dotyczy pary źródeł. Opis jest przypisywany
+    źródłu wskazanemu w decyzji jako duplikat, ponieważ to ono zostało zachowane
+    obok źródła głównego i to przy nim użytkownik ma podjąć decyzję.
+    """
+    wynik: dict[str, list[str]] = {}
+    for decyzja in checkpoint.deduplikacja.decyzje:
+        if decyzja.decyzja != WynikDeduplikacji.WYMAGA_DECYZJI_UZYTKOWNIKA.value:
+            continue
+        opis = (
+            f"Możliwy duplikat źródła {decyzja.identyfikator_zrodla_glownego}: "
+            f"podobieństwo {decyzja.wynik_podobienstwa:.2f}, metoda {decyzja.metoda}."
+        )
+        wynik.setdefault(decyzja.identyfikator_duplikatu, []).append(opis)
+    return {identyfikator: tuple(opisy) for identyfikator, opisy in wynik.items()}
 
 
 def _policz_status(checkpoint: Checkpoint, status: StatusZrodla) -> int:

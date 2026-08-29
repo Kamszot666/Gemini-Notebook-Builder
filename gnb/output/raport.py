@@ -27,8 +27,10 @@ NAGLOWEK_MATERIALOW_DO_SPRAWDZENIA = "Materiały do sprawdzenia"
 OPIS_MATERIALOW_DO_SPRAWDZENIA = (
     "Te źródła zostały zapisane i są w plikach wynikowych. Przy każdym z nich coś "
     "jednak wymaga obejrzenia: albo wynik ekstrakcji wygląda podejrzanie, albo "
-    "ekstraktor zgłosił ostrzeżenie. Warto zajrzeć do pliku przed wgraniem go do "
-    "notatnika. Żadne z nich nie zostało usunięte."
+    "ekstraktor zgłosił ostrzeżenie, albo deduplikacja uznała je za możliwy "
+    "duplikat innego źródła i zostawiła obie kopie do rozstrzygnięcia. Warto "
+    "zajrzeć do pliku przed wgraniem go do notatnika. Żadne z nich nie zostało "
+    "usunięte."
 )
 
 
@@ -57,6 +59,7 @@ class MaterialDoSprawdzenia:
     pochodzenie: str
     powody: tuple[str, ...] = ()
     ostrzezenia: tuple[str, ...] = ()
+    mozliwe_duplikaty: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,6 +159,9 @@ def _wiersze_materialow_do_sprawdzenia(
         if material.powody:
             wiersze.append("  Powody podejrzenia:")
             wiersze.extend(f"    - {powod}" for powod in material.powody)
+        if material.mozliwe_duplikaty:
+            wiersze.append("  Możliwe duplikaty do rozstrzygnięcia:")
+            wiersze.extend(f"    - {opis}" for opis in material.mozliwe_duplikaty)
         wiersze.append("")
     return wiersze[:-1]
 

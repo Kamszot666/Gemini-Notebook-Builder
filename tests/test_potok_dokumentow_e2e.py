@@ -48,7 +48,16 @@ def _pozycje_formatow_dokumentowych() -> list[PozycjaWejsciowa]:
 
 
 def test_wszystkie_formaty_dokumentowe_sa_przetwarzane_bez_bledow(tmp_path: Path) -> None:
-    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path)
+    # Kilka plików z zestawu, między innymi pdf_tekstowy.pdf, dokument.docx i
+    # ksiazka.epub, niesie ten sam artykuł w różnych formatach, więc przy
+    # włączonej deduplikacji część z nich słusznie znika jako duplikat. Ten test
+    # sprawdza samą obsługę formatów, więc deduplikacja jest w nim wyłączona.
+    konfiguracja = Konfiguracja(
+        katalog_wynikow=tmp_path,
+        deduplikacja_hash_wlaczona=False,
+        deduplikacja_kosmetyczna_wlaczona=False,
+        deduplikacja_podobienstwo_wlaczone=False,
+    )
     wynik = przetworz_projekt(
         _pozycje_formatow_dokumentowych(),
         konfiguracja,

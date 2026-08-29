@@ -78,7 +78,14 @@ class StanPobrania:
 
 @dataclass
 class StanZrodla:
-    """Zapisany w checkpoincie stan pojedynczego źródła."""
+    """Zapisany w checkpoincie stan pojedynczego źródła.
+
+    Pole `naglowek_metadanych` niesie gotowy nagłówek pliku wynikowego zbudowany
+    na etapie normalizacji. Jest zapisywany, bo zawiera datę importu w czasie
+    lokalnym i po wznowieniu pracy nie dałoby się go odtworzyć identycznie. Pole
+    `duplikat_glowny` jest ustawiane dla źródła uznanego za duplikat innego i
+    wskazuje identyfikator źródła zachowanego.
+    """
 
     identyfikator: str
     typ: str
@@ -98,6 +105,38 @@ class StanZrodla:
     ocena_jakosci: str | None = None
     powody_oceny: list[str] = field(default_factory=list)
     ostrzezenia: list[str] = field(default_factory=list)
+    naglowek_metadanych: str | None = None
+    duplikat_glowny: str | None = None
+
+
+@dataclass
+class DecyzjaDeduplikacjiZapis:
+    """Audytowalna decyzja deduplikacji zapisana w checkpoincie.
+
+    Odpowiada kontraktowi `gnb.core.model.DecyzjaDeduplikacji`. Pole zachowanych
+    fragmentów unikalnych jest przewidziane w schemacie, ale w zakresie etapu
+    piątego pozostaje puste, co wyjaśnia sekcja osiemnasta e CLAUDE.md.
+    """
+
+    identyfikator_zrodla_glownego: str
+    identyfikator_duplikatu: str
+    metoda: str
+    wynik_podobienstwa: float
+    decyzja: str
+    uzasadnienie: str
+    zachowane_fragmenty_unikalne: list[str] = field(default_factory=list)
+
+
+@dataclass
+class StanDeduplikacji:
+    """Stan etapu deduplikacji projektu.
+
+    `wykonana` pozwala pominąć powtórne porównanie po wznowieniu pracy, gdy
+    przerwanie nastąpiło już po deduplikacji, a przed zapisem plików wynikowych.
+    """
+
+    wykonana: bool = False
+    decyzje: list[DecyzjaDeduplikacjiZapis] = field(default_factory=list)
 
 
 @dataclass
@@ -112,6 +151,7 @@ class Checkpoint:
     czas_ostatniej_zmiany: str
     zrodla: dict[str, StanZrodla] = field(default_factory=dict)
     zakonczony: bool = False
+    deduplikacja: StanDeduplikacji = field(default_factory=StanDeduplikacji)
 
 
 def zapisz(sciezka: Path, checkpoint: Checkpoint) -> None:
@@ -305,7 +345,26 @@ def _checkpoint_do_slownika(checkpoint: Checkpoint) -> dict[str, Any]:
         "konfiguracja": dict(checkpoint.konfiguracja),
         "czas_ostatniej_zmiany": checkpoint.czas_ostatniej_zmiany,
         "zakonczony": checkpoint.zakonczony,
+        "deduplikacja": _deduplikacja_do_slownika(checkpoint.deduplikacja),
         "zrodla": {klucz: _stan_do_slownika(stan) for klucz, stan in checkpoint.zrodla.items()},
+    }
+
+
+def _deduplikacja_do_slownika(stan: StanDeduplikacji) -> dict[str, Any]:
+    return {
+        "wykonana": stan.wykonana,
+        "decyzje": [
+            {
+                "identyfikator_zrodla_glownego": decyzja.identyfikator_zrodla_glownego,
+                "identyfikator_duplikatu": decyzja.identyfikator_duplikatu,
+                "metoda": decyzja.metoda,
+                "wynik_podobienstwa": decyzja.wynik_podobienstwa,
+                "decyzja": decyzja.decyzja,
+                "uzasadnienie": decyzja.uzasadnienie,
+                "zachowane_fragmenty_unikalne": list(decyzja.zachowane_fragmenty_unikalne),
+            }
+            for decyzja in stan.decyzje
+        ],
     }
 
 
@@ -329,6 +388,8 @@ def _stan_do_slownika(stan: StanZrodla) -> dict[str, Any]:
         "ocena_jakosci": stan.ocena_jakosci,
         "powody_oceny": list(stan.powody_oceny),
         "ostrzezenia": list(stan.ostrzezenia),
+        "naglowek_metadanych": stan.naglowek_metadanych,
+        "duplikat_glowny": stan.duplikat_glowny,
     }
 
 
@@ -376,6 +437,38 @@ def _checkpoint_ze_slownika(dane: dict[str, Any]) -> Checkpoint:
         czas_ostatniej_zmiany=str(dane["czas_ostatniej_zmiany"]),
         zrodla=zrodla,
         zakonczony=bool(dane.get("zakonczony", False)),
+        deduplikacja=_deduplikacja_ze_slownika(dane.get("deduplikacja")),
+    )
+
+
+def _deduplikacja_ze_slownika(dane: Any) -> StanDeduplikacji:
+    """Odczytuje stan deduplikacji. Jego brak jest poprawny dla starszych plików.
+
+    Pole zostało dodane w etapie piątym z pustą wartością domyślną, więc plik
+    zapisany wcześniejszą wersją aplikacji wczytuje się bez zmian w schemacie.
+    """
+    if not isinstance(dane, dict):
+        return StanDeduplikacji()
+    surowe_decyzje = dane.get("decyzje", [])
+    decyzje = [
+        _decyzja_deduplikacji_ze_slownika(element)
+        for element in surowe_decyzje
+        if isinstance(element, dict)
+    ]
+    return StanDeduplikacji(wykonana=bool(dane.get("wykonana", False)), decyzje=decyzje)
+
+
+def _decyzja_deduplikacji_ze_slownika(dane: dict[str, Any]) -> DecyzjaDeduplikacjiZapis:
+    return DecyzjaDeduplikacjiZapis(
+        identyfikator_zrodla_glownego=str(dane["identyfikator_zrodla_glownego"]),
+        identyfikator_duplikatu=str(dane["identyfikator_duplikatu"]),
+        metoda=str(dane["metoda"]),
+        wynik_podobienstwa=float(dane["wynik_podobienstwa"]),
+        decyzja=str(dane["decyzja"]),
+        uzasadnienie=str(dane["uzasadnienie"]),
+        zachowane_fragmenty_unikalne=[
+            str(element) for element in dane.get("zachowane_fragmenty_unikalne", [])
+        ],
     )
 
 
@@ -401,6 +494,8 @@ def _stan_ze_slownika(dane: Any) -> StanZrodla:
         ocena_jakosci=_opcjonalny_tekst(dane.get("ocena_jakosci")),
         powody_oceny=[str(element) for element in dane.get("powody_oceny", [])],
         ostrzezenia=[str(element) for element in dane.get("ostrzezenia", [])],
+        naglowek_metadanych=_opcjonalny_tekst(dane.get("naglowek_metadanych")),
+        duplikat_glowny=_opcjonalny_tekst(dane.get("duplikat_glowny")),
     )
 
 

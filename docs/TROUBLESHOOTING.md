@@ -19,6 +19,9 @@ ozdobników, a polecenia do wpisania są w osobnych blokach.
 7. Źródło zniknęło z wyników jako duplikat, choć nie jest identyczne.
 8. Podkatalog wyników pośrednich został usunięty w trakcie pracy.
 9. Jedno źródło dało kilka plików z dopiskiem „czesc” w nazwie.
+10. Interfejs WWW nie startuje: port jest zajęty.
+11. W interfejsie nie widać postępu, a licznik znaków się nie zmienia.
+12. Interfejs odrzuca wysłany plik.
 
 ## 1. Windows blokuje plik wykonywalny narzędzia deweloperskiego
 
@@ -226,3 +229,58 @@ podziału, obejrzyj styk części: znaczy to, że pojedyncze zdanie samo przekra
 limit i cięcie wypadło na granicy słowa. Jeżeli chcesz mniejszej liczby części,
 zwiększ `bezpieczny_limit_slow` w konfiguracji, pamiętając o marginesie wobec
 twardego limitu notatnika wynoszącego 500000 słów.
+
+## 10. Interfejs WWW nie startuje, bo port jest zajęty
+
+Objaw. Polecenie `python -m gnb.ui.server` kończy się komunikatem, że nie udało
+się uruchomić serwera, a port może być zajęty. Zwykle w komunikacie systemu jest
+zwrot „address already in use” albo „Only one usage of each socket address”.
+
+Przyczyna. Domyślny port 8765 jest już używany przez inny program albo przez
+poprzednie, niezamknięte uruchomienie interfejsu.
+
+Co zrobić. Zamknij poprzednie uruchomienie interfejsu, jeśli takie zostało, albo
+wskaż inny port. Numer portu podajesz w pliku `konfiguracja.toml` polem
+`port_nasluchu` albo zmienną środowiskową `GNB_PORT_NASLUCHU`:
+
+```powershell
+$env:GNB_PORT_NASLUCHU = "8790"
+python -m gnb.ui.server
+```
+
+Adres nasłuchu musi pozostać adresem pętli zwrotnej. Wpisanie adresu spoza pętli
+zwrotnej, na przykład `0.0.0.0`, kończy się błędem konfiguracji, ponieważ
+interfejs nie ma uwierzytelniania i nie wolno go wystawiać do sieci.
+
+## 11. W interfejsie nie widać postępu, a licznik znaków się nie zmienia
+
+Objaw. Region stanu przetwarzania na stronie projektu pokazuje wciąż tę samą
+treść, choć projekt się przetwarza. Licznik znaków pod polem instrukcji
+systemowej nie reaguje na wpisywanie.
+
+Przyczyna. W przeglądarce jest wyłączony JavaScript. Odświeżanie regionu postępu
+i licznik znaków to jedyne dwie rzeczy w interfejsie, które go wymagają.
+
+Co zrobić. Aktualny stan przetwarzania sprawdzasz, aktywując odnośnik „Odśwież
+stan” na stronie projektu; jest to zwykły odnośnik do tej samej strony, więc
+działa bez JavaScriptu. Licznik znaków instrukcji pokazuje wtedy stan z chwili
+wczytania strony, a przekroczenie limitu i tak jest blokowane przy zapisie, po
+stronie serwera, z czytelnym błędem przy polu. Jeżeli wolisz pełną obsługę,
+włącz JavaScript dla adresu `http://127.0.0.1`.
+
+## 12. Interfejs odrzuca wysłany plik
+
+Objaw. Po wysłaniu formularza nowego projektu z plikiem pojawia się strona błędu
+z komunikatem o zbyt dużym żądaniu albo o zbyt dużej liczbie plików.
+
+Przyczyna. Wysłany plik przekracza bezpieczny limit rozmiaru wysyłki, domyślnie
+190 megabajtów, albo liczba plików w jednym wysłaniu przekracza limit źródeł
+notatnika.
+
+Co zrobić. Przy zbyt dużym pliku sprawdź, czy to na pewno dokument tekstowy, a nie
+na przykład skan w wysokiej rozdzielczości. Limit rozmiaru wysyłki zmieniasz
+polem `maksymalny_rozmiar_wysylki_mb` w konfiguracji albo zmienną
+`GNB_MAKSYMALNY_ROZMIAR_WYSYLKI_MB`. Pamiętaj, że pojedyncze źródło notatnika ma
+twardy limit 200 megabajtów niezależnie od planu. Przy zbyt dużej liczbie plików
+podziel je na kilka wysłań: checkpoint kumuluje źródła między uruchomieniami, więc
+kolejne wysłanie z tą samą nazwą projektu dokłada źródła do istniejącego projektu.

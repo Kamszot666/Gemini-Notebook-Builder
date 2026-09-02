@@ -86,6 +86,15 @@ def test_bledy_walidacji_sa_powiazane_z_polami() -> None:
     assert 'aria-invalid="true"' in html
     assert 'aria-describedby="nazwa_projektu-blad"' in html
     assert "Nazwa projektu jest wymagana." in html
+    # Sekcja 11 punkt 8 CLAUDE.md: fokus wolno przenieść po nieudanej walidacji.
+    assert "getElementById('bledy-formularza')" in html
+    assert ".focus()" in html
+
+
+def test_strona_bez_bledow_nie_przenosi_fokusu() -> None:
+    html = strona_glowna(projekty=[], token_csrf="t")
+    assert "bledy-formularza" not in html
+    assert ".focus()" not in html
 
 
 def test_strona_projektu_w_trakcie_ma_region_status_i_skrypt_postepu() -> None:

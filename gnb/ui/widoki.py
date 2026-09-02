@@ -196,7 +196,7 @@ def strona_glowna(
 </form>"""
 
     tresc = formularz + _sekcja_niedokonczone(projekty, token_csrf)
-    return _dokument("Gemini Notebook Builder", tresc)
+    return _dokument("Gemini Notebook Builder", tresc, skrypt=_SKRYPT_FOKUS_BLEDOW if bledy else "")
 
 
 def _sekcja_niedokonczone(projekty: list[ProjektNaLiscie], token_csrf: str) -> str:
@@ -260,9 +260,14 @@ def strona_projektu(
     czesci.append('<p><a href="/">Wróć do strony głównej</a></p>')
 
     trwa = informacja is not None and informacja.stan is StanZadania.TRWA
-    skrypt = _SKRYPT_POSTEPU.replace("SCIEZKA_POSTEPU", escapuj(SCIEZKA_POSTEPU)) if trwa else ""
-    skrypt = f"{skrypt}\n{_SKRYPT_LICZNIKA}".strip()
-    return _dokument(f"Projekt: {nazwa}", "\n".join(czesci), skrypt=skrypt)
+    fragmenty_skryptu = [_SKRYPT_LICZNIKA]
+    if trwa:
+        fragmenty_skryptu.append(
+            _SKRYPT_POSTEPU.replace("SCIEZKA_POSTEPU", escapuj(SCIEZKA_POSTEPU))
+        )
+    if bledy:
+        fragmenty_skryptu.append(_SKRYPT_FOKUS_BLEDOW)
+    return _dokument(f"Projekt: {nazwa}", "\n".join(czesci), skrypt="\n".join(fragmenty_skryptu))
 
 
 def _sekcja_postepu(sciezka: str, informacja: InformacjaOZadaniu | None) -> str:
@@ -402,6 +407,13 @@ _SKRYPT_POSTEPU = """
       .catch(function () {});
   }
   setInterval(odswiez, 4000);
+})();
+""".strip()
+
+_SKRYPT_FOKUS_BLEDOW = """
+(function () {
+  var lista = document.getElementById('bledy-formularza');
+  if (lista) { lista.focus(); }
 })();
 """.strip()
 

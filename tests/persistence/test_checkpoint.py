@@ -15,6 +15,7 @@ from gnb.persistence.checkpoint import (
     StanDeduplikacji,
     StanWyniku,
     StanZrodla,
+    WejscieZapis,
     wczytaj,
     zapisz,
 )
@@ -400,6 +401,70 @@ def test_stan_deduplikacji_przezywa_zapis_i_odczyt(tmp_path: Path) -> None:
     stan = odczytany.zrodla["plik_tekstowy-1"]
     assert stan.naglowek_metadanych == "Tytuł: Coś\n\n"
     assert stan.duplikat_glowny == "plik_tekstowy-0"
+
+
+def test_plik_bez_pola_wejscia_wczytuje_sie_z_pusta_lista(tmp_path: Path) -> None:
+    """Lista wejść jest polem addytywnym, więc plik starszej wersji jej nie zawiera.
+
+    Tekst pliku jest wpisany ręcznie i nie ma klucza „wejscia”. Odczyt musi dać
+    pustą listę, a nie błąd braku pola, zgodnie z sekcją czternastą CLAUDE.md.
+    Gdyby odczyt sięgał po klucz zamiast po wartość domyślną, ten test kończyłby
+    się błędem trwałym.
+    """
+    sciezka = tmp_path / "checkpoint.json"
+    sciezka.write_text(_CHECKPOINT_W_WERSJI_TRZECIEJ, encoding="utf-8")
+
+    odczytany = wczytaj(sciezka)
+
+    assert odczytany is not None
+    assert odczytany.wejscia == []
+
+
+def test_lista_wejsc_przezywa_zapis_i_odczyt(tmp_path: Path) -> None:
+    checkpoint = _przykladowy_checkpoint()
+    checkpoint.wejscia = [
+        WejscieZapis(
+            typ_wejscia="tekst",
+            wartosc="Notatka do wznowienia.",
+            format_zrodla="md",
+            moment_dodania="2026-09-02T10:00:00+00:00",
+        ),
+        WejscieZapis(
+            typ_wejscia="url",
+            wartosc="https://example.com/a",
+            format_zrodla="html",
+            moment_dodania="2026-09-02T10:00:00+00:00",
+            grupa="Grupa A",
+        ),
+    ]
+
+    sciezka = tmp_path / "checkpoint.json"
+    zapisz(sciezka, checkpoint)
+    odczytany = wczytaj(sciezka)
+
+    assert odczytany == checkpoint
+
+
+def test_uszkodzony_wpis_wejscia_jest_pomijany_a_nie_wywraca_odczytu(tmp_path: Path) -> None:
+    """Jeden wpis wejścia bez rodzaju nie może uniemożliwić wczytania checkpointu."""
+    sciezka = tmp_path / "checkpoint.json"
+    dane = json.loads(_CHECKPOINT_W_WERSJI_CZWARTEJ_BEZ_PAKOWANIA)
+    dane["wejscia"] = [
+        {"wartosc": "bez rodzaju"},
+        {
+            "typ_wejscia": "tekst",
+            "wartosc": "poprawne wejście",
+            "format_zrodla": "txt",
+            "moment_dodania": "2026-09-02T10:00:00+00:00",
+            "grupa": None,
+        },
+    ]
+    sciezka.write_text(json.dumps(dane, ensure_ascii=False), encoding="utf-8")
+
+    odczytany = wczytaj(sciezka)
+
+    assert odczytany is not None
+    assert [wejscie.wartosc for wejscie in odczytany.wejscia] == ["poprawne wejście"]
 
 
 def test_starszy_checkpoint_wczytuje_sie_takze_z_kopii_zapasowej(tmp_path: Path) -> None:

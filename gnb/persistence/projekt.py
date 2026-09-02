@@ -3,8 +3,9 @@
 Katalog projektu leży poza repozytorium, domyślnie w podkatalogu katalogu
 wyników pochodzącego z konfiguracji. Wewnątrz katalogu projektu trzymane są
 osobno: materiały źródłowe, wyniki pośrednie, pliki wynikowe przeznaczone do
-notatnika, manifest, logi i checkpoint. Pliki wynikowe mają własny podkatalog,
-żeby dało się je znaleźć bez przeglądania reszty.
+notatnika, pliki wysłane do projektu przez interfejs WWW, manifest, logi,
+checkpoint oraz plik dwóch pól tekstowych notatnika. Pliki wynikowe mają własny
+podkatalog, żeby dało się je znaleźć bez przeglądania reszty.
 
 Moduł wyznacza ścieżki i tworzy katalogi. Nie zapisuje żadnej treści.
 """
@@ -20,11 +21,13 @@ from gnb.core.nazwy import sanityzuj_nazwe_projektu
 _NAZWA_MATERIALY_ZRODLOWE = "materialy_zrodlowe"
 _NAZWA_WYNIKI_POSREDNIE = "wyniki_posrednie"
 _NAZWA_PLIKI_WYNIKOWE = "pliki_wynikowe"
+_NAZWA_PLIKI_WEJSCIOWE = "pliki_wejsciowe"
 _NAZWA_LOGI = "logi"
 _NAZWA_MANIFEST_JSON = "manifest.json"
 _NAZWA_MANIFEST_TXT = "manifest.txt"
 _NAZWA_CHECKPOINT = "checkpoint.json"
 _NAZWA_RAPORT = "raport.txt"
+_NAZWA_POLA_NOTATNIKA = "pola_notatnika.json"
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +49,22 @@ class UkladProjektu:
     @property
     def pliki_wynikowe(self) -> Path:
         return self.katalog_projektu / _NAZWA_PLIKI_WYNIKOWE
+
+    @property
+    def pliki_wejsciowe(self) -> Path:
+        """Katalog na pliki wysłane do projektu przez formularz interfejsu WWW.
+
+        Powstaje leniwie, dopiero przy pierwszej wysyłce pliku, żeby projekty
+        prowadzone z wiersza poleceń nie miały pustego, mylącego podkatalogu.
+        Pliki muszą tu przetrwać do wznowienia, więc nie leżą w katalogu
+        tymczasowym systemu.
+        """
+        return self.katalog_projektu / _NAZWA_PLIKI_WEJSCIOWE
+
+    @property
+    def pola_notatnika(self) -> Path:
+        """Plik z instrukcją systemową notatnika i promptem wyszukiwania."""
+        return self.katalog_projektu / _NAZWA_POLA_NOTATNIKA
 
     @property
     def logi(self) -> Path:

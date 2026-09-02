@@ -1,10 +1,12 @@
-# Konfiguracja — stan po etapie trzecim
+# Konfiguracja — stan po etapie siódmym
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
-obsługuje po etapie trzecim. Pełna lista pól z sekcji jedenastej a pliku `CLAUDE.md`, w tym progi
-deduplikacji, ustawienia OCR, transkrypcji, generowania PDF oraz treść instrukcji
-systemowej notatnika, powstanie w kolejnych etapach razem z funkcjami, których
-dotyczy.
+obsługuje po etapie siódmym. Pełna lista pól z sekcji jedenastej a pliku
+`CLAUDE.md`, w tym ustawienia OCR, transkrypcji i generowania PDF, powstanie
+w kolejnych etapach razem z funkcjami, których dotyczy. Treść dwóch pól
+tekstowych notatnika, czyli instrukcji systemowej i promptu wyszukiwania, nie
+jest polem pliku konfiguracji: zapisuje się ją razem z projektem, w pliku
+`pola_notatnika.json` w katalogu projektu, przez interfejs WWW.
 
 ## Skąd pochodzą ustawienia
 
@@ -183,6 +185,26 @@ nie usuwa źródła samo z siebie i w tym wydaniu nie jest jeszcze zaimplementow
    w raporcie. Musi być nie wyższa niż `deduplikacja_prog_duplikatu`. Domyślnie
    0,75.
 
+## Pola interfejsu WWW
+
+Interfejs uruchamiasz poleceniem `python -m gnb.ui.server`.
+
+1. `adres_nasluchu`, zmienna `GNB_ADRES_NASLUCHU`. Adres, na którym nasłuchuje
+   serwer interfejsu. Domyślnie `127.0.0.1`. Dozwolone są wyłącznie adresy pętli
+   zwrotnej: `127.0.0.1`, `localhost` oraz `::1`. Wartość spoza tej listy kończy
+   się błędem trwałym, ponieważ sekcja jedenasta `CLAUDE.md` zakazuje nasłuchu na
+   innym adresie, dopóki interfejs nie ma uwierzytelniania.
+2. `port_nasluchu`, zmienna `GNB_PORT_NASLUCHU`. Numer portu interfejsu.
+   Domyślnie 8765. Numer musi mieścić się w przedziale od 1 do 65535.
+3. `limit_znakow_instrukcji_systemowej`, zmienna
+   `GNB_LIMIT_ZNAKOW_INSTRUKCJI_SYSTEMOWEJ`. Maksymalna liczba znaków pola
+   instrukcji systemowej notatnika. Domyślnie 10000, zgodnie z sekcją jedenastą a
+   `CLAUDE.md`. Interfejs pokazuje licznik użytych znaków i blokuje zapis treści
+   dłuższej niż limit.
+4. `maksymalny_rozmiar_wysylki_mb`, zmienna `GNB_MAKSYMALNY_ROZMIAR_WYSYLKI_MB`.
+   Bezpieczny limit rozmiaru pliku wysyłanego przez formularz interfejsu.
+   Domyślnie 190. Żądanie z większą treścią jest odrzucane, a nie obcinane.
+
 ## Pamięć podręczna pobranych stron
 
 Pamięć podręczna jest wspólna dla wszystkich projektów i leży w katalogu danych
@@ -267,6 +289,11 @@ deduplikacja_prog_do_przegladu = 0.75
 
 uzywaj_cache = true
 maksymalny_wiek_cache_dni = 30
+
+adres_nasluchu = "127.0.0.1"
+port_nasluchu = 8765
+limit_znakow_instrukcji_systemowej = 10000
+maksymalny_rozmiar_wysylki_mb = 190
 ```
 
 Koniec przykładowego pliku konfiguracji.

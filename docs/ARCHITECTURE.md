@@ -1,14 +1,15 @@
-# Architektura — stan po etapie szóstym
+# Architektura — stan po etapie siódmym
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
-zakończeniu etapu szóstego. Pełny docelowy podział na pakiety opisuje sekcja
+zakończeniu etapu siódmego. Pełny docelowy podział na pakiety opisuje sekcja
 szósta `CLAUDE.md`.
 
 ## Potok przetwarzania
 
-Punkt wejścia to funkcja `przetworz_projekt` w `gnb/potok.py`. Uruchamia ona
-etapy w stałej kolejności z sekcji ósmej `CLAUDE.md`, w części obsługiwanej przez
-etapy od pierwszego do szóstego:
+Punkt wejścia to funkcja `przetworz_projekt` w `gnb/potok.py`. Wywołuje ją
+zarówno wiersz poleceń, jak i interfejs WWW. Uruchamia ona etapy w stałej
+kolejności z sekcji ósmej `CLAUDE.md`, w części obsługiwanej przez etapy od
+pierwszego do szóstego:
 
 1. Wejście i walidacja — `gnb/ingestion/wejscie.py`, `gnb/ingestion/lista_url.py`.
 2. Pobranie stron i napisów oraz import treści i wykrycie kodowania —
@@ -69,6 +70,23 @@ i odstępu między żądaniami, a reszta potoku pozostaje synchroniczna. Adres, 
 w checkpoincie ma już status końcowy, nie jest pobierany ponownie, ponieważ jego
 identyfikator wynika z kanonicznej postaci adresu, a nie z treści.
 
+### Lista wejść, wznowienie i postęp
+
+`przetworz_projekt` zapisuje wejścia bieżącego uruchomienia do pola `wejscia`
+checkpointu, rozróżniając je po parze rodzaju i wartości, więc ponowne podanie
+tego samego źródła nie mnoży wpisów. Funkcja `odtworz_wejscia` odbudowuje z tej
+listy `PozycjaWejsciowa` przez te same funkcje `przyjmij_plik`, `przyjmij_tekst`
+i `przyjmij_url`, więc interfejs WWW wznawia projekt bez pytania użytkownika
+o źródła. Sekcja czternasta punkt trzeci `CLAUDE.md` wymagała listy wejść od
+początku; dodano ją jako pole addytywne z pustą listą domyślną, bez zmiany
+numeru schematu.
+
+`przetworz_projekt` przyjmuje też opcjonalny argument `postep`: wywołanie
+zwrotne z modułu `gnb/core/postep.py`, wołane na granicach faz oraz po każdym
+przetworzonym źródle z obiektem `ZdarzeniePostepu`. Brak argumentu oznacza pracę
+bez raportowania postępu, jak w wierszu poleceń. Dławienie zdarzeń jest po
+stronie odbiorcy, nie potoku.
+
 ## Pakiet gnb.core
 
 - `gnb/core/model.py` — siedem kontraktów danych z sekcji siódmej `CLAUDE.md`.
@@ -78,6 +96,8 @@ identyfikator wynika z kanonicznej postaci adresu, a nie z treści.
   pliku TOML i zmiennych środowiskowych z prefiksem `GNB_`. Zakres pól opisuje
   `docs/CONFIGURATION.md`.
 - `gnb/core/liczenie_slow.py` — jedna wspólna definicja liczenia słów i znaków.
+- `gnb/core/postep.py` — typ `ZdarzeniePostepu` i wyliczenie faz potoku. Osobny
+  moduł, żeby pakiet interfejsu nie importował całego potoku dla samego typu.
 - `gnb/core/identyfikatory.py` — sumy kontrolne SHA-256 oraz stabilny
   identyfikator źródła w postaci prefiksu typu i pierwszych szesnastu znaków
   sumy kontrolnej pochodzenia.
@@ -241,10 +261,17 @@ jest zadaniem etapu siódmego.
 
 - `gnb/persistence/projekt.py` — układ katalogów projektu, z nazwą katalogu
   wyznaczaną z nazwy podanej przez użytkownika, a w jej braku z pierwszego źródła:
-  materiały źródłowe, wyniki pośrednie, pliki wynikowe, logi, manifest, checkpoint.
+  materiały źródłowe, wyniki pośrednie, pliki wynikowe, pliki wysłane przez
+  interfejs, logi, manifest, checkpoint oraz plik `pola_notatnika.json`.
   Podkatalog `wyniki_posrednie` trzyma znormalizowany tekst każdego źródła
   zapisany w fazie normalizacji, dzięki czemu wznowienie po deduplikacji nie
-  wymaga ponownej ekstrakcji.
+  wymaga ponownej ekstrakcji. Podkatalog `pliki_wejsciowe` powstaje leniwie,
+  dopiero przy pierwszej wysyłce pliku przez interfejs.
+- `gnb/persistence/pola_notatnika.py` — trwałe przechowywanie dwóch pól
+  tekstowych notatnika, instrukcji systemowej i promptu wyszukiwania, w pliku
+  `pola_notatnika.json` w katalogu projektu, zapisem atomowym tym samym wzorcem
+  co checkpoint. To osobny plik, a nie pole checkpointu, bo treść pól nie jest
+  stanem potoku i nie ma wpływu na wznowienie.
 - `gnb/persistence/cache.py` — wspólna dla projektów pamięć podręczna pobranych
   zasobów, oparta na SQLite, z trybem WAL i numerem wersji schematu.
 - `gnb/persistence/checkpoint.py` — `checkpoint.json` z zapisem atomowym przez
@@ -256,9 +283,9 @@ jest zadaniem etapu siódmego.
   bez spodziewanego pola kończą się błędem trwałym z komunikatem po polsku,
   a nie surowym śladem stosu. Stan deduplikacji, nagłówek metadanych źródła,
   wskazanie źródła głównego duplikatu, nazwa grupy pakowania, ostrzeżenia
-  podziału oraz numer i liczba części pliku wynikowego są polami addytywnymi
-  z bezpieczną wartością domyślną, więc plik starszej wersji wczytuje się bez
-  zmiany numeru schematu.
+  podziału, numer i liczba części pliku wynikowego oraz lista wejść projektu są
+  polami addytywnymi z bezpieczną wartością domyślną, więc plik starszej wersji
+  wczytuje się bez zmiany numeru schematu.
 
 ## Pakiet gnb.logging_pl
 
@@ -268,6 +295,40 @@ jest zadaniem etapu siódmego.
   `logging`. Log ważny jest prowadzony w czasie lokalnym systemu, ponieważ czyta
   go użytkownik. Log szczegółowy, manifest i checkpoint są prowadzone w czasie
   UTC jako dane techniczne.
+
+## Pakiet gnb.ui
+
+Dostępny interfejs WWW. Serwer nasłuchuje wyłącznie na pętli zwrotnej, bez
+zasobów z zewnętrznego serwera. Pakiet nie zawiera logiki przetwarzania: spina
+istniejący potok z żądaniem HTTP przez semantyczny, dostępny HTML.
+
+- `gnb/ui/html.py` — jedyne miejsce, przez które przechodzi każdy napis
+  pochodzący ze źródła, z nazwy pliku, z komunikatu błędu i z pola użytkownika,
+  zanim znajdzie się w odpowiedzi. Sekcja jedenasta punkt drugi `CLAUDE.md`.
+- `gnb/ui/csrf.py` — ochrona przez podwójne przesłanie tokenu: token w ciasteczku
+  sesji `HttpOnly`, `SameSite=Strict`, oraz ten sam token w ukrytym polu
+  formularza, porównywane `secrets.compare_digest`.
+- `gnb/ui/formularze.py` — parsowanie ciała żądań. Multipart jest dzielony
+  ręcznie po ciągu granicznym, a nie modułem `email`, bo `email` normalizuje
+  końce wierszy i uszkodziłby wysłany plik binarny. Zawartość każdej części jest
+  odtwarzana bajt w bajt.
+- `gnb/ui/postep.py` — `DlawikPostepu`: pierwsze zdarzenie przechodzi od razu,
+  kolejne najwyżej raz na cztery sekundy, a komunikat identyczny z widocznym nie
+  jest powtarzany. Zdarzenie zakończenia projektu przechodzi zawsze.
+- `gnb/ui/zadania.py` — `RejestrZadan`: uruchamia potok w wątku roboczym i trzyma
+  stan najwyżej jednego zadania. Drugie żądanie uruchomienia jest odrzucane,
+  a nie kolejkowane. Wyjątek w wątku staje się stanem błędu.
+- `gnb/ui/projekty.py` — wykrywanie projektów w katalogu wyników i wyróżnianie
+  niedokończonych. Uszkodzony checkpoint jednego projektu nie wywraca listy.
+- `gnb/ui/widoki.py` — generowanie stron: strona główna z formularzem nowego
+  projektu i wykazem projektów do wznowienia, strona projektu z regionem postępu,
+  dwoma polami tekstowymi i raportem, strony błędu. Ciemny motyw, style w jednym
+  elemencie `style`, dwa krótkie skrypty wbudowane w stronę.
+- `gnb/ui/serwer.py` — `ThreadingHTTPServer` z routingiem tablicą tras. Każdy
+  POST wymaga zgodnego tokenu CSRF, a po udanym POST serwer przekierowuje kodem
+  303. Nieobsłużony wyjątek staje się stroną 500.
+- `gnb/ui/server.py` — punkt wejścia `python -m gnb.ui.server`. Nazwa pliku jest
+  angielska, bo to część kontraktu komend; logika i komunikaty są po polsku.
 
 ## Wiersz poleceń
 
@@ -283,9 +344,9 @@ podręcznej i pozwala ją wyczyścić.
 
 ## Pozostałe pakiety
 
-Pakiety `gnb.documents`, `gnb.audio`, `gnb.images`, `gnb.music`, `gnb.ui`,
-`gnb.hotkeys` istnieją jako puste, importowalne pakiety z docstringiem. Logika
-powstanie w kolejnych etapach.
+Pakiety `gnb.documents`, `gnb.audio`, `gnb.images`, `gnb.music`, `gnb.hotkeys`
+istnieją jako puste, importowalne pakiety z docstringiem. Logika powstanie
+w kolejnych etapach.
 
 ## Testy
 
@@ -322,6 +383,15 @@ Testy są zbierane w trybie importu `importlib`, ustawionym w `pyproject.toml`.
 Dzięki temu pliki testowe o tej samej nazwie mogą leżeć w różnych katalogach,
 na przykład `tests/core/test_youtube.py` obok `tests/ingestion/test_youtube.py`.
 W domyślnym trybie takie pliki zderzają się przy zbieraniu testów.
+
+Testy pakietu `gnb.ui` są w `tests/ui/`. Pokrywają escapowanie treści ze
+źródła, ochronę przed CSRF, parsowanie formularzy wraz z odtworzeniem wysłanego
+pliku binarnego bajt w bajt, dławienie komunikatów postępu na podstawionym
+zegarze, rejestr zadań w tle, wykrywanie niedokończonych projektów, dostępność
+wygenerowanego HTML oraz pełny przebieg przez serwer na losowym porcie pętli
+zwrotnej. Test `tests/test_potok_wznowienie_e2e.py` sprawdza zapis listy wejść do
+checkpointu, odtworzenie wejść przy wznowieniu bez podania źródeł oraz kolejność
+zdarzeń postępu.
 
 Testy kanaryjne w `tests/test_youtube_kanaryjny.py` są jedynymi, które sięgają do
 prawdziwego serwisu. Mają marker `siec`, są domyślnie wyłączone i sprawdzają

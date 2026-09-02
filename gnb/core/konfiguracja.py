@@ -11,9 +11,16 @@ lista formatów wynikowych, zachowywanie oryginałów źródeł, ustawienia pobi
 stron: nazwa klienta, limit czasu, ponowienia, odstępy, liczba połączeń na
 domenę, respektowanie pliku robots, pamięć podręczna i dodatkowe parametry
 śledzące, ustawienia napisów filmów: języki, zgoda na napisy automatyczne
-i tłumaczone oraz znaczniki czasu, a także włączenie i progi kolejnych etapów
-deduplikacji. Pozostałe pola wymienione w sekcji jedenastej a pliku CLAUDE.md
-dojdą w kolejnych etapach.
+i tłumaczone oraz znaczniki czasu, włączenie i progi kolejnych etapów
+deduplikacji, a także ustawienia interfejsu WWW: adres i port nasłuchu, limit
+znaków pola instrukcji systemowej notatnika oraz limit rozmiaru wysyłanego
+pliku. Pozostałe pola wymienione w sekcji jedenastej a pliku CLAUDE.md dojdą
+w kolejnych etapach.
+
+Adres nasłuchu musi wskazywać pętlę zwrotną. Sekcja jedenasta CLAUDE.md zakazuje
+nasłuchu na innym adresie, ponieważ interfejs nie ma uwierzytelniania, więc
+wartość spoza pętli zwrotnej kończy się błędem trwałym, a nie cichym
+zastąpieniem wartością domyślną.
 """
 
 from __future__ import annotations
@@ -85,6 +92,22 @@ DOMYSLNE_DEDUPLIKACJA_EMBEDDINGI_WLACZONE = False
 DOMYSLNY_DEDUPLIKACJA_PROG_DUPLIKATU = 0.9
 DOMYSLNY_DEDUPLIKACJA_PROG_DO_PRZEGLADU = 0.75
 
+# Ustawienia interfejsu WWW. Adres nasłuchu jest domyślnie pętlą zwrotną i musi
+# nią pozostać, dopóki interfejs nie ma uwierzytelniania, zgodnie z sekcją
+# jedenastą CLAUDE.md. Limit znaków instrukcji systemowej wynika wprost z sekcji
+# jedenastej a. Limit rozmiaru wysyłanego pliku chroni serwer przed wyczerpaniem
+# pamięci przy wysyłce dużego pliku binarnego.
+DOMYSLNY_ADRES_NASLUCHU = "127.0.0.1"
+DOMYSLNY_PORT_NASLUCHU = 8765
+DOMYSLNY_LIMIT_ZNAKOW_INSTRUKCJI_SYSTEMOWEJ = 10_000
+DOMYSLNY_MAKSYMALNY_ROZMIAR_WYSYLKI_MB = 190
+
+# Adresy uznawane za pętlę zwrotną. „localhost” jest dopuszczony, bo w praktyce
+# rozwiązuje się na adres pętli zwrotnej, a użytkownicy tak właśnie wpisują adres
+# w przeglądarce.
+_ADRESY_PETLI_ZWROTNEJ = frozenset({"127.0.0.1", "localhost", "::1"})
+_MAKSYMALNY_NUMER_PORTU = 65535
+
 NAZWA_KATALOGU_APLIKACJI_WINDOWS = "Gemini Notebook Builder"
 NAZWA_KATALOGU_APLIKACJI_XDG = "gemini-notebook-builder"
 NAZWA_PLIKU_KONFIGURACJI = "konfiguracja.toml"
@@ -133,6 +156,10 @@ _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
     PREFIKS_ZMIENNYCH + "DEDUPLIKACJA_EMBEDDINGI_WLACZONE": "deduplikacja_embeddingi_wlaczone",
     PREFIKS_ZMIENNYCH + "DEDUPLIKACJA_PROG_DUPLIKATU": "deduplikacja_prog_duplikatu",
     PREFIKS_ZMIENNYCH + "DEDUPLIKACJA_PROG_DO_PRZEGLADU": "deduplikacja_prog_do_przegladu",
+    PREFIKS_ZMIENNYCH + "ADRES_NASLUCHU": "adres_nasluchu",
+    PREFIKS_ZMIENNYCH + "PORT_NASLUCHU": "port_nasluchu",
+    PREFIKS_ZMIENNYCH + "LIMIT_ZNAKOW_INSTRUKCJI_SYSTEMOWEJ": "limit_znakow_instrukcji_systemowej",
+    PREFIKS_ZMIENNYCH + "MAKSYMALNY_ROZMIAR_WYSYLKI_MB": "maksymalny_rozmiar_wysylki_mb",
 }
 _ZNANE_POLA = frozenset(_ZMIENNE_SRODOWISKOWE.values())
 
@@ -196,6 +223,10 @@ class Konfiguracja:
     deduplikacja_embeddingi_wlaczone: bool = DOMYSLNE_DEDUPLIKACJA_EMBEDDINGI_WLACZONE
     deduplikacja_prog_duplikatu: float = DOMYSLNY_DEDUPLIKACJA_PROG_DUPLIKATU
     deduplikacja_prog_do_przegladu: float = DOMYSLNY_DEDUPLIKACJA_PROG_DO_PRZEGLADU
+    adres_nasluchu: str = DOMYSLNY_ADRES_NASLUCHU
+    port_nasluchu: int = DOMYSLNY_PORT_NASLUCHU
+    limit_znakow_instrukcji_systemowej: int = DOMYSLNY_LIMIT_ZNAKOW_INSTRUKCJI_SYSTEMOWEJ
+    maksymalny_rozmiar_wysylki_mb: int = DOMYSLNY_MAKSYMALNY_ROZMIAR_WYSYLKI_MB
 
 
 def sciezka_pliku_konfiguracji(srodowisko: Mapping[str, str] | None = None) -> Path:
@@ -325,6 +356,16 @@ def wczytaj_konfiguracje(
         deduplikacja_prog_do_przegladu=_jako_ulamek(
             scalone, "deduplikacja_prog_do_przegladu", domyslna.deduplikacja_prog_do_przegladu
         ),
+        adres_nasluchu=_jako_adres_nasluchu(scalone, "adres_nasluchu", domyslna.adres_nasluchu),
+        port_nasluchu=_jako_port(scalone, "port_nasluchu", domyslna.port_nasluchu),
+        limit_znakow_instrukcji_systemowej=_jako_liczba(
+            scalone,
+            "limit_znakow_instrukcji_systemowej",
+            domyslna.limit_znakow_instrukcji_systemowej,
+        ),
+        maksymalny_rozmiar_wysylki_mb=_jako_liczba(
+            scalone, "maksymalny_rozmiar_wysylki_mb", domyslna.maksymalny_rozmiar_wysylki_mb
+        ),
     )
     if konfiguracja.deduplikacja_prog_do_przegladu > konfiguracja.deduplikacja_prog_duplikatu:
         raise BladTrwaly(
@@ -373,6 +414,41 @@ def _jako_liczba(scalone: Mapping[str, object], pole: str, domyslna: int) -> int
         ) from blad
     if liczba <= 0:
         raise BladTrwaly(f"Ustawienie „{pole}” musi być liczbą dodatnią, a jest {liczba}.")
+    return liczba
+
+
+def _jako_adres_nasluchu(scalone: Mapping[str, object], pole: str, domyslna: str) -> str:
+    """Zwraca adres nasłuchu, odrzucając wszystko poza pętlą zwrotną.
+
+    Sekcja jedenasta CLAUDE.md zakazuje nasłuchu na adresie innym niż pętla
+    zwrotna, dopóki interfejs nie ma uwierzytelniania. Wartość spoza pętli
+    zwrotnej kończy się więc błędem trwałym z czytelnym komunikatem, a nie cichym
+    zastąpieniem wartością domyślną, żeby pomyłka w konfiguracji nie wystawiła
+    interfejsu do sieci bez wiedzy użytkownika.
+    """
+    if pole not in scalone:
+        return domyslna
+    napis = str(scalone[pole]).strip()
+    if not napis:
+        return domyslna
+    if napis not in _ADRESY_PETLI_ZWROTNEJ:
+        dozwolone = ", ".join(sorted(_ADRESY_PETLI_ZWROTNEJ))
+        raise BladTrwaly(
+            f"Ustawienie „{pole}” musi wskazywać pętlę zwrotną ({dozwolone}), a jest „{napis}”. "
+            "Sekcja jedenasta CLAUDE.md zakazuje nasłuchu na innym adresie, ponieważ interfejs "
+            "nie ma uwierzytelniania."
+        )
+    return napis
+
+
+def _jako_port(scalone: Mapping[str, object], pole: str, domyslna: int) -> int:
+    """Zwraca numer portu nasłuchu z przedziału od jednego do sześćdziesięciu pięciu tysięcy."""
+    liczba = _jako_liczba(scalone, pole, domyslna)
+    if liczba > _MAKSYMALNY_NUMER_PORTU:
+        raise BladTrwaly(
+            f"Ustawienie „{pole}” musi być numerem portu od 1 do {_MAKSYMALNY_NUMER_PORTU}, "
+            f"a jest {liczba}."
+        )
     return liczba
 
 

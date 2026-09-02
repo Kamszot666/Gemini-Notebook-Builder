@@ -13,6 +13,7 @@ from gnb.output.manifest import (
     WpisWyniku,
     WpisZrodla,
     zapisz_manifest,
+    zbuduj_widok_tekstowy,
 )
 
 _MANIFEST = Manifest(
@@ -156,3 +157,63 @@ def test_manifest_zapisuje_ocene_jakosci_wraz_z_powodami(tmp_path: Path) -> None
     tekst = (tmp_path / "manifest.txt").read_text(encoding="utf-8")
     assert "Ocena jakości ekstrakcji: podejrzana" in tekst
     assert "    - źródło nie ma tytułu" in tekst
+
+
+def test_manifest_pokazuje_grupe_czesci_i_zrodla_w_pliku() -> None:
+    manifest = replace(
+        _MANIFEST,
+        zrodla=(
+            replace(
+                _MANIFEST.zrodla[0],
+                grupa_pakowania="Podatki 2026",
+                ostrzezenia_pakowania=("Cięcie wewnątrz zdania.",),
+            ),
+        ),
+        wyniki=(
+            WpisWyniku(
+                sciezka="pliki_wynikowe/podatki_2026_ab12_czesc_1_z_2.txt",
+                format="txt",
+                liczba_zrodel=3,
+                liczba_slow=400,
+                liczba_znakow_pliku=2600,
+                rozmiar_bajtow=2650,
+                checksum="c" * 64,
+                status="spakowane",
+                identyfikatory_zrodel=("plik_tekstowy-1", "plik_tekstowy-2", "plik_tekstowy-3"),
+                numer_czesci=1,
+                liczba_czesci=2,
+            ),
+        ),
+    )
+
+    widok = zbuduj_widok_tekstowy(manifest)
+
+    assert "Grupa pakowania: Podatki 2026" in widok
+    assert "Ostrzeżenia podziału:" in widok
+    assert "    - Cięcie wewnątrz zdania." in widok
+    assert "Część: 1 z 2" in widok
+    assert "Liczba źródeł: 3" in widok
+    assert "Źródła w pliku:" in widok
+    assert "    - plik_tekstowy-2" in widok
+
+
+def test_manifest_json_zapisuje_pola_pakowania(tmp_path: Path) -> None:
+    manifest = replace(
+        _MANIFEST,
+        zrodla=(replace(_MANIFEST.zrodla[0], grupa_pakowania="Grupa"),),
+        wyniki=(
+            replace(
+                _MANIFEST.wyniki[0],
+                identyfikatory_zrodel=("plik_tekstowy-1", "plik_tekstowy-2"),
+                numer_czesci=None,
+                liczba_czesci=None,
+            ),
+        ),
+    )
+    zapisz_manifest(tmp_path / "manifest.json", tmp_path / "manifest.txt", manifest)
+    dane = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+
+    assert dane["zrodla"][0]["grupa_pakowania"] == "Grupa"
+    assert dane["zrodla"][0]["ostrzezenia_pakowania"] == []
+    assert dane["wyniki"][0]["identyfikatory_zrodel"] == ["plik_tekstowy-1", "plik_tekstowy-2"]
+    assert dane["wyniki"][0]["numer_czesci"] is None

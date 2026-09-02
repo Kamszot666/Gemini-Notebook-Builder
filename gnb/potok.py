@@ -42,8 +42,15 @@ import httpx
 
 from gnb.core.identyfikatory import suma_kontrolna_bajtow
 from gnb.core.konfiguracja import Konfiguracja
-from gnb.core.model import DokumentWyekstrahowany, DokumentZnormalizowany, Zrodlo
+from gnb.core.model import (
+    DokumentWyekstrahowany,
+    DokumentZnormalizowany,
+    PlikWynikowy,
+    Zrodlo,
+)
 from gnb.core.nazwy import (
+    nazwa_pliku_czesci,
+    nazwa_pliku_grupy,
     nazwa_pliku_wynikowego,
     skrot_z_identyfikatora,
     wygeneruj_nazwe_projektu,
@@ -99,18 +106,21 @@ from gnb.logging_pl.dziennik import (
     NAZWA_LOGU_WAZNEGO,
     ZDARZENIE_CHECKPOINT_ZAPISANY,
     ZDARZENIE_DEDUPLIKACJA_ZAKONCZONA,
+    ZDARZENIE_GRUPA_SPAKOWANA,
     ZDARZENIE_JAKOSC_PODEJRZANA,
     ZDARZENIE_MANIFEST_ZAPISANY,
     ZDARZENIE_MOZLIWY_DUPLIKAT,
     ZDARZENIE_NAPISY_INNY_JEZYK,
     ZDARZENIE_NAPISY_WYBRANE,
     ZDARZENIE_OSTRZEZENIE_EKSTRAKCJI,
+    ZDARZENIE_OSTRZEZENIE_PODZIALU,
     ZDARZENIE_PLIK_WYNIKOWY_ZAPISANY,
     ZDARZENIE_PROJEKT_UTWORZONY,
     ZDARZENIE_PROJEKT_WZNOWIONY,
     ZDARZENIE_PROJEKT_ZAKONCZONY,
     ZDARZENIE_ZRODLO_BLAD,
     ZDARZENIE_ZRODLO_DUPLIKAT,
+    ZDARZENIE_ZRODLO_PODZIELONE,
     ZDARZENIE_ZRODLO_POMINIETE,
     ZDARZENIE_ZRODLO_PRZYJETE,
     DziennikSzczegolowy,
@@ -144,6 +154,7 @@ from gnb.output.naglowek_metadanych import (
     ETYKIETA_TYTUL,
     opis_dlugosci,
     opis_typu_zrodla,
+    z_oznaczeniem_czesci,
     zbuduj_naglowek,
 )
 from gnb.output.ocena_jakosci import OCENA_PODEJRZANA, OcenaJakosci, ocen_jakosc
@@ -154,8 +165,16 @@ from gnb.output.raport import (
     zapisz_raport,
     zbuduj_raport,
 )
+from gnb.output.skladanie import oznaczenie_pliku_grupy, zloz_plik
 from gnb.output.tekst_bez_znacznikow import zamien_markdown_na_tekst
-from gnb.output.zapis import zapisz_wyniki
+from gnb.output.zapis import zapisz_plik_pakietu, zapisz_wyniki
+from gnb.packing import (
+    LimityPakowania,
+    PlanPliku,
+    ZrodloDoPakowania,
+    podziel_na_czesci,
+    rozplanuj_grupe,
+)
 from gnb.persistence.cache import PamiecPodreczna, WpisCache, otworz, teraz_utc
 from gnb.persistence.checkpoint import WERSJA_SCHEMATU as WERSJA_SCHEMATU_CHECKPOINTU
 from gnb.persistence.checkpoint import (
@@ -442,10 +461,10 @@ class _Wykonanie:
         try:
             self._przetworz_zrodlo(pozycja, zrodlo)
         except PrzekroczonoLimit as blad:
-            # Przekroczenie limitu nie jest awarią, tylko przypadkiem jeszcze
-            # nieobsłużonym: podział zbyt dużego źródła to zadanie etapu
-            # szóstego. Taki sam status dostaje przekroczenie limitu liczby
-            # źródeł, więc obie sytuacje są opisane w ten sam sposób.
+            # Limit słów źródła jest teraz obsługiwany podziałem w fazie pakowania,
+            # więc tu trafia już tylko przekroczenie limitu zgłoszone wprost przez
+            # ekstraktor. Dostaje status pominięcia, tak samo jak przekroczenie
+            # limitu liczby źródeł notatnika.
             self._pomin(zrodlo, pozycja, blad.komunikat)
         except BladGnb as blad:
             self._zapisz_blad_zrodla(zrodlo, pozycja, blad)
@@ -672,13 +691,10 @@ class _Wykonanie:
 
         znormalizowany = zbuduj_dokument_znormalizowany(identyfikator, dokument.tekst)
 
-        if znormalizowany.liczba_slow > self._konfiguracja.bezpieczny_limit_slow:
-            raise PrzekroczonoLimit(
-                f"Źródło ma {znormalizowany.liczba_slow} słów, ponad bezpieczny limit "
-                f"{self._konfiguracja.bezpieczny_limit_slow}. Podział źródła to zadanie "
-                "etapu szóstego.",
-                identyfikator,
-            )
+        # Źródło przekraczające bezpieczny limit słów nie jest już pomijane:
+        # w fazie zapisu, po deduplikacji, faza pakowania dzieli je na części na
+        # granicy jednostki strukturalnej. Podział zbyt dużego źródła to zadanie
+        # etapu szóstego i jest tutaj rozstrzygnięte.
 
         ocena = self._ocen_jakosc(zrodlo, pozycja, dokument, znormalizowany.tekst, przygotowane)
 
@@ -686,10 +702,10 @@ class _Wykonanie:
             # Format celowo pominięty przez ocenę jakości, na przykład CSV albo
             # napisy SRT i VTT, nie ma żadnej treści: wynik zawierałby wyłącznie
             # nagłówek metadanych i nie wniesie nic do notatnika. Źródło jest
-            # pomijane tak samo jak przekroczenie limitu słów, zamiast zajmować
-            # slot notatnika pustą treścią. Format oceniany, na przykład skan PDF
-            # bez warstwy tekstowej, zamiast tego trafia niżej do oceny jakości
-            # jako podejrzany i zostaje zapisany do ręcznego sprawdzenia.
+            # pomijane, zamiast zajmować slot notatnika pustą treścią. Format
+            # oceniany, na przykład skan PDF bez warstwy tekstowej, zamiast tego
+            # trafia niżej do oceny jakości jako podejrzany i zostaje zapisany do
+            # ręcznego sprawdzenia.
             self._pomin(zrodlo, pozycja, KOMUNIKAT_PLIK_BEZ_TRESCI)
             return
 
@@ -725,6 +741,7 @@ class _Wykonanie:
             powody_oceny=list(ocena.powody) if ocena is not None else [],
             ostrzezenia=ostrzezenia,
             naglowek_metadanych=naglowek,
+            grupa_pakowania=pozycja.grupa,
         )
         self._zapisz_checkpoint()
         self._loguj(
@@ -844,24 +861,54 @@ class _Wykonanie:
         )
 
     def zapisz_pliki_wynikowe(self) -> None:
-        """Trzecia faza potoku: zapisuje pliki wynikowe źródeł, które przeżyły deduplikację."""
-        for stan in list(self._checkpoint.zrodla.values()):
-            if stan.status != StatusZrodla.ZNORMALIZOWANE.value:
-                continue
-            self._zapisz_jeden_plik_wynikowy(stan)
+        """Trzecia faza potoku: pakowanie źródeł, które przeżyły deduplikację.
 
-    def _zapisz_jeden_plik_wynikowy(self, stan: StanZrodla) -> None:
-        """Buduje pliki wynikowe jednego znormalizowanego źródła i domyka jego stan."""
-        identyfikator = stan.identyfikator
-        tekst = self._wczytaj_tekst_posredni(identyfikator, _SUFIKS_TEKST_ZNORMALIZOWANY)
+        Źródło przekraczające bezpieczny limit słów albo limit rozmiaru jest
+        dzielone na części na granicy jednostki strukturalnej. Małe źródła jednej
+        grupy tematycznej nadanej przez użytkownika są łączone w jeden plik.
+        Źródło bez grupy, które mieści się w limicie, dostaje jeden plik razem
+        z warunkową wersją Markdown, dokładnie jak przed etapem szóstym.
+        """
+        limity = LimityPakowania.z_konfiguracji(
+            self._konfiguracja.bezpieczny_limit_slow, self._konfiguracja.bezpieczny_limit_mb
+        )
+        do_pakowania = [
+            stan
+            for stan in self._checkpoint.zrodla.values()
+            if stan.status == StatusZrodla.ZNORMALIZOWANE.value
+        ]
+        grupy: dict[str, list[StanZrodla]] = {}
+        for stan in do_pakowania:
+            if stan.grupa_pakowania:
+                grupy.setdefault(stan.grupa_pakowania, []).append(stan)
+            else:
+                self._spakuj_zrodlo_samodzielne(stan, limity)
+        for nazwa_grupy, stany in grupy.items():
+            self._spakuj_grupe(nazwa_grupy, stany, limity)
+
+    def _spakuj_zrodlo_samodzielne(self, stan: StanZrodla, limity: LimityPakowania) -> None:
+        """Pakuje jedno źródło spoza grupy: jeden plik albo kilka ponumerowanych części."""
+        tekst = self._wczytaj_tekst_posredni(stan.identyfikator, _SUFIKS_TEKST_ZNORMALIZOWANY)
         if tekst is None:
-            stan.status = StatusZrodla.BLAD.value
-            stan.komunikat_bledu = KOMUNIKAT_BRAK_TEKSTU_POSREDNIEGO
-            self._zapisz_checkpoint()
-            self._dziennik_wazny.zapisz(ZDARZENIE_ZRODLO_BLAD)
-            self._loguj(logging.ERROR, identyfikator, KOMUNIKAT_BRAK_TEKSTU_POSREDNIEGO)
+            self._oznacz_brak_tekstu_posredniego(stan)
             return
+        podzial = podziel_na_czesci(tekst, limity)
+        if len(podzial.czesci) == 1:
+            self._zapisz_zrodlo_niepodzielone(stan, tekst)
+            return
+        self._zapisz_czesci_zrodla(stan, podzial.czesci, list(podzial.ostrzezenia))
 
+    def _oznacz_brak_tekstu_posredniego(self, stan: StanZrodla) -> None:
+        """Zamienia brak pliku wyniku pośredniego na kontrolowany błąd źródła."""
+        stan.status = StatusZrodla.BLAD.value
+        stan.komunikat_bledu = KOMUNIKAT_BRAK_TEKSTU_POSREDNIEGO
+        self._zapisz_checkpoint()
+        self._dziennik_wazny.zapisz(ZDARZENIE_ZRODLO_BLAD)
+        self._loguj(logging.ERROR, stan.identyfikator, KOMUNIKAT_BRAK_TEKSTU_POSREDNIEGO)
+
+    def _zapisz_zrodlo_niepodzielone(self, stan: StanZrodla, tekst: str) -> None:
+        """Zapisuje jedno źródło mieszczące się w limicie: TXT zawsze, MD warunkowo."""
+        identyfikator = stan.identyfikator
         znormalizowany = DokumentZnormalizowany(
             identyfikator_zrodla=identyfikator,
             tekst=tekst,
@@ -888,17 +935,7 @@ class _Wykonanie:
             naglowek=stan.naglowek_metadanych or "",
         )
 
-        stan.wyniki = [
-            StanWyniku(
-                sciezka_wzgledna=plik.sciezka.relative_to(self._uklad.katalog_projektu).as_posix(),
-                format=plik.format.value,
-                liczba_slow=plik.liczba_slow,
-                liczba_znakow_pliku=plik.liczba_znakow,
-                rozmiar_bajtow=plik.rozmiar_bajtow,
-                checksum=plik.checksum,
-            )
-            for plik in pliki
-        ]
+        stan.wyniki = [self._stan_wyniku(plik, [identyfikator], None, None) for plik in pliki]
         stan.status = StatusZrodla.SPAKOWANE.value
         self._zapisz_checkpoint()
         self._dziennik_wazny.zapisz(ZDARZENIE_ZRODLO_PRZYJETE)
@@ -910,6 +947,166 @@ class _Wykonanie:
             f"Zapisano {len(pliki)} plików wynikowych, wersja MD: "
             f"{'tak' if stan.decyzja_md else 'nie'}.",
         )
+
+    def _zapisz_czesci_zrodla(
+        self, stan: StanZrodla, czesci: list[str], ostrzezenia: list[str]
+    ) -> None:
+        """Zapisuje kolejne części źródła podzielonego, każdą z własnym oznaczeniem części."""
+        identyfikator = stan.identyfikator
+        liczba = len(czesci)
+        nazwa_bazowa = stan.nazwa_bazowa_wyniku or nazwa_pliku_wynikowego(None, identyfikator)
+        wyniki: list[StanWyniku] = []
+        for numer, czesc in enumerate(czesci, start=1):
+            naglowek = z_oznaczeniem_czesci(stan.naglowek_metadanych or "", numer, liczba)
+            tresc = zloz_plik([(naglowek, czesc)])
+            nazwa = nazwa_pliku_czesci(nazwa_bazowa, numer, liczba)
+            plik = zapisz_plik_pakietu(self._uklad.pliki_wynikowe, nazwa, tresc, [identyfikator])
+            wyniki.append(self._stan_wyniku(plik, [identyfikator], numer, liczba))
+
+        stan.wyniki = wyniki
+        stan.ostrzezenia_pakowania = list(ostrzezenia)
+        stan.status = StatusZrodla.SPAKOWANE.value
+        self._zapisz_checkpoint()
+
+        self._dziennik_wazny.zapisz(ZDARZENIE_ZRODLO_PRZYJETE)
+        self._dziennik_wazny.zapisz(
+            f"{ZDARZENIE_ZRODLO_PODZIELONE}: {stan.pochodzenie}, {liczba} części"
+        )
+        for _ in wyniki:
+            self._dziennik_wazny.zapisz(ZDARZENIE_PLIK_WYNIKOWY_ZAPISANY)
+        self._odnotuj_ostrzezenia_pakowania(stan, ostrzezenia)
+        self._loguj(
+            logging.INFO,
+            identyfikator,
+            f"Źródło {identyfikator} podzielone na {liczba} części po przekroczeniu limitu.",
+        )
+
+    def _spakuj_grupe(
+        self, nazwa_grupy: str, stany: list[StanZrodla], limity: LimityPakowania
+    ) -> None:
+        """Pakuje jedną grupę tematyczną: dzieli źródła duże i łączy małe w jak najmniej plików.
+
+        Wszystkie źródła grupy dostają status „spakowane” w jednym zapisie
+        checkpointu. Przerwanie pracy przed tym zapisem zostawia je jako
+        „znormalizowane”, więc wznowienie planuje grupę od nowa, nadpisując pliki.
+        """
+        zrodla_do_pakowania: list[ZrodloDoPakowania] = []
+        po_identyfikatorze: dict[str, StanZrodla] = {}
+        for stan in stany:
+            tekst = self._wczytaj_tekst_posredni(stan.identyfikator, _SUFIKS_TEKST_ZNORMALIZOWANY)
+            if tekst is None:
+                self._oznacz_brak_tekstu_posredniego(stan)
+                continue
+            po_identyfikatorze[stan.identyfikator] = stan
+            zrodla_do_pakowania.append(
+                ZrodloDoPakowania(stan.identyfikator, tekst, grupa=nazwa_grupy)
+            )
+        if not zrodla_do_pakowania:
+            return
+
+        for stan in po_identyfikatorze.values():
+            stan.wyniki = []
+            stan.ostrzezenia_pakowania = []
+
+        for plan in rozplanuj_grupe(nazwa_grupy, zrodla_do_pakowania, limity):
+            self._zapisz_plan_grupy(nazwa_grupy, plan, po_identyfikatorze)
+
+        for stan in po_identyfikatorze.values():
+            if stan.wyniki:
+                stan.status = StatusZrodla.SPAKOWANE.value
+        self._zapisz_checkpoint()
+
+        sciezki = {
+            wynik.sciezka_wzgledna for stan in po_identyfikatorze.values() for wynik in stan.wyniki
+        }
+        self._dziennik_wazny.zapisz(
+            f"{ZDARZENIE_GRUPA_SPAKOWANA}: {nazwa_grupy}, "
+            f"{len(po_identyfikatorze)} źródeł, {len(sciezki)} plików"
+        )
+        for stan in po_identyfikatorze.values():
+            self._dziennik_wazny.zapisz(ZDARZENIE_ZRODLO_PRZYJETE)
+            self._odnotuj_ostrzezenia_pakowania(stan, stan.ostrzezenia_pakowania)
+        for _ in sciezki:
+            self._dziennik_wazny.zapisz(ZDARZENIE_PLIK_WYNIKOWY_ZAPISANY)
+        self._loguj(
+            logging.INFO,
+            "-",
+            f"Grupa „{nazwa_grupy}”: {len(po_identyfikatorze)} źródeł w {len(sciezki)} plikach.",
+        )
+
+    def _zapisz_plan_grupy(
+        self, nazwa_grupy: str, plan: PlanPliku, po_identyfikatorze: dict[str, StanZrodla]
+    ) -> None:
+        """Zapisuje jeden plik zaplanowany dla grupy i dopisuje go do stanu jego źródeł."""
+        identyfikatory = [fragment.identyfikator for fragment in plan.fragmenty]
+
+        if plan.czy_grupa:
+            nazwa_bazowa = nazwa_pliku_grupy(nazwa_grupy, identyfikatory)
+            oznaczenie = (
+                oznaczenie_pliku_grupy(nazwa_grupy, plan.numer_czesci, plan.liczba_czesci)
+                if plan.czy_wieloczesciowy
+                else ""
+            )
+            fragmenty_tekstu = [
+                (
+                    po_identyfikatorze[fragment.identyfikator].naglowek_metadanych or "",
+                    fragment.tekst,
+                )
+                for fragment in plan.fragmenty
+            ]
+            tresc = zloz_plik(fragmenty_tekstu, oznaczenie_pliku=oznaczenie)
+        else:
+            (fragment,) = plan.fragmenty
+            stan = po_identyfikatorze[fragment.identyfikator]
+            nazwa_bazowa = stan.nazwa_bazowa_wyniku or nazwa_pliku_wynikowego(
+                None, stan.identyfikator
+            )
+            naglowek = z_oznaczeniem_czesci(
+                stan.naglowek_metadanych or "", plan.numer_czesci, plan.liczba_czesci
+            )
+            tresc = zloz_plik([(naglowek, fragment.tekst)])
+
+        nazwa = (
+            nazwa_pliku_czesci(nazwa_bazowa, plan.numer_czesci, plan.liczba_czesci)
+            if plan.czy_wieloczesciowy
+            else nazwa_bazowa
+        )
+        plik = zapisz_plik_pakietu(self._uklad.pliki_wynikowe, nazwa, tresc, identyfikatory)
+        numer, liczba = _numery_czesci(plan)
+        wynik = self._stan_wyniku(plik, identyfikatory, numer, liczba)
+        for identyfikator in identyfikatory:
+            po_identyfikatorze[identyfikator].wyniki.append(wynik)
+        for ostrzezenie in plan.ostrzezenia:
+            for identyfikator in identyfikatory:
+                po_identyfikatorze[identyfikator].ostrzezenia_pakowania.append(ostrzezenie)
+
+    def _stan_wyniku(
+        self,
+        plik: PlikWynikowy,
+        identyfikatory_zrodel: list[str],
+        numer_czesci: int | None,
+        liczba_czesci: int | None,
+    ) -> StanWyniku:
+        """Buduje wpis stanu jednego pliku wynikowego z jego rzeczywistej zawartości."""
+        return StanWyniku(
+            sciezka_wzgledna=plik.sciezka.relative_to(self._uklad.katalog_projektu).as_posix(),
+            format=plik.format.value,
+            liczba_slow=plik.liczba_slow,
+            liczba_znakow_pliku=plik.liczba_znakow,
+            rozmiar_bajtow=plik.rozmiar_bajtow,
+            checksum=plik.checksum,
+            identyfikatory_zrodel=list(identyfikatory_zrodel),
+            numer_czesci=numer_czesci,
+            liczba_czesci=liczba_czesci,
+        )
+
+    def _odnotuj_ostrzezenia_pakowania(self, stan: StanZrodla, ostrzezenia: list[str]) -> None:
+        """Zapisuje ostrzeżenia podziału w obu logach, tą samą drogą co pominięcie."""
+        if not ostrzezenia:
+            return
+        self._dziennik_wazny.zapisz(f"{ZDARZENIE_OSTRZEZENIE_PODZIALU}: {stan.pochodzenie}")
+        for ostrzezenie in ostrzezenia:
+            self._loguj(logging.WARNING, stan.identyfikator, f"Ostrzeżenie podziału: {ostrzezenie}")
 
     def _zapisz_tekst_posredni(self, identyfikator: str, sufiks: str, tekst: str) -> None:
         """Zapisuje jeden plik wyniku pośredniego w UTF-8 z końcami wierszy LF."""
@@ -1546,7 +1743,6 @@ def _nowy_checkpoint(
 
 def _zbuduj_manifest(uklad: UkladProjektu, checkpoint: Checkpoint) -> Manifest:
     wpisy_zrodel: list[WpisZrodla] = []
-    wpisy_wynikow: list[WpisWyniku] = []
     for stan in checkpoint.zrodla.values():
         wpisy_zrodel.append(
             WpisZrodla(
@@ -1569,27 +1765,16 @@ def _zbuduj_manifest(uklad: UkladProjektu, checkpoint: Checkpoint) -> Manifest:
                 ocena_jakosci=stan.ocena_jakosci,
                 powody_oceny=tuple(stan.powody_oceny),
                 ostrzezenia=tuple(stan.ostrzezenia),
+                grupa_pakowania=stan.grupa_pakowania,
+                ostrzezenia_pakowania=tuple(stan.ostrzezenia_pakowania),
             )
         )
-        for wynik in stan.wyniki:
-            wpisy_wynikow.append(
-                WpisWyniku(
-                    sciezka=wynik.sciezka_wzgledna,
-                    format=wynik.format,
-                    liczba_zrodel=1,
-                    liczba_slow=wynik.liczba_slow,
-                    liczba_znakow_pliku=wynik.liczba_znakow_pliku,
-                    rozmiar_bajtow=wynik.rozmiar_bajtow,
-                    checksum=wynik.checksum,
-                    status=StatusZrodla.SPAKOWANE.value,
-                )
-            )
     return Manifest(
         wersja_schematu=WERSJA_SCHEMATU_MANIFESTU,
         identyfikator_projektu=uklad.identyfikator_projektu,
         nazwa_projektu=uklad.nazwa_projektu,
         zrodla=tuple(wpisy_zrodel),
-        wyniki=tuple(wpisy_wynikow),
+        wyniki=_wpisy_wynikow(checkpoint),
         deduplikacja=tuple(
             WpisDeduplikacji(
                 identyfikator_zrodla_glownego=decyzja.identyfikator_zrodla_glownego,
@@ -1603,6 +1788,36 @@ def _zbuduj_manifest(uklad: UkladProjektu, checkpoint: Checkpoint) -> Manifest:
             for decyzja in checkpoint.deduplikacja.decyzje
         ),
     )
+
+
+def _wpisy_wynikow(checkpoint: Checkpoint) -> tuple[WpisWyniku, ...]:
+    """Buduje wpisy plików wynikowych, licząc każdy plik raz, nawet plik grupy.
+
+    Ten sam plik grupy jest zapisany w stanie każdego ze swoich źródeł, więc bez
+    złączenia po ścieżce trafiłby do manifestu wielokrotnie. Liczba źródeł w pliku
+    pochodzi z listy identyfikatorów zapisanej przy wyniku, a dla wpisów sprzed
+    etapu szóstego, w których tej listy nie ma, przyjmowane jest źródło macierzyste.
+    """
+    po_sciezce: dict[str, WpisWyniku] = {}
+    for stan in checkpoint.zrodla.values():
+        for wynik in stan.wyniki:
+            if wynik.sciezka_wzgledna in po_sciezce:
+                continue
+            identyfikatory = tuple(wynik.identyfikatory_zrodel) or (stan.identyfikator,)
+            po_sciezce[wynik.sciezka_wzgledna] = WpisWyniku(
+                sciezka=wynik.sciezka_wzgledna,
+                format=wynik.format,
+                liczba_zrodel=len(identyfikatory),
+                liczba_slow=wynik.liczba_slow,
+                liczba_znakow_pliku=wynik.liczba_znakow_pliku,
+                rozmiar_bajtow=wynik.rozmiar_bajtow,
+                checksum=wynik.checksum,
+                status=StatusZrodla.SPAKOWANE.value,
+                identyfikatory_zrodel=identyfikatory,
+                numer_czesci=wynik.numer_czesci,
+                liczba_czesci=wynik.liczba_czesci,
+            )
+    return tuple(po_sciezce.values())
 
 
 def _wpis_pobrania(pobranie: StanPobrania | None) -> WpisPobrania | None:
@@ -1630,7 +1845,16 @@ def _zbuduj_podsumowanie(
     bledne = _policz_status(checkpoint, StatusZrodla.BLAD)
     duplikaty = _policz_status(checkpoint, StatusZrodla.DUPLIKAT)
 
-    wyniki = [wynik for stan in checkpoint.zrodla.values() for wynik in stan.wyniki]
+    # Plik grupy jest zapisany w stanie każdego ze swoich źródeł, więc liczenie
+    # po ścieżce liczy go raz. Bez tego plik grupy pięciu źródeł liczyłby się
+    # pięciokrotnie i zawyżałby wykorzystanie limitu.
+    wyniki = list(
+        {
+            wynik.sciezka_wzgledna: wynik
+            for stan in checkpoint.zrodla.values()
+            for wynik in stan.wyniki
+        }.values()
+    )
     liczba_txt = sum(1 for wynik in wyniki if wynik.format == "txt")
     liczba_md = sum(1 for wynik in wyniki if wynik.format == "md")
     laczna_liczba_slow = sum(wynik.liczba_slow for wynik in wyniki if wynik.format == "txt")
@@ -1675,9 +1899,10 @@ def _materialy_do_sprawdzenia(checkpoint: Checkpoint) -> tuple[MaterialDoSprawdz
     """Zbiera źródła zapisane poprawnie, przy których coś wymaga obejrzenia.
 
     Kwalifikuje źródło podejrzane w ocenie jakości, źródło z ostrzeżeniem
-    ekstraktora oraz źródło, które deduplikacja uznała za możliwy duplikat i
-    zostawiła obie kopie do rozstrzygnięcia. Każdy z trzech powodów musi tu
-    trafiać niezależnie od pozostałych, bo mówią o różnych rzeczach.
+    ekstraktora, źródło z ostrzeżeniem podziału oraz źródło, które deduplikacja
+    uznała za możliwy duplikat i zostawiła obie kopie do rozstrzygnięcia. Każdy
+    z powodów musi tu trafiać niezależnie od pozostałych, bo mówią o różnych
+    rzeczach.
     """
     mozliwe_duplikaty = _mozliwe_duplikaty_wedlug_zrodla(checkpoint)
     return tuple(
@@ -1687,10 +1912,12 @@ def _materialy_do_sprawdzenia(checkpoint: Checkpoint) -> tuple[MaterialDoSprawdz
             powody=tuple(stan.powody_oceny),
             ostrzezenia=tuple(stan.ostrzezenia),
             mozliwe_duplikaty=mozliwe_duplikaty.get(stan.identyfikator, ()),
+            ostrzezenia_pakowania=tuple(stan.ostrzezenia_pakowania),
         )
         for stan in checkpoint.zrodla.values()
         if stan.ocena_jakosci == OCENA_PODEJRZANA
         or stan.ostrzezenia
+        or stan.ostrzezenia_pakowania
         or stan.identyfikator in mozliwe_duplikaty
     )
 
@@ -1712,6 +1939,17 @@ def _mozliwe_duplikaty_wedlug_zrodla(checkpoint: Checkpoint) -> dict[str, tuple[
         )
         wynik.setdefault(decyzja.identyfikator_duplikatu, []).append(opis)
     return {identyfikator: tuple(opisy) for identyfikator, opisy in wynik.items()}
+
+
+def _numery_czesci(plan: PlanPliku) -> tuple[int | None, int | None]:
+    """Zwraca numer i liczbę części do zapisu, albo parę pustą dla pliku jedynego.
+
+    Plik jedyny dla swojej podstawy nazwy nie dostaje oznaczenia części, więc jego
+    wpis w checkpoincie i manifeście ma tu wartości puste, a nie „1 z 1”.
+    """
+    if not plan.czy_wieloczesciowy:
+        return None, None
+    return plan.numer_czesci, plan.liczba_czesci
 
 
 def _policz_status(checkpoint: Checkpoint, status: StatusZrodla) -> int:

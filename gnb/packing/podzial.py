@@ -32,7 +32,8 @@ import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
-from gnb.packing.limity import LimityPakowania, miesci_sie
+from gnb.core.liczenie_slow import policz_slowa
+from gnb.packing.limity import LimityPakowania, liczba_bajtow, miesci_sie
 
 # Podział na zdania: po znaku kończącym zdanie i następującym po nim białym znaku.
 # Wzorzec zachowuje znak kończący przy zdaniu poprzedzającym, bo bez kropki zdanie
@@ -137,6 +138,38 @@ def _podziel_rekurencyjnie(
     return _sklej_jednostki(jednostki, laczik, limity, poziom=poziom, ostrzezenia=ostrzezenia)
 
 
+@dataclass(slots=True)
+class _Biezaca:
+    """Sklejana część wraz z bieżącą liczbą słów i rozmiarem, liczonymi przyrostowo.
+
+    Mierzenie całej sklejanej części przy każdej jednostce dałoby złożoność
+    kwadratową, a dla źródła o setkach tysięcy słów bez akapitów oznaczałoby
+    zawieszenie. Łącznik jednostek jest zawsze białym znakiem, więc liczba słów
+    i liczba bajtów sumują się bez poprawek.
+    """
+
+    fragmenty: list[str]
+    slowa: int
+    bajty: int
+    bajty_laczika: int
+
+    def zmiescilaby(self, slowa: int, bajty: int, limity: LimityPakowania) -> bool:
+        """Prawda, gdy dołożenie jednostki nie przekroczy żadnego z limitów."""
+        dodatkowe_bajty = bajty + (self.bajty_laczika if self.fragmenty else 0)
+        return (
+            self.slowa + slowa <= limity.limit_slow
+            and self.bajty + dodatkowe_bajty <= limity.limit_bajtow
+        )
+
+    def dodaj(self, jednostka: str, slowa: int, bajty: int) -> None:
+        self.bajty += bajty + (self.bajty_laczika if self.fragmenty else 0)
+        self.slowa += slowa
+        self.fragmenty.append(jednostka)
+
+    def zbierz(self, laczik: str) -> str:
+        return laczik.join(self.fragmenty)
+
+
 def _sklej_jednostki(
     jednostki: Sequence[str],
     laczik: str,
@@ -147,28 +180,29 @@ def _sklej_jednostki(
 ) -> list[str]:
     """Skleja jednostki w części, otwierając nową część przed przekroczeniem limitu."""
     czesci: list[str] = []
-    biezaca = ""
+    bajty_laczika = len(laczik.encode("utf-8"))
+    biezaca = _Biezaca(fragmenty=[], slowa=0, bajty=0, bajty_laczika=bajty_laczika)
 
     for jednostka in jednostki:
-        kandydat = f"{biezaca}{laczik}{jednostka}" if biezaca else jednostka
-        if miesci_sie(kandydat, limity):
-            biezaca = kandydat
+        slowa = policz_slowa(jednostka)
+        bajty = liczba_bajtow(jednostka)
+
+        if biezaca.fragmenty and not biezaca.zmiescilaby(slowa, bajty, limity):
+            czesci.append(biezaca.zbierz(laczik))
+            biezaca = _Biezaca(fragmenty=[], slowa=0, bajty=0, bajty_laczika=bajty_laczika)
+
+        if not biezaca.fragmenty and (slowa > limity.limit_slow or bajty > limity.limit_bajtow):
+            drobniejsze = _podziel_rekurencyjnie(
+                jednostka, limity, poziom=poziom + 1, ostrzezenia=ostrzezenia
+            )
+            czesci.extend(drobniejsze[:-1])
+            if drobniejsze:
+                ostatnia = drobniejsze[-1]
+                biezaca.dodaj(ostatnia, policz_slowa(ostatnia), liczba_bajtow(ostatnia))
             continue
 
-        if biezaca:
-            czesci.append(biezaca)
-            biezaca = ""
+        biezaca.dodaj(jednostka, slowa, bajty)
 
-        if miesci_sie(jednostka, limity):
-            biezaca = jednostka
-            continue
-
-        drobniejsze = _podziel_rekurencyjnie(
-            jednostka, limity, poziom=poziom + 1, ostrzezenia=ostrzezenia
-        )
-        czesci.extend(drobniejsze[:-1])
-        biezaca = drobniejsze[-1] if drobniejsze else ""
-
-    if biezaca:
-        czesci.append(biezaca)
+    if biezaca.fragmenty:
+        czesci.append(biezaca.zbierz(laczik))
     return czesci

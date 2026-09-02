@@ -212,6 +212,94 @@ def test_migracja_wersji_trzeciej_nie_gubi_pol_dodanych_pozniej(tmp_path: Path) 
     assert stan.ostrzezenia == []
 
 
+# Plik checkpointu w wersji czwartej, sprzed etapu szóstego: nie ma pól
+# `grupa_pakowania`, `ostrzezenia_pakowania` przy źródle ani `identyfikatory_zrodel`,
+# `numer_czesci`, `liczba_czesci` przy wyniku. Tekst wpisany wprost, żeby test
+# zgodności wstecznej nie sprawdzał wyłącznie tego, co sam ustawił.
+_CHECKPOINT_W_WERSJI_CZWARTEJ_BEZ_PAKOWANIA = """{
+  "wersja_schematu": 4,
+  "identyfikator_projektu": "proj-abc",
+  "nazwa_projektu": "Projekt",
+  "katalog_projektu": "/tmp/projekt",
+  "konfiguracja": {"limit_zrodel": "100"},
+  "czas_ostatniej_zmiany": "2026-08-26T10:00:00+00:00",
+  "zakonczony": true,
+  "zrodla": {
+    "plik_tekstowy-1": {
+      "identyfikator": "plik_tekstowy-1",
+      "typ": "plik_tekstowy",
+      "pochodzenie": "a.md",
+      "checksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "format_zrodla": "md",
+      "status": "spakowane",
+      "nazwa_bazowa_wyniku": "a",
+      "wyniki": [
+        {
+          "sciezka_wzgledna": "pliki_wynikowe/a.txt",
+          "format": "txt",
+          "liczba_slow": 10,
+          "liczba_znakow_pliku": 61,
+          "rozmiar_bajtow": 62,
+          "checksum": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      ],
+      "liczba_slow": 10,
+      "liczba_znakow": 60,
+      "decyzja_md": false,
+      "uzasadnienie_md": [],
+      "komunikat_bledu": null,
+      "pobranie": null,
+      "metadane": {},
+      "ocena_jakosci": null,
+      "powody_oceny": [],
+      "ostrzezenia": [],
+      "naglowek_metadanych": null,
+      "duplikat_glowny": null
+    }
+  }
+}"""
+
+
+def test_checkpoint_wersji_czwartej_bez_pol_pakowania_wczytuje_sie(tmp_path: Path) -> None:
+    """Plik sprzed etapu szóstego nie ma pól pakowania i wczytuje się bez błędu.
+
+    Pola pakowania są dodane z bezpieczną wartością domyślną, więc zgodnie
+    z sekcją czternastą CLAUDE.md nie wymagają podniesienia wersji schematu.
+    Gdyby odczyt używał dostępu przez klucz zamiast przez wartość domyślną,
+    ten test kończyłby się błędem braku klucza.
+    """
+    sciezka = tmp_path / "checkpoint.json"
+    sciezka.write_text(_CHECKPOINT_W_WERSJI_CZWARTEJ_BEZ_PAKOWANIA, encoding="utf-8")
+
+    odczytany = wczytaj(sciezka)
+
+    assert odczytany is not None
+    assert odczytany.wersja_schematu == WERSJA_SCHEMATU
+    stan = odczytany.zrodla["plik_tekstowy-1"]
+    assert stan.grupa_pakowania is None
+    assert stan.ostrzezenia_pakowania == []
+    wynik = stan.wyniki[0]
+    assert wynik.identyfikatory_zrodel == []
+    assert wynik.numer_czesci is None
+    assert wynik.liczba_czesci is None
+
+
+def test_pola_pakowania_przezywaja_zapis_i_odczyt(tmp_path: Path) -> None:
+    checkpoint = _przykladowy_checkpoint()
+    stan = checkpoint.zrodla["plik_tekstowy-1"]
+    stan.grupa_pakowania = "Podatki 2026"
+    stan.ostrzezenia_pakowania = ["Cięcie wewnątrz zdania."]
+    stan.wyniki[0].identyfikatory_zrodel = ["plik_tekstowy-1", "plik_tekstowy-2"]
+    stan.wyniki[0].numer_czesci = 2
+    stan.wyniki[0].liczba_czesci = 3
+
+    sciezka = tmp_path / "checkpoint.json"
+    zapisz(sciezka, checkpoint)
+    odczytany = wczytaj(sciezka)
+
+    assert odczytany == checkpoint
+
+
 def test_zmigrowany_checkpoint_zapisuje_sie_w_biezacej_wersji(tmp_path: Path) -> None:
     """Po migracji i ponownym zapisie plik na dysku jest już w wersji bieżącej."""
     sciezka = tmp_path / "checkpoint.json"

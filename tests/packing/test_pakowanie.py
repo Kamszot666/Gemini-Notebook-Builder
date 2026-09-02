@@ -28,8 +28,7 @@ def test_pojedyncze_zrodlo_w_limicie_daje_jeden_plik_bez_numeracji() -> None:
     assert len(plany) == 1
     (plan,) = plany
     assert plan.czy_grupa is False
-    assert plan.numer_czesci is None
-    assert plan.liczba_czesci is None
+    assert plan.czy_wieloczesciowy is False
     assert [f.identyfikator for f in plan.fragmenty] == ["plik_tekstowy-1"]
 
 
@@ -58,7 +57,7 @@ def test_grupa_malych_zrodel_laczy_sie_w_jeden_plik() -> None:
     (plan,) = plany
     assert plan.czy_grupa is True
     assert plan.grupa == "Temat"
-    assert plan.numer_czesci is None
+    assert plan.czy_wieloczesciowy is False
     # Fragmenty są uporządkowane rosnąco po identyfikatorze, więc wynik jest
     # powtarzalny niezależnie od kolejności podania źródeł.
     assert [f.identyfikator for f in plan.fragmenty] == ["plik_tekstowy-a", "plik_tekstowy-b"]

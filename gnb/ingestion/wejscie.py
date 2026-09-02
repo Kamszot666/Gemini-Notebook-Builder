@@ -82,21 +82,32 @@ class PozycjaWejsciowa:
     użytkownika. Od tego zależy wyjątek od kontroli pliku ``robots.txt`` opisany
     w sekcji piętnastej CLAUDE.md. Adres znaleziony kiedyś przez sam program
     w treści innego źródła będzie miał tu wartość fałsz.
+
+    Pole `grupa` niesie nazwę grupy tematycznej nadaną przez użytkownika. Źródła
+    z tą samą nazwą grupy są w etapie szóstym łączone w jeden plik wynikowy, żeby
+    oszczędzać sloty notatnika. Wartość pusta oznacza, że źródło ma trafić do
+    osobnego pliku.
     """
 
     wejscie: WejscieSurowe
     format_zrodla: str
     adres_kanoniczny: str | None = None
     wskazane_jawnie: bool = True
+    grupa: str | None = None
 
 
 def przyjmij_tekst(
-    tresc: str, moment_dodania: datetime, *, format_tekstu: str = "txt"
+    tresc: str,
+    moment_dodania: datetime,
+    *,
+    format_tekstu: str = "txt",
+    grupa: str | None = None,
 ) -> PozycjaWejsciowa:
     """Tworzy pozycję wejściową z tekstu wklejonego przez użytkownika.
 
     Domyślnie tekst wklejony jest traktowany jako tekst płaski. Format ``md``
-    wskazuje, że użytkownik świadomie deklaruje tekst jako Markdown.
+    wskazuje, że użytkownik świadomie deklaruje tekst jako Markdown. Argument
+    `grupa` przypisuje źródło do grupy tematycznej pakowania.
     """
     format_znormalizowany = format_tekstu.strip().lower() or "txt"
     if format_znormalizowany not in FORMATY_TEKSTU_WKLEJONEGO:
@@ -109,11 +120,29 @@ def przyjmij_tekst(
         wartosc=tresc,
         moment_dodania=moment_dodania,
     )
-    return PozycjaWejsciowa(wejscie=wejscie, format_zrodla=format_znormalizowany)
+    return PozycjaWejsciowa(
+        wejscie=wejscie, format_zrodla=format_znormalizowany, grupa=_grupa_znormalizowana(grupa)
+    )
+
+
+def _grupa_znormalizowana(grupa: str | None) -> str | None:
+    """Sprowadza nazwę grupy do postaci znaczącej albo do wartości pustej.
+
+    Nazwa złożona z samych białych znaków nie jest grupą, tylko pomyłką przy
+    wpisywaniu, więc jest traktowana jak brak grupy.
+    """
+    if grupa is None:
+        return None
+    oczyszczona = grupa.strip()
+    return oczyszczona or None
 
 
 def przyjmij_url(
-    adres: str, moment_dodania: datetime, dodatkowe_parametry_sledzace: tuple[str, ...] = ()
+    adres: str,
+    moment_dodania: datetime,
+    dodatkowe_parametry_sledzace: tuple[str, ...] = (),
+    *,
+    grupa: str | None = None,
 ) -> PozycjaWejsciowa:
     """Tworzy pozycję wejściową z adresu strony internetowej albo filmu.
 
@@ -146,7 +175,10 @@ def przyjmij_url(
         moment_dodania=moment_dodania,
     )
     return PozycjaWejsciowa(
-        wejscie=wejscie, format_zrodla=format_zrodla, adres_kanoniczny=kanoniczny
+        wejscie=wejscie,
+        format_zrodla=format_zrodla,
+        adres_kanoniczny=kanoniczny,
+        grupa=_grupa_znormalizowana(grupa),
     )
 
 
@@ -163,8 +195,13 @@ def identyfikator_adresu(typ_zrodla: TypZrodla, adres_kanoniczny_zrodla: str) ->
     )
 
 
-def przyjmij_plik(sciezka: Path, moment_dodania: datetime) -> PozycjaWejsciowa:
-    """Tworzy pozycję wejściową ze ścieżki pliku lokalnego."""
+def przyjmij_plik(
+    sciezka: Path, moment_dodania: datetime, *, grupa: str | None = None
+) -> PozycjaWejsciowa:
+    """Tworzy pozycję wejściową ze ścieżki pliku lokalnego.
+
+    Argument `grupa` przypisuje źródło do grupy tematycznej pakowania.
+    """
     format_zrodla = sciezka.suffix.lstrip(".").lower()
     wejscie = WejscieSurowe(
         identyfikator_wejscia=_identyfikator_wejscia(TypWejscia.PLIK, str(sciezka)),
@@ -172,7 +209,9 @@ def przyjmij_plik(sciezka: Path, moment_dodania: datetime) -> PozycjaWejsciowa:
         wartosc=str(sciezka),
         moment_dodania=moment_dodania,
     )
-    return PozycjaWejsciowa(wejscie=wejscie, format_zrodla=format_zrodla)
+    return PozycjaWejsciowa(
+        wejscie=wejscie, format_zrodla=format_zrodla, grupa=_grupa_znormalizowana(grupa)
+    )
 
 
 def waliduj_i_utworz_zrodlo(
@@ -244,13 +283,7 @@ def _zrodlo_z_pliku(
             f"Nieobsługiwany format pliku: „{pozycja.format_zrodla or 'brak rozszerzenia'}”. "
             "Obsługiwane są: txt, md, html, htm, xhtml, csv, srt, vtt, pdf, docx, epub."
         )
-    rozmiar = sciezka.stat().st_size
-    limit_bajtow = konfiguracja.bezpieczny_limit_mb * _BAJTOW_W_MEGABAJCIE
-    if rozmiar > limit_bajtow:
-        raise PrzekroczonoLimit(
-            f"Plik {sciezka.name} ma {rozmiar} bajtów, ponad bezpieczny limit "
-            f"{limit_bajtow} bajtów. Podział zbyt dużego źródła to zadanie etapu szóstego."
-        )
+    _sprawdz_rozmiar_pliku(sciezka, pozycja.format_zrodla, konfiguracja)
     suma = suma_kontrolna_pliku(sciezka)
     typ = typ_zrodla_dla_pliku(pozycja.format_zrodla)
     return Zrodlo(
@@ -262,6 +295,32 @@ def _zrodlo_z_pliku(
         utworzono=moment,
         zaktualizowano=moment,
     )
+
+
+def _sprawdz_rozmiar_pliku(sciezka: Path, format_zrodla: str, konfiguracja: Konfiguracja) -> None:
+    """Odrzuca zbyt duży plik binarny, ale przepuszcza zbyt duży plik tekstowy.
+
+    Dla plików binarnych, czyli PDF, DOCX i EPUB, rozmiar na dysku jest realnym
+    ograniczeniem: taki plik trzeba wczytać do pamięci w całości, zanim powstanie
+    z niego tekst. Przekroczenie bezpiecznego limitu megabajtów kończy się więc
+    kontrolowanym pominięciem.
+
+    Dla plików tekstowych, w tym TXT, MD, HTML, CSV oraz napisów SRT i VTT,
+    rozmiar surowego pliku nie jest ograniczeniem: nadmiarową treścią zajmuje się
+    podział w etapie szóstym, który dzieli źródło na części na granicy jednostki
+    strukturalnej. Odrzucanie takiego pliku przy wejściu byłoby cichą utratą
+    treści, czyli naruszeniem drugiego priorytetu z sekcji czwartej CLAUDE.md.
+    """
+    if format_zrodla not in FORMATY_PLIKOW_BINARNYCH:
+        return
+    rozmiar = sciezka.stat().st_size
+    limit_bajtow = konfiguracja.bezpieczny_limit_mb * _BAJTOW_W_MEGABAJCIE
+    if rozmiar > limit_bajtow:
+        raise PrzekroczonoLimit(
+            f"Plik {sciezka.name} ma {rozmiar} bajtów, ponad bezpieczny limit "
+            f"{limit_bajtow} bajtów. Pliku binarnego tej wielkości nie da się bezpiecznie "
+            "wczytać do pamięci, więc źródło zostało pominięte."
+        )
 
 
 def typ_zrodla_dla_pliku(format_zrodla: str) -> TypZrodla:

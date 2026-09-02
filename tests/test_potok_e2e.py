@@ -219,11 +219,20 @@ def test_bledne_wejscie_nie_zatrzymuje_potoku(tmp_path: Path) -> None:
     assert statusy.count("blad") == 1
 
 
-def test_zrodlo_ponad_limit_slow_jest_pominiete_a_nie_bledne(tmp_path: Path) -> None:
+def _tresc_bez_naglowka(sciezka: Path) -> str:
+    """Zwraca treść pliku wynikowego po odcięciu nagłówka metadanych."""
+    return sciezka.read_text(encoding="utf-8").partition("\n\n")[2]
+
+
+def test_zrodlo_ponad_limit_slow_jest_dzielone_na_czesci_bez_utraty_tresci(
+    tmp_path: Path,
+) -> None:
     konfiguracja = Konfiguracja(katalog_wynikow=tmp_path, bezpieczny_limit_slow=5)
     moment = datetime(2026, 8, 26, 9, 0, tzinfo=UTC)
+    akapit = "Pierwsze zdanie jest krótkie. Drugie zdanie też jest krótkie. Trzecie kończy akapit."
+    duzy_tekst = f"{akapit}\n\n{akapit}\n\n{akapit}"
     pozycje = [
-        przyjmij_tekst("Ten tekst ma zdecydowanie więcej niż pięć słów w swojej treści.", moment),
+        przyjmij_tekst(duzy_tekst, moment),
         przyjmij_tekst("Krótki tekst.", moment),
     ]
 
@@ -231,30 +240,37 @@ def test_zrodlo_ponad_limit_slow_jest_pominiete_a_nie_bledne(tmp_path: Path) -> 
         pozycje, konfiguracja, nazwa_projektu="Test limitu słów", zegar=_zegar_krokowy()
     )
 
-    assert wynik.liczba_pominietych == 1
+    assert wynik.liczba_pominietych == 0
     assert wynik.liczba_bledow == 0
-    assert wynik.liczba_przetworzonych == 1
+    assert wynik.liczba_przetworzonych == 2
+
+    katalog_wynikow = wynik.katalog_projektu / "pliki_wynikowe"
+    czesci = sorted(p for p in katalog_wynikow.glob("*.txt") if "_czesc_" in p.name)
+    assert len(czesci) >= 2
+
+    for plik_czesci in czesci:
+        assert "Część: " in plik_czesci.read_text(encoding="utf-8").partition("\n\n")[0]
+
+    slowa_czesci = [slowo for plik in czesci for slowo in _tresc_bez_naglowka(plik).split()]
+    assert slowa_czesci == duzy_tekst.split()
 
     manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
-    pominiete = [zrodlo for zrodlo in manifest["zrodla"] if zrodlo["status"] == "pominiete"]
-    assert len(pominiete) == 1
-    assert "etapu szóstego" in (pominiete[0]["komunikat_bledu"] or "")
+    duze = next(z for z in manifest["zrodla"] if len(z["pliki_wynikowe"]) > 1)
+    assert duze["status"] == "spakowane"
+    wyniki_z_czesciami = [w for w in manifest["wyniki"] if w["liczba_czesci"]]
+    assert {w["liczba_czesci"] for w in wyniki_z_czesciami} == {len(czesci)}
+    assert {w["numer_czesci"] for w in wyniki_z_czesciami} == set(range(1, len(czesci) + 1))
 
     raport = wynik.sciezka_raportu.read_text(encoding="utf-8")
-    assert "Liczba źródeł pominiętych: 1" in raport
-    assert "Liczba źródeł z błędem: 0" in raport
-
-    log_szczegolowy = (wynik.katalog_projektu / "logi" / "log_szczegolowy.txt").read_text(
-        encoding="utf-8"
-    )
-    assert "Pominięto źródło" in log_szczegolowy
+    assert "Liczba źródeł pominiętych: 0" in raport
+    assert f"Liczba plików TXT: {len(czesci) + 1}" in raport
 
 
-def test_plik_ponad_bezpieczny_limit_rozmiaru_jest_pominiety(tmp_path: Path) -> None:
+def test_plik_binarny_ponad_bezpieczny_limit_rozmiaru_jest_pominiety(tmp_path: Path) -> None:
     katalog_zrodel = tmp_path / "zrodla"
     katalog_zrodel.mkdir()
-    duzy_plik = katalog_zrodel / "duzy.txt"
-    duzy_plik.write_text("słowo " * 200_000, encoding="utf-8")
+    duzy_plik = katalog_zrodel / "duzy.pdf"
+    duzy_plik.write_bytes(b"%PDF-1.4\n" + b"0" * 1_200_000)
 
     konfiguracja = Konfiguracja(katalog_wynikow=tmp_path / "wyniki", bezpieczny_limit_mb=1)
     pozycje = [przyjmij_plik(duzy_plik, datetime(2026, 8, 26, 9, 0, tzinfo=UTC))]
@@ -268,6 +284,34 @@ def test_plik_ponad_bezpieczny_limit_rozmiaru_jest_pominiety(tmp_path: Path) -> 
 
     manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
     assert [zrodlo["status"] for zrodlo in manifest["zrodla"]] == ["pominiete"]
+
+
+def test_plik_tekstowy_ponad_bezpieczny_limit_rozmiaru_jest_dzielony_a_nie_pomijany(
+    tmp_path: Path,
+) -> None:
+    """Duży plik tekstowy nie jest odrzucany przy wejściu: dzieli go faza pakowania."""
+    katalog_zrodel = tmp_path / "zrodla"
+    katalog_zrodel.mkdir()
+    duzy_plik = katalog_zrodel / "duzy.txt"
+    akapit = "Zdanie pierwsze akapitu. Zdanie drugie akapitu. Zdanie trzecie akapitu."
+    duzy_plik.write_text("\n\n".join([akapit] * 40), encoding="utf-8")
+
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path / "wyniki", bezpieczny_limit_slow=25)
+    pozycje = [przyjmij_plik(duzy_plik, datetime(2026, 8, 26, 9, 0, tzinfo=UTC))]
+
+    wynik = przetworz_projekt(
+        pozycje, konfiguracja, nazwa_projektu="Test dużego tekstu", zegar=_zegar_krokowy()
+    )
+
+    assert wynik.liczba_pominietych == 0
+    assert wynik.liczba_bledow == 0
+    assert wynik.liczba_przetworzonych == 1
+
+    katalog_wynikow = wynik.katalog_projektu / "pliki_wynikowe"
+    czesci = sorted(katalog_wynikow.glob("*_czesc_*.txt"))
+    assert len(czesci) >= 2
+    slowa = [slowo for plik in czesci for slowo in _tresc_bez_naglowka(plik).split()]
+    assert slowa == "\n\n".join([akapit] * 40).split()
 
 
 def test_wylaczone_zachowywanie_oryginalow_nie_tworzy_podkatalogu(tmp_path: Path) -> None:

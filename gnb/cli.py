@@ -236,12 +236,19 @@ def uruchom_przetwarzanie(
     adresy: list[str] | None = None,
     listy_adresow: list[str] | None = None,
     tylko_sprawdz_liste: bool = False,
+    grupa: str | None = None,
 ) -> int:
     """Buduje pozycje wejściowe, uruchamia potok i wypisuje raport dla użytkownika.
 
     Zwraca kod zero, gdy potok się wykona, oraz kod dwa, gdy nie podano żadnego
     źródła. Pojedyncze błędne źródło nie zmienia kodu wyjścia — jest opisane
     w raporcie, w manifeście i w logu.
+
+    Argument `grupa` przypisuje wszystkie źródła tego wywołania do jednej grupy
+    tematycznej pakowania. Źródła jednej grupy są w etapie szóstym łączone
+    w możliwie najmniej plików wynikowych. Wiele grup w jednym projekcie
+    uzyskuje się przez kilkukrotne uruchomienie polecenia: checkpoint kumuluje
+    źródła między uruchomieniami.
 
     Przy opcji `tylko_sprawdz_liste` polecenie kończy się po wypisaniu
     podsumowania listy adresów, z kodem zero także wtedy, gdy część wpisów jest
@@ -270,14 +277,19 @@ def uruchom_przetwarzanie(
 
     pozycje: list[PozycjaWejsciowa] = []
     for sciezka in pliki:
-        pozycje.append(przyjmij_plik(Path(sciezka), moment))
+        pozycje.append(przyjmij_plik(Path(sciezka), moment, grupa=grupa))
     for tresc in teksty_plaskie:
-        pozycje.append(przyjmij_tekst(tresc, moment, format_tekstu="txt"))
+        pozycje.append(przyjmij_tekst(tresc, moment, format_tekstu="txt", grupa=grupa))
     for tresc in teksty_markdown:
-        pozycje.append(przyjmij_tekst(tresc, moment, format_tekstu="md"))
+        pozycje.append(przyjmij_tekst(tresc, moment, format_tekstu="md", grupa=grupa))
     for adres in podsumowanie_adresow.adresy:
         pozycje.append(
-            przyjmij_url(adres.podany, moment, konfiguracja.dodatkowe_parametry_sledzace)
+            przyjmij_url(
+                adres.podany,
+                moment,
+                konfiguracja.dodatkowe_parametry_sledzace,
+                grupa=grupa,
+            )
         )
 
     if not pozycje:
@@ -408,6 +420,16 @@ def main(argumenty: list[str] | None = None) -> int:
         help="Wypisz podsumowanie listy adresów i zakończ, bez pobierania czegokolwiek.",
     )
     parser_przetworz.add_argument(
+        "--grupa",
+        metavar="NAZWA",
+        default=None,
+        help=(
+            "Nazwa grupy tematycznej dla wszystkich źródeł tego wywołania. Źródła jednej "
+            "grupy są łączone w możliwie najmniej plików wynikowych. Kolejną grupę dodaje "
+            "się osobnym wywołaniem polecenia w tym samym projekcie."
+        ),
+    )
+    parser_przetworz.add_argument(
         "--katalog",
         metavar="SCIEZKA",
         default=None,
@@ -432,6 +454,7 @@ def main(argumenty: list[str] | None = None) -> int:
             list(ustalone.url),
             list(ustalone.lista_url),
             bool(ustalone.sprawdz_liste),
+            ustalone.grupa,
         )
 
     parser.error(f"Nieznane polecenie: {ustalone.polecenie}")

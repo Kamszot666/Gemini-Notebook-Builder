@@ -49,6 +49,14 @@ class StanWyniku:
     też końcowy znak nowej linii. Liczba znaków źródła, zapisana przy wpisie
     źródła, liczy sam tekst dokumentu i jest zawsze o ten jeden znak mniejsza.
     Dwie różne miary noszą różne nazwy, żeby nie dało się ich pomylić.
+
+    Pola `identyfikatory_zrodel`, `numer_czesci` i `liczba_czesci` opisują wynik
+    etapu szóstego. Plik grupy łączący kilka małych źródeł ma w
+    `identyfikatory_zrodel` je wszystkie, a ten sam wpis pojawia się przy każdym
+    z tych źródeł. Numer i liczba części są wypełnione dla części podzielonego
+    źródła oraz dla kolejnych plików grupy zbyt licznej na jeden plik. Wszystkie
+    trzy pola są dodane z bezpieczną wartością domyślną, więc plik zapisany
+    wcześniejszą wersją aplikacji wczytuje się bez zmiany schematu.
     """
 
     sciezka_wzgledna: str
@@ -57,6 +65,9 @@ class StanWyniku:
     liczba_znakow_pliku: int
     rozmiar_bajtow: int
     checksum: str
+    identyfikatory_zrodel: list[str] = field(default_factory=list)
+    numer_czesci: int | None = None
+    liczba_czesci: int | None = None
 
 
 @dataclass
@@ -85,6 +96,12 @@ class StanZrodla:
     lokalnym i po wznowieniu pracy nie dałoby się go odtworzyć identycznie. Pole
     `duplikat_glowny` jest ustawiane dla źródła uznanego za duplikat innego i
     wskazuje identyfikator źródła zachowanego.
+
+    Pole `grupa_pakowania` niesie nazwę grupy tematycznej nadaną przez
+    użytkownika, po której etap szósty łączy małe źródła w jeden plik. Pole
+    `ostrzezenia_pakowania` zbiera ostrzeżenia z podziału źródła zbyt dużego,
+    na przykład informację o cięciu wewnątrz zdania. Oba pola są dodane
+    z bezpieczną wartością domyślną i nie zmieniają wersji schematu.
     """
 
     identyfikator: str
@@ -107,6 +124,8 @@ class StanZrodla:
     ostrzezenia: list[str] = field(default_factory=list)
     naglowek_metadanych: str | None = None
     duplikat_glowny: str | None = None
+    grupa_pakowania: str | None = None
+    ostrzezenia_pakowania: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -390,6 +409,8 @@ def _stan_do_slownika(stan: StanZrodla) -> dict[str, Any]:
         "ostrzezenia": list(stan.ostrzezenia),
         "naglowek_metadanych": stan.naglowek_metadanych,
         "duplikat_glowny": stan.duplikat_glowny,
+        "grupa_pakowania": stan.grupa_pakowania,
+        "ostrzezenia_pakowania": list(stan.ostrzezenia_pakowania),
     }
 
 
@@ -414,6 +435,9 @@ def _wynik_do_slownika(wynik: StanWyniku) -> dict[str, Any]:
         "liczba_znakow_pliku": wynik.liczba_znakow_pliku,
         "rozmiar_bajtow": wynik.rozmiar_bajtow,
         "checksum": wynik.checksum,
+        "identyfikatory_zrodel": list(wynik.identyfikatory_zrodel),
+        "numer_czesci": wynik.numer_czesci,
+        "liczba_czesci": wynik.liczba_czesci,
     }
 
 
@@ -496,6 +520,8 @@ def _stan_ze_slownika(dane: Any) -> StanZrodla:
         ostrzezenia=[str(element) for element in dane.get("ostrzezenia", [])],
         naglowek_metadanych=_opcjonalny_tekst(dane.get("naglowek_metadanych")),
         duplikat_glowny=_opcjonalny_tekst(dane.get("duplikat_glowny")),
+        grupa_pakowania=_opcjonalny_tekst(dane.get("grupa_pakowania")),
+        ostrzezenia_pakowania=[str(element) for element in dane.get("ostrzezenia_pakowania", [])],
     )
 
 
@@ -532,6 +558,9 @@ def _wynik_ze_slownika(dane: Any) -> StanWyniku:
         liczba_znakow_pliku=int(dane["liczba_znakow_pliku"]),
         rozmiar_bajtow=int(dane["rozmiar_bajtow"]),
         checksum=str(dane["checksum"]),
+        identyfikatory_zrodel=[str(element) for element in dane.get("identyfikatory_zrodel", [])],
+        numer_czesci=_opcjonalna_liczba(dane.get("numer_czesci")),
+        liczba_czesci=_opcjonalna_liczba(dane.get("liczba_czesci")),
     )
 
 

@@ -64,19 +64,24 @@ class FragmentPliku:
 class PlanPliku:
     """Opis jednego pliku wynikowego do zapisania.
 
-    `numer_czesci` i `liczba_czesci` są wypełnione, gdy plik jest jednym z kilku
-    dla tej samej podstawy nazwy: częścią podzielonego źródła albo kolejnym
-    plikiem grupy, której skład nie zmieścił się w jednym pliku. `czy_grupa`
-    mówi, czy nazwa pliku ma powstać z nazwy grupy, czy z nazwy pojedynczego
-    źródła.
+    `numer_czesci` i `liczba_czesci` mówią, którą z ilu części dla tej samej
+    podstawy nazwy jest ten plik. Dla pliku, który jest jedyny dla swojej
+    podstawy, oba pola mają wartość jeden, a `czy_wieloczesciowy` jest fałszem.
+    `czy_grupa` mówi, czy nazwa pliku ma powstać z nazwy grupy, czy z nazwy
+    pojedynczego źródła.
     """
 
     fragmenty: tuple[FragmentPliku, ...]
     czy_grupa: bool
     grupa: str | None = None
-    numer_czesci: int | None = None
-    liczba_czesci: int | None = None
+    numer_czesci: int = 1
+    liczba_czesci: int = 1
     ostrzezenia: tuple[str, ...] = ()
+
+    @property
+    def czy_wieloczesciowy(self) -> bool:
+        """Prawda, gdy dla tej podstawy nazwy powstaje więcej niż jeden plik."""
+        return self.liczba_czesci > 1
 
 
 def rozplanuj_pojedyncze_zrodlo(
@@ -148,18 +153,16 @@ def _polacz_male(
         kosze.append(biezacy)
 
     liczba_koszy = len(kosze)
-    plany: list[PlanPliku] = []
-    for numer, kosz in enumerate(kosze, start=1):
-        plany.append(
-            PlanPliku(
-                fragmenty=tuple(FragmentPliku(z.identyfikator, z.tekst) for z in kosz),
-                czy_grupa=True,
-                grupa=nazwa_grupy,
-                numer_czesci=numer if liczba_koszy > 1 else None,
-                liczba_czesci=liczba_koszy if liczba_koszy > 1 else None,
-            )
+    return [
+        PlanPliku(
+            fragmenty=tuple(FragmentPliku(z.identyfikator, z.tekst) for z in kosz),
+            czy_grupa=True,
+            grupa=nazwa_grupy,
+            numer_czesci=numer,
+            liczba_czesci=liczba_koszy,
         )
-    return plany
+        for numer, kosz in enumerate(kosze, start=1)
+    ]
 
 
 def _kosz_sie_miesci(zrodla: Sequence[ZrodloDoPakowania], limity: LimityPakowania) -> bool:

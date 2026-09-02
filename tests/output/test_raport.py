@@ -110,3 +110,38 @@ def test_raport_wymienia_mozliwe_duplikaty_do_rozstrzygniecia() -> None:
     assert "Materiały do sprawdzenia, liczba: 1" in tekst
     assert "  Możliwe duplikaty do rozstrzygnięcia:" in tekst
     assert "    - Możliwy duplikat źródła plik_dokument-abc: podobieństwo 0.81" in tekst
+
+
+def test_raport_wymienia_ostrzezenia_podzialu_w_materialach_do_sprawdzenia() -> None:
+    podsumowanie = replace(
+        _PODSUMOWANIE,
+        materialy_do_sprawdzenia=(
+            MaterialDoSprawdzenia(
+                identyfikator="plik_tekstowy-duze",
+                pochodzenie="duzy_dokument.txt",
+                ostrzezenia_pakowania=("Podział wykonany wewnątrz zdania, na granicy słowa.",),
+            ),
+        ),
+    )
+
+    tekst = zbuduj_raport("Projekt testowy", podsumowanie)
+
+    assert "Materiały do sprawdzenia, liczba: 1" in tekst
+    assert "  Ostrzeżenia podziału:" in tekst
+    assert "    - Podział wykonany wewnątrz zdania, na granicy słowa." in tekst
+
+
+def test_wykorzystanie_limitu_liczy_pliki_wynikowe_a_nie_zrodla() -> None:
+    # Jedno źródło rozbite na sześć części zajmuje sześć slotów notatnika, mimo
+    # że jest jednym materiałem źródłowym.
+    podsumowanie = replace(
+        _PODSUMOWANIE,
+        liczba_zrodel_po_deduplikacji=1,
+        liczba_plikow_txt=6,
+        limit_zrodel=100,
+    )
+
+    tekst = zbuduj_raport("Projekt testowy", podsumowanie)
+
+    assert "Wykorzystanie limitu źródeł: 6 procent" in tekst
+    assert "plików wynikowych 6" in tekst

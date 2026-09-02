@@ -77,6 +77,38 @@ def zapisz_wyniki(
     return wyniki
 
 
+def zapisz_plik_pakietu(
+    katalog_wynikow: Path,
+    nazwa_bazowa: str,
+    tresc: str,
+    identyfikatory_zrodel: list[str],
+) -> PlikWynikowy:
+    """Zapisuje jeden gotowy plik TXT pakietu i zwraca jego opis.
+
+    Używane do plików, które powstają w etapie szóstym: części podzielonego
+    źródła oraz plików grupy łączących kilka małych źródeł. Treść jest już złożona
+    razem z nagłówkami metadanych przez `gnb.output.skladanie`, więc ta funkcja
+    tylko dopisuje końcowy znak nowej linii, zapisuje plik w UTF-8 bez znaku
+    kolejności bajtów i liczy jego zawartość. Plik MD nie powstaje: fragment ani
+    kompilacja kilku źródeł nie są jednym dokumentem, więc gwarancja wiernej
+    struktury Markdown by tu nie obowiązywała.
+    """
+    katalog_wynikow.mkdir(parents=True, exist_ok=True)
+    sciezka = katalog_wynikow / f"{nazwa_bazowa}.txt"
+    _zapisz_tekst(sciezka, _z_koncowym_znakiem_nowej_linii(tresc))
+    dane = sciezka.read_bytes()
+    tekst = dane.decode("utf-8")
+    return PlikWynikowy(
+        sciezka=sciezka,
+        format=FormatWynikowy.TXT,
+        identyfikatory_zrodel=list(identyfikatory_zrodel),
+        liczba_slow=policz_slowa(tekst),
+        liczba_znakow=policz_znaki(tekst),
+        rozmiar_bajtow=len(dane),
+        checksum=suma_kontrolna_pliku(sciezka),
+    )
+
+
 def _z_koncowym_znakiem_nowej_linii(tekst: str) -> str:
     """Zapewnia, że niepusty tekst kończy się dokładnie jednym znakiem nowej linii."""
     if not tekst:

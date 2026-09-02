@@ -15,7 +15,9 @@ przetwarzają napisy.
 
 from __future__ import annotations
 
+import hashlib
 import re
+from collections.abc import Sequence
 
 from gnb.core.wyjatki import BladTrwaly
 
@@ -36,6 +38,8 @@ DLUGOSC_SKROTU_W_NAZWIE_PLIKU = 8
 ROZDZIELACZ_SKROTU_W_NAZWIE_PLIKU = "_"
 _NAZWA_AWARYJNA_PROJEKTU = "projekt"
 _NAZWA_AWARYJNA_ZRODLA = "zrodlo"
+_NAZWA_AWARYJNA_GRUPY = "grupa"
+_CZLON_CZESCI = "czesc"
 
 
 def _oczysc(nazwa: str) -> str:
@@ -148,6 +152,38 @@ def _czlon_typu_z_identyfikatora(identyfikator_zrodla: str) -> str:
     """Zwraca człon typu źródła z identyfikatora, używany gdy tytuł jest pusty."""
     czlon = identyfikator_zrodla.rsplit("-", 1)[0].strip()
     return czlon if czlon else _NAZWA_AWARYJNA_ZRODLA
+
+
+def nazwa_pliku_czesci(nazwa_bazowa: str, numer_czesci: int, liczba_czesci: int) -> str:
+    """Dokłada do nazwy pliku oznaczenie części, na przykład ``_czesc_2_z_3``.
+
+    Numer części jest uzupełniany zerami do szerokości liczby wszystkich części,
+    dzięki czemu części sortują się w katalogu wyników w naturalnej kolejności
+    także wtedy, gdy jest ich więcej niż dziewięć. Przy liczbie części od dwóch
+    do dziewięciu uzupełnienie nie występuje, więc odsłuch pozostaje krótki.
+    """
+    szerokosc = len(str(liczba_czesci))
+    numer = f"{numer_czesci:0{szerokosc}d}"
+    oznaczenie = f"{_CZLON_CZESCI}_{numer}_z_{liczba_czesci}"
+    return f"{nazwa_bazowa}{ROZDZIELACZ_SKROTU_W_NAZWIE_PLIKU}{oznaczenie}"
+
+
+def nazwa_pliku_grupy(nazwa_grupy: str, identyfikatory_zrodel: Sequence[str]) -> str:
+    """Buduje nazwę pliku dla grupy źródeł: trzon nazwy grupy i skrót jej składu.
+
+    Skrót powstaje z posortowanych identyfikatorów źródeł należących do grupy,
+    więc jest stabilny między uruchomieniami i rozróżnia dwie grupy o tej samej
+    nazwie, ale innym składzie. Nazwa nadana przez użytkownika jest oczyszczana
+    tak samo jak nazwa pliku wynikowego źródła, a nazwa pusta albo zarezerwowana
+    daje człon awaryjny ``grupa``.
+    """
+    trzon = bezpieczna_nazwa_pliku(
+        _trzon_z_tytulu(nazwa_grupy), nazwa_awaryjna=_NAZWA_AWARYJNA_GRUPY
+    )
+    material = "\n".join(sorted(identyfikatory_zrodel)).encode("utf-8")
+    skrot = hashlib.sha256(material).hexdigest()[:DLUGOSC_SKROTU_W_NAZWIE_PLIKU]
+    nazwa = f"{trzon}{ROZDZIELACZ_SKROTU_W_NAZWIE_PLIKU}{skrot}"
+    return _WIELE_PODKRESLEN.sub("_", nazwa).strip("_")
 
 
 def skrot_z_identyfikatora(identyfikator_zrodla: str) -> str:

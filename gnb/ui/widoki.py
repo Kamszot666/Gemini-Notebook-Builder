@@ -152,7 +152,8 @@ def _pole_csrf(token_csrf: str) -> str:
     )
 
 
-def _sciezka_projektu(nazwa: str) -> str:
+def sciezka_projektu(nazwa: str) -> str:
+    """Buduje ścieżkę adresu strony projektu, z nazwą zakodowaną do postaci bezpiecznej w URL."""
     return "/projekt/" + quote(nazwa, safe="")
 
 
@@ -207,7 +208,7 @@ def _sekcja_niedokonczone(projekty: list[ProjektNaLiscie], token_csrf: str) -> s
         )
     pozycje = []
     for projekt in projekty:
-        sciezka = _sciezka_projektu(projekt.nazwa)
+        sciezka = sciezka_projektu(projekt.nazwa)
         opis_bledu = (
             f'<p class="pomoc">Uwaga: {escapuj(projekt.komunikat_bledu)}</p>'
             if projekt.komunikat_bledu
@@ -244,7 +245,7 @@ def strona_projektu(
 ) -> str:
     """Strona projektu: region postępu, dwa pola tekstowe oraz raport po zakończeniu."""
     bledy = bledy or []
-    sciezka = _sciezka_projektu(nazwa)
+    sciezka = sciezka_projektu(nazwa)
     czesci = [f"<h1>Projekt: {escapuj(nazwa)}</h1>", _sekcja_postepu(sciezka, informacja)]
 
     if podsumowanie is not None:
@@ -351,7 +352,7 @@ def _sekcja_pol(
 
 def strona_promptu(*, nazwa: str, prompt: str) -> str:
     """Osobna strona z samym promptem wyszukiwania w polu tylko do odczytu."""
-    sciezka = _sciezka_projektu(nazwa)
+    sciezka = sciezka_projektu(nazwa)
     tresc = prompt or "Pole promptu wyszukiwania jest puste."
     return _dokument(
         f"Prompt wyszukiwania: {nazwa}",

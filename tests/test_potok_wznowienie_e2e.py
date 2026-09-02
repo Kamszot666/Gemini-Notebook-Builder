@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from gnb.core.konfiguracja import Konfiguracja
+from gnb.core.postep import FazaPotoku, ZdarzeniePostepu
 from gnb.ingestion.wejscie import PozycjaWejsciowa, przyjmij_plik, przyjmij_tekst
 from gnb.persistence.checkpoint import wczytaj
 from gnb.potok import odtworz_wejscia, przetworz_projekt
@@ -73,6 +74,40 @@ def test_odtworzone_wejscia_daja_te_same_identyfikatory_zrodel(tmp_path: Path) -
     manifest_drugi = json.loads(drugie.sciezka_manifestu.read_text(encoding="utf-8"))
     identyfikatory_drugie = sorted(z["identyfikator"] for z in manifest_drugi["zrodla"])
     assert identyfikatory_drugie == identyfikatory_pierwsze
+
+
+def test_wywolanie_zwrotne_postepu_dostaje_zdarzenia_wszystkich_faz(tmp_path: Path) -> None:
+    """Potok zgłasza postęp na granicach faz i po każdym źródle, w oczekiwanej kolejności."""
+    zdarzenia: list[ZdarzeniePostepu] = []
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path)
+
+    przetworz_projekt(
+        _pozycje(),
+        konfiguracja,
+        nazwa_projektu="Test postępu",
+        zegar=_zegar_krokowy(),
+        postep=zdarzenia.append,
+    )
+
+    fazy = [zdarzenie.faza for zdarzenie in zdarzenia]
+    assert FazaPotoku.EKSTRAKCJA in fazy
+    assert fazy.index(FazaPotoku.DEDUPLIKACJA) < fazy.index(FazaPotoku.PAKOWANIE)
+    assert fazy[-1] == FazaPotoku.ZAKONCZENIE
+
+    ekstrakcja = [z for z in zdarzenia if z.faza == FazaPotoku.EKSTRAKCJA]
+    assert [z.wykonano for z in ekstrakcja] == [1, 2]
+    assert all(z.wszystkich == 2 for z in ekstrakcja)
+    assert ekstrakcja[-1].opis == "Przetworzono 2 z 2 źródeł"
+
+
+def test_brak_wywolania_zwrotnego_nie_zmienia_wyniku(tmp_path: Path) -> None:
+    """Potok bez argumentu postępu działa dokładnie tak jak przed jego dodaniem."""
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path)
+    wynik = przetworz_projekt(
+        _pozycje(), konfiguracja, nazwa_projektu="Test bez postępu", zegar=_zegar_krokowy()
+    )
+    assert wynik.liczba_przetworzonych == 2
+    assert wynik.liczba_bledow == 0
 
 
 def test_wznowienie_konczy_projekt_przerwany_przed_pakowaniem(tmp_path: Path) -> None:

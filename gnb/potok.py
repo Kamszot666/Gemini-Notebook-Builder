@@ -55,6 +55,7 @@ from gnb.core.nazwy import (
     skrot_z_identyfikatora,
     wygeneruj_nazwe_projektu,
 )
+from gnb.core.postep import FazaPotoku, WywolanieZwrotnePostepu, ZdarzeniePostepu
 from gnb.core.stale import StatusZrodla, TypWejscia, TypZrodla, WynikDeduplikacji
 from gnb.core.wyjatki import BladGnb, BladTrwaly, PrzekroczonoLimit
 from gnb.core.youtube import rozpoznaj
@@ -287,6 +288,23 @@ def _teraz_utc() -> datetime:
     return datetime.now(UTC)
 
 
+def _zglos_postep(
+    postep: WywolanieZwrotnePostepu | None,
+    faza: FazaPotoku,
+    wykonano: int,
+    wszystkich: int,
+    opis: str,
+) -> None:
+    """Przekazuje jedno zdarzenie postępu do wywołania zwrotnego, jeżeli je podano.
+
+    Dławienie komunikatów jest po stronie odbiorcy, nie tutaj: potok zgłasza
+    każde zdarzenie, a interfejs decyduje, które i jak często ogłosić.
+    """
+    if postep is None:
+        return
+    postep(ZdarzeniePostepu(faza=faza, wykonano=wykonano, wszystkich=wszystkich, opis=opis))
+
+
 def przetworz_projekt(
     pozycje: Sequence[PozycjaWejsciowa],
     konfiguracja: Konfiguracja,
@@ -299,6 +317,7 @@ def przetworz_projekt(
     rejestr_binarny: RejestrEkstraktorowBinarnych | None = None,
     transport_http: httpx.AsyncBaseTransport | None = None,
     pobieracz_youtube: PobieraczYouTube | None = None,
+    postep: WywolanieZwrotnePostepu | None = None,
 ) -> WynikPrzetwarzania:
     """Przetwarza listę wejść w ramach jednego projektu i zwraca podsumowanie.
 
@@ -306,6 +325,12 @@ def przetworz_projekt(
     szczegółowym. Argument `zegar_lokalny` podaje czas lokalny systemu, którym
     prowadzony jest przeznaczony dla użytkownika plik ``log_wazne.txt``. Oba
     zegary można podmienić w testach.
+
+    Argument `postep` to opcjonalne wywołanie zwrotne przyjmujące kolejne
+    `ZdarzeniePostepu` na granicach faz oraz po każdym przetworzonym źródle. Brak
+    tego argumentu oznacza pracę bez raportowania postępu, tak jak w wierszu
+    poleceń. Interfejs WWW podaje tu funkcję, która zamienia zdarzenia na dławione
+    komunikaty regionu ``role="status"``.
 
     Argumenty `transport_http` oraz `pobieracz_youtube` służą wyłącznie testom.
     Pozwalają podstawić sztuczny transport oraz przygotowane napisy i sprawdzić
@@ -340,9 +365,9 @@ def przetworz_projekt(
             "tak" if wznowiono else "nie",
         )
 
-        pobrane = _pobierz_strony(pozycje, konfiguracja, checkpoint, log, transport_http)
+        pobrane = _pobierz_strony(pozycje, konfiguracja, checkpoint, log, transport_http, postep)
         filmy = _pobierz_filmy(
-            pozycje, konfiguracja, checkpoint, log, transport_http, pobieracz_youtube
+            pozycje, konfiguracja, checkpoint, log, transport_http, pobieracz_youtube, postep
         )
         wykonanie = _Wykonanie(
             uklad,
@@ -357,11 +382,24 @@ def przetworz_projekt(
             pobrane,
             filmy,
         )
-        for pozycja in pozycje:
+        liczba_pozycji = len(pozycje)
+        for numer, pozycja in enumerate(pozycje, start=1):
             wykonanie.przetworz(pozycja)
+            _zglos_postep(
+                postep,
+                FazaPotoku.EKSTRAKCJA,
+                numer,
+                liczba_pozycji,
+                f"Przetworzono {numer} z {liczba_pozycji} źródeł",
+            )
 
+        _zglos_postep(postep, FazaPotoku.DEDUPLIKACJA, 0, 1, "Deduplikacja źródeł")
         wykonanie.deduplikuj()
+        _zglos_postep(postep, FazaPotoku.DEDUPLIKACJA, 1, 1, "Deduplikacja zakończona")
+
+        _zglos_postep(postep, FazaPotoku.PAKOWANIE, 0, 1, "Pakowanie i zapis plików wynikowych")
         wykonanie.zapisz_pliki_wynikowe()
+        _zglos_postep(postep, FazaPotoku.PAKOWANIE, 1, 1, "Pliki wynikowe zapisane")
 
         checkpoint.zakonczony = True
         checkpoint.czas_ostatniej_zmiany = zegar().isoformat()
@@ -380,6 +418,7 @@ def przetworz_projekt(
         zapisz_raport(uklad.raport, zbuduj_raport(uklad.nazwa_projektu, podsumowanie))
         dziennik_wazny.zapisz(ZDARZENIE_PROJEKT_ZAKONCZONY)
         log.info("Projekt zakończony.")
+        _zglos_postep(postep, FazaPotoku.ZAKONCZENIE, 1, 1, "Projekt zakończony")
 
     return WynikPrzetwarzania(
         katalog_projektu=uklad.katalog_projektu,
@@ -1405,20 +1444,40 @@ def _pobierz_strony(
     checkpoint: Checkpoint,
     log: logging.Logger,
     transport: httpx.AsyncBaseTransport | None = None,
+    postep: WywolanieZwrotnePostepu | None = None,
 ) -> dict[str, WynikFazyPobrania]:
     """Pobiera wszystkie adresy z listy wejść i zwraca wyniki po identyfikatorze źródła.
 
     Adresy, które w checkpoincie mają już status końcowy, nie są pobierane
     ponownie. Powtórzony adres jest pobierany raz, bo jego identyfikator wynika
     z kanonicznej postaci adresu.
+
+    Postęp jest zgłaszany zgrubnie: jedno zdarzenie przed pobieraniem i jedno po
+    nim. Samo pobieranie jest tu najdłuższym odcinkiem pracy, więc zdarzenie
+    otwierające mówi użytkownikowi, że praca trwa, mimo braku zapisu do
+    checkpointu w tym czasie.
     """
     zadania = _zadania_do_pobrania(pozycje, checkpoint)
     if not zadania:
         return {}
 
     log.info("Faza pobrania: %d adresów do pobrania.", len(zadania))
+    _zglos_postep(
+        postep,
+        FazaPotoku.POBIERANIE_STRON,
+        0,
+        len(zadania),
+        f"Pobieranie {len(zadania)} adresów stron",
+    )
     wyniki = asyncio.run(
         _pobierz_asynchronicznie([zadanie for _, zadanie in zadania], konfiguracja, log, transport)
+    )
+    _zglos_postep(
+        postep,
+        FazaPotoku.POBIERANIE_STRON,
+        len(zadania),
+        len(zadania),
+        f"Pobrano {len(zadania)} adresów stron",
     )
     return {identyfikator: wynik for (identyfikator, _), wynik in zip(zadania, wyniki, strict=True)}
 
@@ -1430,6 +1489,7 @@ def _pobierz_filmy(
     log: logging.Logger,
     transport: httpx.AsyncBaseTransport | None = None,
     pobieracz_youtube: PobieraczYouTube | None = None,
+    postep: WywolanieZwrotnePostepu | None = None,
 ) -> dict[str, WynikFazyFilmu]:
     """Pobiera napisy wszystkich filmów z listy wejść i zwraca wyniki po identyfikatorze.
 
@@ -1437,6 +1497,9 @@ def _pobierz_filmy(
     sięgania do sieci, ze statusem pominięcia i powodem gotowym do pokazania
     użytkownikowi. Filmy przetworzone w poprzednim uruchomieniu nie są pobierane
     ponownie.
+
+    Postęp jest zgłaszany zgrubnie, jednym zdarzeniem przed pobieraniem napisów
+    i jednym po nim, tak samo jak dla pobierania stron.
     """
     wyniki: dict[str, WynikFazyFilmu] = {}
     do_pobrania: list[tuple[str, str, Zadanie]] = []
@@ -1477,12 +1540,26 @@ def _pobierz_filmy(
 
     if do_pobrania:
         log.info("Faza pobrania napisów: %d filmów do pobrania.", len(do_pobrania))
+        _zglos_postep(
+            postep,
+            FazaPotoku.POBIERANIE_NAPISOW,
+            0,
+            len(do_pobrania),
+            f"Pobieranie napisów {len(do_pobrania)} filmów",
+        )
         wyniki.update(
             asyncio.run(
                 _pobierz_filmy_asynchronicznie(
                     do_pobrania, konfiguracja, log, transport, pobieracz_youtube
                 )
             )
+        )
+        _zglos_postep(
+            postep,
+            FazaPotoku.POBIERANIE_NAPISOW,
+            len(do_pobrania),
+            len(do_pobrania),
+            f"Pobrano napisy {len(do_pobrania)} filmów",
         )
     return wyniki
 

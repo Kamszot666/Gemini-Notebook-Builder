@@ -87,6 +87,9 @@ from gnb.ingestion.wejscie import (
     czy_format_binarny,
     identyfikator_adresu,
     identyfikator_awaryjny,
+    przyjmij_plik,
+    przyjmij_tekst,
+    przyjmij_url,
     typ_zrodla_dla_formatu,
     waliduj_i_utworz_zrodlo,
     wczytaj_tresc_zrodla,
@@ -183,6 +186,7 @@ from gnb.persistence.checkpoint import (
     StanPobrania,
     StanWyniku,
     StanZrodla,
+    WejscieZapis,
     wczytaj,
     zapisz,
 )
@@ -320,6 +324,7 @@ def przetworz_projekt(
     istniejacy_checkpoint = wczytaj(uklad.checkpoint)
     wznowiono = istniejacy_checkpoint is not None
     checkpoint = istniejacy_checkpoint or _nowy_checkpoint(uklad, konfiguracja, zegar())
+    _zapamietaj_wejscia(checkpoint, pozycje)
 
     dziennik_wazny = DziennikWazny(uklad.logi / NAZWA_LOGU_WAZNEGO, zegar_lokalny)
     with DziennikSzczegolowy(
@@ -1739,6 +1744,68 @@ def _nowy_checkpoint(
         },
         czas_ostatniej_zmiany=moment.isoformat(),
     )
+
+
+def _zapamietaj_wejscia(checkpoint: Checkpoint, pozycje: Sequence[PozycjaWejsciowa]) -> None:
+    """Dopisuje wejścia bieżącego uruchomienia do listy wejść w checkpoincie.
+
+    Wejścia są rozróżniane po parze rodzaju i wartości, więc ponowne podanie tego
+    samego źródła w kolejnym uruchomieniu nie mnoży wpisów. Lista wejść pozwala
+    wznowić projekt bez ponownego podawania źródeł, czego wymaga sekcja
+    czternasta punkt trzeci CLAUDE.md, a z czego korzysta wznowienie z interfejsu
+    WWW.
+    """
+    widziane = {(wejscie.typ_wejscia, wejscie.wartosc) for wejscie in checkpoint.wejscia}
+    for pozycja in pozycje:
+        klucz = (pozycja.wejscie.typ_wejscia.value, pozycja.wejscie.wartosc)
+        if klucz in widziane:
+            continue
+        widziane.add(klucz)
+        checkpoint.wejscia.append(
+            WejscieZapis(
+                typ_wejscia=pozycja.wejscie.typ_wejscia.value,
+                wartosc=pozycja.wejscie.wartosc,
+                format_zrodla=pozycja.format_zrodla,
+                moment_dodania=pozycja.wejscie.moment_dodania.isoformat(),
+                grupa=pozycja.grupa,
+            )
+        )
+
+
+def odtworz_wejscia(checkpoint: Checkpoint, konfiguracja: Konfiguracja) -> list[PozycjaWejsciowa]:
+    """Odbudowuje pozycje wejściowe z listy wejść zapisanej w checkpoincie.
+
+    Używane przy wznowieniu projektu z interfejsu WWW: użytkownik nie podaje
+    źródeł ponownie, bo potok odtwarza je z checkpointu. Każde wejście wraca
+    przez tę samą funkcję przyjmującą, której użyto pierwotnie, więc identyfikator
+    źródła jest ten sam i etapy już ukończone nie są powtarzane. Moment dodania
+    jest ustawiany na chwilę wznowienia, ponieważ nie wpływa on na identyfikator
+    ani wejścia, ani źródła.
+    """
+    moment = datetime.now(UTC)
+    pozycje: list[PozycjaWejsciowa] = []
+    for wejscie in checkpoint.wejscia:
+        if wejscie.typ_wejscia == TypWejscia.URL.value:
+            pozycje.append(
+                przyjmij_url(
+                    wejscie.wartosc,
+                    moment,
+                    konfiguracja.dodatkowe_parametry_sledzace,
+                    grupa=wejscie.grupa,
+                )
+            )
+        elif wejscie.typ_wejscia == TypWejscia.PLIK.value:
+            pozycje.append(przyjmij_plik(Path(wejscie.wartosc), moment, grupa=wejscie.grupa))
+        elif wejscie.typ_wejscia == TypWejscia.TEKST.value:
+            pozycje.append(
+                przyjmij_tekst(
+                    wejscie.wartosc,
+                    moment,
+                    format_tekstu=wejscie.format_zrodla or "txt",
+                    grupa=wejscie.grupa,
+                )
+            )
+    return pozycje
 
 
 def _zbuduj_manifest(uklad: UkladProjektu, checkpoint: Checkpoint) -> Manifest:

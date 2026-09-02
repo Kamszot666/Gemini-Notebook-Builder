@@ -159,8 +159,39 @@ class StanDeduplikacji:
 
 
 @dataclass
+class WejscieZapis:
+    """Jedno wejście projektu zapamiętane w checkpoincie na potrzeby wznowienia.
+
+    Sekcja czternasta punkt trzeci CLAUDE.md wymaga, żeby checkpoint przechowywał
+    listę wejść. Wznowienie z interfejsu WWW odbudowuje z tych pól
+    ``PozycjaWejsciowa`` przez zwykłe funkcje przyjmujące wejście, więc użytkownik
+    nie musi podawać źródeł drugi raz.
+
+    Pole `wartosc` to adres, ścieżka pliku wysłanego do projektu albo treść
+    tekstu wklejonego, zależnie od `typ_wejscia`. Pole `format_zrodla` ma
+    znaczenie głównie dla tekstu wklejonego, gdzie rozróżnia ``txt`` i ``md``.
+
+    Pole zostało dodane z pustą listą jako wartością domyślną w kontrakcie
+    `Checkpoint`, więc plik zapisany wcześniejszą wersją aplikacji wczytuje się
+    bez zmiany numeru schematu, tak samo jak wcześniejsze pola addytywne.
+    """
+
+    typ_wejscia: str
+    wartosc: str
+    format_zrodla: str
+    moment_dodania: str
+    grupa: str | None = None
+
+
+@dataclass
 class Checkpoint:
-    """Pełny stan projektu pozwalający wznowić pracę bez powtarzania etapów."""
+    """Pełny stan projektu pozwalający wznowić pracę bez powtarzania etapów.
+
+    Pole `wejscia` niesie listę wejść projektu, po której wznowienie odtwarza
+    źródła bez pytania użytkownika. Jest polem addytywnym z pustą listą jako
+    wartością domyślną, więc plik starszej wersji wczytuje się bez zmiany numeru
+    schematu, dokładnie jak pola deduplikacji i pakowania z wcześniejszych etapów.
+    """
 
     wersja_schematu: int
     identyfikator_projektu: str
@@ -171,6 +202,7 @@ class Checkpoint:
     zrodla: dict[str, StanZrodla] = field(default_factory=dict)
     zakonczony: bool = False
     deduplikacja: StanDeduplikacji = field(default_factory=StanDeduplikacji)
+    wejscia: list[WejscieZapis] = field(default_factory=list)
 
 
 def zapisz(sciezka: Path, checkpoint: Checkpoint) -> None:
@@ -365,7 +397,18 @@ def _checkpoint_do_slownika(checkpoint: Checkpoint) -> dict[str, Any]:
         "czas_ostatniej_zmiany": checkpoint.czas_ostatniej_zmiany,
         "zakonczony": checkpoint.zakonczony,
         "deduplikacja": _deduplikacja_do_slownika(checkpoint.deduplikacja),
+        "wejscia": [_wejscie_do_slownika(wejscie) for wejscie in checkpoint.wejscia],
         "zrodla": {klucz: _stan_do_slownika(stan) for klucz, stan in checkpoint.zrodla.items()},
+    }
+
+
+def _wejscie_do_slownika(wejscie: WejscieZapis) -> dict[str, Any]:
+    return {
+        "typ_wejscia": wejscie.typ_wejscia,
+        "wartosc": wejscie.wartosc,
+        "format_zrodla": wejscie.format_zrodla,
+        "moment_dodania": wejscie.moment_dodania,
+        "grupa": wejscie.grupa,
     }
 
 
@@ -462,7 +505,38 @@ def _checkpoint_ze_slownika(dane: dict[str, Any]) -> Checkpoint:
         zrodla=zrodla,
         zakonczony=bool(dane.get("zakonczony", False)),
         deduplikacja=_deduplikacja_ze_slownika(dane.get("deduplikacja")),
+        wejscia=_wejscia_ze_slownika(dane.get("wejscia")),
     )
+
+
+def _wejscia_ze_slownika(dane: Any) -> list[WejscieZapis]:
+    """Odczytuje listę wejść. Jej brak jest poprawny dla plików starszej wersji.
+
+    Wpis o nieoczekiwanym kształcie oraz wpis bez rodzaju albo wartości jest
+    pomijany, a nie zgłaszany jako błąd: lista wejść służy wygodzie wznowienia,
+    a nie poprawności danych, więc jeden uszkodzony wpis nie może uniemożliwić
+    wczytania całego checkpointu.
+    """
+    if not isinstance(dane, list):
+        return []
+    wynik: list[WejscieZapis] = []
+    for element in dane:
+        if not isinstance(element, dict):
+            continue
+        typ_wejscia = element.get("typ_wejscia")
+        wartosc = element.get("wartosc")
+        if not isinstance(typ_wejscia, str) or not isinstance(wartosc, str):
+            continue
+        wynik.append(
+            WejscieZapis(
+                typ_wejscia=typ_wejscia,
+                wartosc=wartosc,
+                format_zrodla=str(element.get("format_zrodla", "")),
+                moment_dodania=str(element.get("moment_dodania", "")),
+                grupa=_opcjonalny_tekst(element.get("grupa")),
+            )
+        )
+    return wynik
 
 
 def _deduplikacja_ze_slownika(dane: Any) -> StanDeduplikacji:

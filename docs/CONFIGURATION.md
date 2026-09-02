@@ -42,11 +42,18 @@ Nazwa pola w pliku TOML, odpowiadająca zmienna środowiskowa oraz znaczenie:
 2. `limit_zrodel`, zmienna `GNB_LIMIT_ZRODEL`. Maksymalna liczba źródeł w jednym
    notatniku. Domyślnie 100, co odpowiada planowi Gemini Notebook Plus.
 3. `bezpieczny_limit_slow`, zmienna `GNB_BEZPIECZNY_LIMIT_SLOW`. Bezpieczny limit
-   liczby słów pojedynczego źródła. Domyślnie 480000. Margines wobec limitu
-   Google wynoszącego 500000 słów istnieje dlatego, że sposób liczenia słów po
-   stronie Google może różnić się od naszego.
+   liczby słów pojedynczego pliku wynikowego. Domyślnie 480000. Margines wobec
+   limitu Google wynoszącego 500000 słów istnieje dlatego, że sposób liczenia
+   słów po stronie Google może różnić się od naszego. Źródło przekraczające ten
+   limit nie jest pomijane: faza pakowania dzieli je na części na granicy
+   jednostki strukturalnej, nigdy w środku zdania.
 4. `bezpieczny_limit_mb`, zmienna `GNB_BEZPIECZNY_LIMIT_MB`. Bezpieczny limit
-   rozmiaru pojedynczego źródła w megabajtach. Domyślnie 190.
+   rozmiaru w megabajtach. Dotyczy jednocześnie pliku wynikowego, którego treść
+   przekraczająca ten limit jest dzielona na części, oraz surowego pliku
+   binarnego przy wejściu — plik PDF, DOCX albo EPUB tej wielkości jest pomijany,
+   bo nie da się go bezpiecznie wczytać do pamięci w całości. Domyślnie 190.
+   Dla plików tekstowych rozmiar surowego pliku nie jest ograniczeniem wejścia,
+   bo nadmiarową treścią zajmuje się podział.
 5. `formaty_wynikowe`, zmienna `GNB_FORMATY_WYNIKOWE`. Lista formatów plików
    wynikowych. Dozwolone wartości to `txt` i `md`. Format `txt` jest zawsze
    obecny, nawet gdy go nie wymienisz, bo plik TXT powstaje zawsze. Pozostawienie

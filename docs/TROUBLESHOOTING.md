@@ -18,6 +18,7 @@ ozdobników, a polecenia do wpisania są w osobnych blokach.
 6. Projekt z poprzedniej wersji aplikacji nie daje się wznowić.
 7. Źródło zniknęło z wyników jako duplikat, choć nie jest identyczne.
 8. Podkatalog wyników pośrednich został usunięty w trakcie pracy.
+9. Jedno źródło dało kilka plików z dopiskiem „czesc” w nazwie.
 
 ## 1. Windows blokuje plik wykonywalny narzędzia deweloperskiego
 
@@ -206,3 +207,22 @@ ponownie, pliki lokalne zostaną odczytane raz jeszcze. Źródła oznaczone już
 `blad` nie są ponawiane, więc jeśli status `blad` z tym komunikatem pojawił się
 przy dokończonym projekcie, przetwórz go pod nową nazwą. Najprościej: nie usuwaj
 podkatalogu `wyniki_posrednie` przed komunikatem „Projekt zakończony”.
+
+## 9. Jedno źródło dało kilka plików z dopiskiem „czesc” w nazwie
+
+Objaw. W katalogu `pliki_wynikowe` dla jednego materiału źródłowego powstało kilka
+plików, na przykład `raport_a1b2c3d4_czesc_1_z_3.txt`, `..._czesc_2_z_3.txt`
+i `..._czesc_3_z_3.txt`.
+
+Przyczyna. To jest zachowanie zamierzone. Znormalizowana treść źródła przekroczyła
+bezpieczny limit słów albo bezpieczny limit rozmiaru, więc faza pakowania
+podzieliła ją na części na granicy jednostki strukturalnej. Wcześniej takie
+źródło było pomijane w całości, co było cichą utratą treści.
+
+Co zrobić. Wgraj do notatnika wszystkie części. Każda ma w nagłówku metadanych
+wiersz „Część: N z M”, więc kolejność jest jednoznaczna. Jeżeli w raporcie
+końcowym, w sekcji „Materiały do sprawdzenia”, przy tym źródle jest ostrzeżenie
+podziału, obejrzyj styk części: znaczy to, że pojedyncze zdanie samo przekraczało
+limit i cięcie wypadło na granicy słowa. Jeżeli chcesz mniejszej liczby części,
+zwiększ `bezpieczny_limit_slow` w konfiguracji, pamiętając o marginesie wobec
+twardego limitu notatnika wynoszącego 500000 słów.

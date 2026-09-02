@@ -88,7 +88,7 @@ Poniższy blok zawiera komendy uruchamiania aplikacji, diagnostyki i testów. Te
 ```powershell
 python -m gnb.ui.server
 python -m gnb.cli diagnostyka
-python -m gnb.cli przetworz --projekt NAZWA --plik SCIEZKA --tekst TRESC --tekst-md TRESC --url ADRES --lista-url SCIEZKA
+python -m gnb.cli przetworz --projekt NAZWA --plik SCIEZKA --tekst TRESC --tekst-md TRESC --url ADRES --lista-url SCIEZKA --grupa NAZWA
 python -m gnb.cli przetworz --lista-url SCIEZKA --sprawdz-liste
 python -m gnb.cli pamiec
 python -m gnb.cli pamiec --wyczysc
@@ -109,7 +109,7 @@ Nie jest to obchodzenie zabezpieczenia w rozumieniu sekcji trzeciej. Ta zasada d
 Zasady dotyczące komend:
 
 1. `python -m gnb.cli diagnostyka` musi wypisać czytelny tekstowo raport o dostępności narzędzi zewnętrznych: FFmpeg, Tesseract, LibreOffice (`soffice`), MuseScore CLI (`mscore`), Java dla Audiveris. Dla każdego brakującego narzędzia podaj nazwę, do czego służy i co przestanie działać bez niego.
-2. `python -m gnb.cli przetworz` uruchamia potok przetwarzania dla tekstu wklejonego, plików TXT i MD, adresów stron internetowych oraz adresów filmów z serwisu YouTube, dla których pobierane są napisy. Opcje `--plik`, `--tekst`, `--tekst-md`, `--url` i `--lista-url` można podawać wielokrotnie, `--projekt` i `--katalog` są opcjonalne. Wyjście jest czytelne liniowo, bez pasków postępu i znaków sterujących, i kończy się jednym zdaniem podsumowania: ile źródeł przetworzono, ile pominięto i w którym katalogu są wyniki. Kod wyjścia zero oznacza wykonany potok, kod dwa brak podanych źródeł. Zakres formatów obsługiwanych przez to polecenie rośnie w kolejnych etapach.
+2. `python -m gnb.cli przetworz` uruchamia potok przetwarzania dla tekstu wklejonego, plików TXT i MD, adresów stron internetowych oraz adresów filmów z serwisu YouTube, dla których pobierane są napisy. Opcje `--plik`, `--tekst`, `--tekst-md`, `--url` i `--lista-url` można podawać wielokrotnie, `--projekt`, `--katalog` i `--grupa` są opcjonalne. Opcja `--grupa NAZWA` przypisuje wszystkie źródła jednego wywołania do wspólnej grupy tematycznej pakowania, w której małe źródła są łączone w jeden plik wynikowy; kolejną grupę w tym samym projekcie dodaje się osobnym wywołaniem, bo checkpoint kumuluje źródła między uruchomieniami. Wyjście jest czytelne liniowo, bez pasków postępu i znaków sterujących, i kończy się jednym zdaniem podsumowania: ile źródeł przetworzono, ile pominięto i w którym katalogu są wyniki. Kod wyjścia zero oznacza wykonany potok, kod dwa brak podanych źródeł. Zakres formatów obsługiwanych przez to polecenie rośnie w kolejnych etapach.
 3. Zanim cokolwiek zostanie pobrane, polecenie `przetworz` wypisuje podsumowanie listy adresów: liczbę wykrytych, poprawnych, duplikatów oraz odrzuconych wraz z powodem odrzucenia. Opcja `--sprawdz-liste` kończy pracę zaraz po tym podsumowaniu, bez pobierania. Kod wyjścia jest wtedy zerowy także wtedy, gdy część wpisów jest błędna, bo wykrycie błędnych wpisów jest zamierzonym wynikiem sprawdzenia. Kod niezerowy oznacza wyłącznie to, że pliku listy nie dało się odczytać.
 4. `python -m gnb.cli pamiec` pokazuje ścieżkę wspólnej pamięci podręcznej pobranych stron, informację o jej włączeniu, maksymalny wiek wpisu oraz liczbę zapamiętanych zasobów. Opcja `--wyczysc` usuwa całą jej zawartość. Pamięć podręczna jest wspólna dla wszystkich projektów i leży w katalogu danych aplikacji, obok pliku konfiguracji.
 5. Testy domyślnie nie korzystają z sieci. Testy sieciowe oznaczaj markerem `siec`, testy długotrwałe markerem `wolne`. Oba są domyślnie wyłączone.
@@ -417,7 +417,7 @@ Realizuj etapami. Nie zaczynaj kolejnego, zanim poprzedni nie ma testów i nie d
 5. Etap czwarty A: metadane strukturalne z danych JSON-LD, ocena jakości ekstrakcji, nagłówek metadanych w plikach wynikowych. Ukończony, scalony pull requestami 10 i 11.
 6. Etap czwarty: dokumenty, czyli PDF tekstowy, DOCX, HTML, EPUB, CSV, SRT i VTT.
 7. Etap piąty: deduplikacja wielopoziomowa wraz z audytem. Ukończony, scalony pull requestem 16.
-8. Etap szósty: pakowanie, grupowanie tematyczne, podział według trzech limitów.
+8. Etap szósty: pakowanie, grupowanie tematyczne, podział według trzech limitów. Ukończony, scalony pull requestem 18.
 9. Etap siódmy: dostępny interfejs WWW z postępem, wznowieniem, polem instrukcji systemowej i polem promptu wyszukiwania.
 10. Etap ósmy: obrazy, OCR, PDF skanowany, tematyczne PDF z opisami.
 11. Etap dziewiąty: audio, wykrywanie mowy, transkrypcja nagrań mowy, odrzucanie materiału muzycznego.

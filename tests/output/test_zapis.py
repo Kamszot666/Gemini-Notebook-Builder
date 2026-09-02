@@ -7,7 +7,7 @@ from pathlib import Path
 from gnb.core.model import DokumentZnormalizowany
 from gnb.core.stale import FormatWynikowy
 from gnb.output.regula_md import DecyzjaFormatu
-from gnb.output.zapis import zapisz_wyniki
+from gnb.output.zapis import zapisz_plik_pakietu, zapisz_wyniki
 
 _DOKUMENT = DokumentZnormalizowany(
     identyfikator_zrodla="plik_tekstowy-1",
@@ -80,3 +80,31 @@ def test_liczba_znakow_pliku_jest_wieksza_o_koncowy_znak_nowej_linii(tmp_path: P
     assert wynik.liczba_znakow == len(tresc)
     assert wynik.liczba_znakow == len(_DOKUMENT.tekst) + 1
     assert wynik.liczba_slow == _DOKUMENT.liczba_slow
+
+
+def test_zapisz_plik_pakietu_pisze_txt_bez_bom_z_koncem_lf_i_liczy_zawartosc(
+    tmp_path: Path,
+) -> None:
+    tresc = (
+        "Tytuł: A\n\nPierwsza treść.\n\nKolejny fragment tego pliku:\n\nTytuł: B\n\nDruga treść."
+    )
+    wynik = zapisz_plik_pakietu(
+        tmp_path, "grupa_temat_abcd1234", tresc, ["plik_tekstowy-1", "plik_tekstowy-2"]
+    )
+
+    dane = (tmp_path / "grupa_temat_abcd1234.txt").read_bytes()
+    assert not dane.startswith(b"\xef\xbb\xbf")
+    assert b"\r\n" not in dane
+    assert dane.endswith(b"\n")
+    assert wynik.format == FormatWynikowy.TXT
+    assert wynik.identyfikatory_zrodel == ["plik_tekstowy-1", "plik_tekstowy-2"]
+    assert wynik.rozmiar_bajtow == len(dane)
+    assert wynik.liczba_slow == len(dane.decode("utf-8").split())
+    assert len(wynik.checksum) == 64
+
+
+def test_zapisz_plik_pakietu_nie_tworzy_pliku_md(tmp_path: Path) -> None:
+    zapisz_plik_pakietu(tmp_path, "czesc", "Tytuł: A\nCzęść: 1 z 2\n\nTreść.", ["plik_dokument-1"])
+
+    assert (tmp_path / "czesc.txt").exists()
+    assert not (tmp_path / "czesc.md").exists()

@@ -47,6 +47,9 @@ ZDARZENIE_NAPISY_WYBRANE = "Napisy wybrane"
 ZDARZENIE_NAPISY_INNY_JEZYK = "Uwaga, napisy w innym języku niż preferowane"
 ZDARZENIE_JAKOSC_PODEJRZANA = "Uwaga, podejrzany wynik ekstrakcji"
 ZDARZENIE_OSTRZEZENIE_EKSTRAKCJI = "Uwaga, ostrzeżenie ekstraktora"
+ZDARZENIE_ZRODLO_PODZIELONE = "Źródło podzielone na części"
+ZDARZENIE_GRUPA_SPAKOWANA = "Grupa źródeł spakowana do wspólnego pliku"
+ZDARZENIE_OSTRZEZENIE_PODZIALU = "Uwaga, kompromis przy podziale źródła"
 
 _FORMAT_LOGU_SZCZEGOLOWEGO = (
     "%(asctime)s|%(levelname)s|%(name)s|%(identyfikator_zrodla)s|%(message)s"

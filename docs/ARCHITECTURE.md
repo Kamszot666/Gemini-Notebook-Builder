@@ -1,14 +1,14 @@
-# Architektura — stan po etapie piątym
+# Architektura — stan po etapie szóstym
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
-zakończeniu etapu piątego. Pełny docelowy podział na pakiety opisuje sekcja
+zakończeniu etapu szóstego. Pełny docelowy podział na pakiety opisuje sekcja
 szósta `CLAUDE.md`.
 
 ## Potok przetwarzania
 
 Punkt wejścia to funkcja `przetworz_projekt` w `gnb/potok.py`. Uruchamia ona
 etapy w stałej kolejności z sekcji ósmej `CLAUDE.md`, w części obsługiwanej przez
-etapy od pierwszego do piątego:
+etapy od pierwszego do szóstego:
 
 1. Wejście i walidacja — `gnb/ingestion/wejscie.py`, `gnb/ingestion/lista_url.py`.
 2. Pobranie stron i napisów oraz import treści i wykrycie kodowania —
@@ -19,14 +19,18 @@ etapy od pierwszego do piątego:
    `gnb/core/liczenie_slow.py`.
 5. Klasyfikacja TXT kontra MD — `gnb/output/regula_md.py`.
 6. Deduplikacja — `gnb/deduplication/`.
-7. Zapis plików wynikowych — `gnb/output/zapis.py`.
-8. Manifest — `gnb/output/manifest.py`.
-9. Checkpoint — `gnb/persistence/checkpoint.py`.
-10. Raport końcowy — `gnb/output/raport.py`.
+7. Pakowanie: podział źródeł zbyt dużych i łączenie małych źródeł grup —
+   `gnb/packing/`.
+8. Zapis plików wynikowych — `gnb/output/zapis.py`, `gnb/output/skladanie.py`.
+9. Manifest — `gnb/output/manifest.py`.
+10. Checkpoint — `gnb/persistence/checkpoint.py`.
+11. Raport końcowy — `gnb/output/raport.py`.
 
-Etapy kondensacji i grupowania tematycznego są pominięte, ale ich miejsce
-w kolejności jest zachowane. Jedno uszkodzone wejście nie zatrzymuje pozostałych;
-kończy się kontrolowanym błędem zapisanym w logu, manifeście i raporcie.
+Etap kondensacji jest pominięty, ale jego miejsce w kolejności jest zachowane.
+Grupowanie tematyczne działa wyłącznie według jawnej nazwy grupy nadanej przez
+użytkownika; bez nazwy każde źródło dostaje własny plik. Jedno uszkodzone wejście
+nie zatrzymuje pozostałych; kończy się kontrolowanym błędem zapisanym w logu,
+manifeście i raporcie.
 
 ### Podział na fazy przez deduplikację
 
@@ -42,11 +46,18 @@ fazy w `_Wykonanie`:
    i wpisuje do materiałów do sprawdzenia. Decyzje trafiają do checkpointu,
    manifestu i raportu. Faza wykonuje się raz, co zapisuje znacznik
    `deduplikacja.wykonana` w checkpoincie.
-3. Faza zapisu — dla każdego źródła, które przeżyło deduplikację, powstają pliki
-   wynikowe TXT i warunkowo MD, a status zmienia się na `spakowane`.
+3. Faza pakowania i zapisu — dla każdego źródła, które przeżyło deduplikację:
+   źródło mieszczące się w limicie i bez nazwy grupy dostaje jeden plik TXT
+   i warunkowo MD; źródło przekraczające bezpieczny limit słów albo rozmiaru
+   jest dzielone na ponumerowane części, każdą w osobnym pliku TXT; źródła z tą
+   samą nazwą grupy są łączone w możliwie najmniej wspólnych plików TXT,
+   z nagłówkiem metadanych przed treścią każdego fragmentu. Po zapisaniu status
+   źródła zmienia się na `spakowane`. Grupa dostaje ten status jednym zapisem
+   checkpointu, więc przerwanie w połowie planuje ją od nowa.
 
 Ten podział jest też podziałem wznowienia: przerwanie w trakcie deduplikacji albo
-zapisu nie wymaga ponownej ekstrakcji, bo znormalizowany tekst jest już na dysku.
+pakowania nie wymaga ponownej ekstrakcji, bo znormalizowany tekst jest już na
+dysku.
 
 Pobranie adresów oraz pobranie napisów są osobnymi fazami, wykonywanymi przed
 pętlą po źródłach. Strony pobierają się równolegle, a filmy po kolei, ponieważ
@@ -156,18 +167,26 @@ pliku wynikowego.
 
 - `gnb/output/regula_md.py` — deterministyczna reguła wyboru między TXT a MD.
 - `gnb/output/zapis.py` — zapis TXT zawsze, MD warunkowo, w UTF-8 bez BOM z LF.
+  Funkcja `zapisz_plik_pakietu` zapisuje gotowy plik części albo pliku grupy,
+  zawsze wyłącznie w formacie TXT.
+- `gnb/output/skladanie.py` — składanie treści jednego pliku z fragmentów wraz
+  z nagłówkiem metadanych przed każdym oraz z wierszem „Kolejny fragment tego
+  pliku:” między nimi.
 - `gnb/output/tekst_bez_znacznikow.py` — przepisanie Markdown na czysty tekst
   z zachowaną strukturą, używane do wersji TXT źródeł markdownowych.
 - `gnb/output/manifest.py` — `manifest.json` jako źródło prawdy i `manifest.txt`
-  jako czytelny widok.
+  jako czytelny widok. Plik grupy jest w manifeście liczony raz, a jego wpis
+  wymienia wszystkie źródła w nim zawarte.
 - `gnb/output/ocena_jakosci.py` — heurystyczna ocena jakości ekstrakcji dla
   źródeł rozpoznawanych: stron, filmów, PDF, DOCX, EPUB i HTML lokalnego.
   Zwraca ocenę wraz z listą powodów i nigdy nie usuwa źródła.
 - `gnb/output/raport.py` — raport końcowy jako zwykły tekst, wraz z wykazem
   źródeł pominiętych i błędnych oraz powodem każdego z nich, a także z sekcją
   „Materiały do sprawdzenia” dla źródeł o podejrzanym wyniku ekstrakcji, źródeł
-  z ostrzeżeniem ekstraktora oraz źródeł, które deduplikacja uznała za możliwy
-  duplikat i zostawiła do rozstrzygnięcia.
+  z ostrzeżeniem ekstraktora, źródeł z ostrzeżeniem podziału oraz źródeł, które
+  deduplikacja uznała za możliwy duplikat i zostawiła do rozstrzygnięcia.
+  Wykorzystanie limitu źródeł jest liczone po plikach wynikowych, bo to one
+  zajmują sloty notatnika, a nie po odrębnych materiałach źródłowych.
 
 ## Pakiet gnb.deduplication
 
@@ -190,6 +209,34 @@ identyfikatorów, więc wynik jest powtarzalny między uruchomieniami.
   piątego. Pole zachowanych fragmentów unikalnych w tym zakresie pozostaje puste,
   co wyjaśnia sekcja osiemnasta e `CLAUDE.md`.
 
+## Pakiet gnb.packing
+
+Podział źródeł zbyt dużych i łączenie małych źródeł grup, zawsze po deduplikacji.
+Pakiet nie dotyka dysku ani nie buduje nagłówków metadanych — decyduje wyłącznie,
+które źródła trafią do którego pliku i w jakiej postaci treści.
+
+- `gnb/packing/limity.py` — dwa limity treści traktowane niezależnie: liczba słów
+  liczona wspólną definicją z `gnb/core/liczenie_slow.py` oraz rozmiar w bajtach
+  kodowania UTF-8. Trzecie ograniczenie z sekcji dziewiątej `CLAUDE.md`, liczba
+  źródeł, dotyczy całego notatnika i jest pilnowane w potoku.
+- `gnb/packing/podzial.py` — podział jednej treści przekraczającej limit na
+  możliwie najmniejszą liczbę części. Granica podziału wypada jak najwyżej
+  w hierarchii: blok rozdzielony pustym wierszem, potem wiersz, potem zdanie,
+  a w ostateczności granica słowa. Cięcie na granicy słowa, czyli wewnątrz
+  zdania, dokłada ostrzeżenie kierowane do manifestu i raportu. Liczniki słów
+  i bajtów są sumowane przyrostowo, więc podział źródła o setkach tysięcy słów
+  bez akapitów nie ma złożoności kwadratowej.
+- `gnb/packing/pakowanie.py` — planowanie plików grupy: źródło samo przekraczające
+  limit trafia do własnych plików-części, pozostałe są dokładane po kolei do
+  bieżącego pliku grupy, a przekroczenie któregokolwiek limitu zamyka plik
+  i otwiera następny, numerowany jak część.
+
+Kryterium grupowania w tym etapie to jawne przypisanie przez użytkownika. Bez
+embeddingów i bez interfejsu żadne automatyczne kryterium tematyczne nie jest
+dostępne, a łączenie po samym typie źródła byłoby łączeniem przypadkowym,
+zakazanym w sekcji dziesiątej `CLAUDE.md`. Przypisanie per źródło z interfejsu
+jest zadaniem etapu siódmego.
+
 ## Pakiet gnb.persistence
 
 - `gnb/persistence/projekt.py` — układ katalogów projektu, z nazwą katalogu
@@ -207,9 +254,11 @@ identyfikatorów, więc wynik jest powtarzalny między uruchomieniami.
   więc katalog projektu założony poprzednią wersją aplikacji nadal daje się
   wznowić. Plik w wersji nowszej niż obsługiwana, plik bez numeru wersji oraz plik
   bez spodziewanego pola kończą się błędem trwałym z komunikatem po polsku,
-  a nie surowym śladem stosu. Stan deduplikacji, nagłówek metadanych źródła oraz
-  wskazanie źródła głównego duplikatu są polami addytywnymi z bezpieczną wartością
-  domyślną, więc plik starszej wersji wczytuje się bez zmiany numeru schematu.
+  a nie surowym śladem stosu. Stan deduplikacji, nagłówek metadanych źródła,
+  wskazanie źródła głównego duplikatu, nazwa grupy pakowania, ostrzeżenia
+  podziału oraz numer i liczba części pliku wynikowego są polami addytywnymi
+  z bezpieczną wartością domyślną, więc plik starszej wersji wczytuje się bez
+  zmiany numeru schematu.
 
 ## Pakiet gnb.logging_pl
 
@@ -223,16 +272,20 @@ identyfikatorów, więc wynik jest powtarzalny między uruchomieniami.
 ## Wiersz poleceń
 
 `gnb/cli.py` udostępnia trzy polecenia. `diagnostyka` sprawdza narzędzia
-zewnętrzne. `przetworz` uruchamia potok dla tekstu wklejonego, plików TXT i MD
-oraz adresów stron, z opcjami `--projekt`, `--plik`, `--tekst`, `--tekst-md`,
-`--url`, `--lista-url`, `--sprawdz-liste` i `--katalog`. `pamiec` pokazuje stan
-wspólnej pamięci podręcznej i pozwala ją wyczyścić.
+zewnętrzne. `przetworz` uruchamia potok dla tekstu wklejonego, plików w formatach
+etapów pierwszego do czwartego oraz adresów stron i filmów, z opcjami
+`--projekt`, `--plik`, `--tekst`, `--tekst-md`, `--url`, `--lista-url`,
+`--sprawdz-liste`, `--katalog` oraz `--grupa`. Opcja `--grupa` przypisuje
+wszystkie źródła jednego wywołania do wspólnej grupy tematycznej pakowania;
+kolejną grupę w tym samym projekcie dodaje się osobnym wywołaniem, bo checkpoint
+kumuluje źródła między uruchomieniami. `pamiec` pokazuje stan wspólnej pamięci
+podręcznej i pozwala ją wyczyścić.
 
 ## Pozostałe pakiety
 
-Pakiety `gnb.packing`, `gnb.documents`, `gnb.audio`, `gnb.images`, `gnb.music`,
-`gnb.ui`, `gnb.hotkeys` istnieją jako puste, importowalne pakiety z docstringiem.
-Logika powstanie w kolejnych etapach.
+Pakiety `gnb.documents`, `gnb.audio`, `gnb.images`, `gnb.music`, `gnb.ui`,
+`gnb.hotkeys` istnieją jako puste, importowalne pakiety z docstringiem. Logika
+powstanie w kolejnych etapach.
 
 ## Testy
 
@@ -255,6 +308,15 @@ podobieństwie zostaje w całości wraz z akapitem unikalnym i trafia do materia
 do sprawdzenia, wznowienie nie zmienia decyzji ani plików, a wyłączenie wszystkich
 etapów w konfiguracji realnie zatrzymuje deduplikację. Testy pakietu
 `gnb.deduplication` są w `tests/deduplication/`.
+
+Test `tests/test_potok_pakowanie_e2e.py` przeprowadza pełny przebieg dla
+pakowania: małe źródła jednej grupy łączą się w jeden plik bez utraty treści
+i z nagłówkiem przed każdym fragmentem, grupa zbyt liczna dzieli się na kolejne
+pliki, wznowienie nie zmienia plików, a źródło bez grupy zostaje osobno obok
+grupy. Test `tests/test_potok_e2e.py` sprawdza dodatkowo, że źródło przekraczające
+bezpieczny limit słów jest dzielone na ponumerowane części zamiast pomijane oraz
+że duży plik binarny nadal jest odrzucany przy wejściu. Testy pakietu
+`gnb.packing` są w `tests/packing/`.
 
 Testy są zbierane w trybie importu `importlib`, ustawionym w `pyproject.toml`.
 Dzięki temu pliki testowe o tej samej nazwie mogą leżeć w różnych katalogach,

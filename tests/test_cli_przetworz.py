@@ -153,3 +153,33 @@ def test_polecenie_pamiec_czysci_zawartosc(
 
     assert main(["pamiec", "--wyczysc"]) == 0
     assert "Usunięto wpisów: 0." in capsys.readouterr().out
+
+
+def test_przetworz_z_grupa_laczy_zrodla_w_jeden_plik(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GNB_KATALOG_WYNIKOW", str(tmp_path))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+
+    kod = main(
+        [
+            "przetworz",
+            "--projekt",
+            "Test grupy CLI",
+            "--grupa",
+            "Notatki podatkowe",
+            "--tekst",
+            "Pierwsza notatka o rozliczeniu rocznym.",
+            "--tekst",
+            "Druga notatka o zaliczkach kwartalnych.",
+        ]
+    )
+
+    assert kod == 0
+    capsys.readouterr()
+    pliki_txt = list((tmp_path / "Test grupy CLI" / "pliki_wynikowe").glob("*.txt"))
+    assert len(pliki_txt) == 1
+    tresc = pliki_txt[0].read_text(encoding="utf-8")
+    assert "Pierwsza notatka o rozliczeniu rocznym." in tresc
+    assert "Druga notatka o zaliczkach kwartalnych." in tresc
+    assert tresc.count("Identyfikator źródła: ") == 2

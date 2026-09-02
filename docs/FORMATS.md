@@ -515,6 +515,7 @@ pól jest stała:
 10. Rodzaj napisów, wyłącznie dla filmu z pobranymi napisami.
 11. Data importu, w czasie lokalnym.
 12. Identyfikator źródła.
+13. Część, wyłącznie dla źródła podzielonego, w postaci „2 z 3”.
 
 Pole nieobecne dla danego źródła jest pomijane w całości, a nie drukowane z pustą
 wartością. Pola „Adres” i „Plik” wykluczają się wzajemnie, a tekst wklejony nie ma
@@ -525,6 +526,59 @@ ozdobnych ani separatorów ze znaków. Do wersji MD trafia w identycznej postaci
 zwykłego tekstu, bez składni Markdown, ponieważ są to metadane strukturalne,
 a nie treść artykułu, i nie mogą stać się nagłówkiem sekcji ani trafić do
 automatycznego spisu treści notatnika.
+
+## Pakowanie i podział plików wynikowych
+
+Po deduplikacji, a przed zapisem, działa faza pakowania. Rozstrzyga ona, ile
+plików wynikowych powstanie i które źródła trafią do którego pliku, z poszanowaniem
+trzech niezależnych limitów notatnika: liczby źródeł, liczby słów w pliku oraz
+rozmiaru pliku w bajtach.
+
+### Podział źródła zbyt dużego
+
+Źródło, którego znormalizowana treść przekracza bezpieczny limit słów albo
+bezpieczny limit rozmiaru, nie jest pomijane. Jest dzielone na możliwie
+najmniejszą liczbę części, każda w osobnym pliku TXT. Granica podziału wypada jak
+najwyżej w hierarchii: najpierw na granicy akapitu, czyli pustego wiersza, potem
+na granicy wiersza, potem na granicy zdania, a dopiero w ostateczności na granicy
+słowa. Cięcie na granicy słowa oznacza cięcie wewnątrz zdania i dokłada
+ostrzeżenie, które trafia do manifestu oraz do sekcji „Materiały do sprawdzenia”
+w raporcie.
+
+Każda część zachowuje ten sam identyfikator źródła i dostaje w nagłówku
+metadanych wiersz „Część: N z M”. Nazwa pliku części to nazwa źródła z dopiskiem
+`_czesc_N_z_M`, na przykład `raport_roczny_a1b2c3d4_czesc_2_z_3.txt`. Numer części
+jest uzupełniany zerami do szerokości liczby wszystkich części, więc części
+sortują się w katalogu w naturalnej kolejności także wtedy, gdy jest ich więcej
+niż dziewięć.
+
+### Łączenie małych źródeł jednej grupy
+
+Małe źródła można łączyć w jeden plik, żeby oszczędzać sloty notatnika. Łączenie
+następuje wyłącznie w obrębie grupy tematycznej nadanej przez użytkownika, nigdy
+przypadkowo. W wierszu poleceń grupę nadaje opcja `--grupa NAZWA`, wspólna dla
+wszystkich źródeł jednego wywołania `przetworz`. Kolejną grupę w tym samym
+projekcie dodaje się osobnym wywołaniem: checkpoint kumuluje źródła między
+uruchomieniami. Źródło bez nazwy grupy dostaje własny plik, dokładnie jak przed
+tym etapem.
+
+W pliku grupy przed treścią każdego fragmentu stoi jego nagłówek metadanych,
+a fragmenty rozdziela wiersz „Kolejny fragment tego pliku:”. Gdy skład grupy nie
+mieści się w jednym pliku, powstaje kilka plików grupy, numerowanych jak części,
+a każdy zaczyna się wierszem „Plik grupy „NAZWA”, część N z M.”. Źródło należące
+do grupy, ale samo przekraczające limit, jest dzielone na własne pliki-części
+i nie jest łączone z pozostałymi.
+
+Pliki części i pliki grupy powstają wyłącznie w formacie TXT. Fragment ani
+kompilacja kilku źródeł nie są jednym dokumentem, więc gwarancja wiernej struktury
+Markdown by tu nie obowiązywała. Decyzja jest zapisana w manifeście.
+
+### Limit liczby źródeł
+
+Limit liczby źródeł notatnika dotyczy plików do wgrania, a nie odrębnych
+materiałów źródłowych. Jedno źródło podzielone na trzy części zajmuje trzy sloty,
+a plik grupy łączący pięć źródeł zajmuje jeden. Raport końcowy liczy wykorzystanie
+limitu po liczbie plików TXT.
 
 ## Metadane z danych strukturalnych strony
 

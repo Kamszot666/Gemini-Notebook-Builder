@@ -8,6 +8,7 @@ from gnb.core.stale import TypZrodla
 from gnb.output.naglowek_metadanych import (
     ETYKIETA_ADRES,
     ETYKIETA_AUTOR,
+    ETYKIETA_CZESC,
     ETYKIETA_DATA_IMPORTU,
     ETYKIETA_IDENTYFIKATOR,
     ETYKIETA_PLIK,
@@ -17,6 +18,7 @@ from gnb.output.naglowek_metadanych import (
     opis_dlugosci,
     opis_typu_zrodla,
     polacz_z_trescia,
+    z_oznaczeniem_czesci,
     zbuduj_naglowek,
 )
 
@@ -128,3 +130,19 @@ def test_typ_zrodla_ma_nazwe_zrozumiala_bez_znajomosci_kodu(
     typ: TypZrodla, oczekiwane: str
 ) -> None:
     assert opis_typu_zrodla(typ) == oczekiwane
+
+
+def test_z_oznaczeniem_czesci_dokleja_wiersz_czesci_na_koncu_naglowka() -> None:
+    naglowek = "Tytuł: Duży dokument\nIdentyfikator źródła: plik_dokument-1"
+    wynik = z_oznaczeniem_czesci(naglowek, 2, 3)
+
+    assert wynik == ("Tytuł: Duży dokument\nIdentyfikator źródła: plik_dokument-1\nCzęść: 2 z 3")
+    assert wynik.splitlines()[-1] == f"{ETYKIETA_CZESC}: 2 z 3"
+
+
+def test_z_oznaczeniem_czesci_dla_pustego_naglowka_daje_sam_wiersz_czesci() -> None:
+    assert z_oznaczeniem_czesci("", 1, 4) == "Część: 1 z 4"
+
+
+def test_pole_czesci_jest_ostatnie_w_stalej_kolejnosci() -> None:
+    assert KOLEJNOSC_POL[-1] == ETYKIETA_CZESC

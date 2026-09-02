@@ -6,6 +6,8 @@ import pytest
 
 from gnb.core.nazwy import (
     bezpieczna_nazwa_pliku,
+    nazwa_pliku_czesci,
+    nazwa_pliku_grupy,
     nazwa_pliku_wynikowego,
     sanityzuj_nazwe_projektu,
     wygeneruj_nazwe_projektu,
@@ -116,3 +118,29 @@ def test_ciag_znakow_niedozwolonych_nie_daje_ciagu_podkreslen() -> None:
     assert "__" not in nazwa
     assert not nazwa.startswith("_")
     assert not nazwa.endswith("_")
+
+
+def test_nazwa_pliku_czesci_dokleja_oznaczenie_bez_uzupelniania_zerami_dla_malej_liczby() -> None:
+    assert nazwa_pliku_czesci("raport_12345678", 2, 3) == "raport_12345678_czesc_2_z_3"
+
+
+def test_nazwa_pliku_czesci_uzupelnia_zerami_do_szerokosci_liczby_wszystkich_czesci() -> None:
+    assert nazwa_pliku_czesci("raport_12345678", 2, 12) == "raport_12345678_czesc_02_z_12"
+    assert nazwa_pliku_czesci("raport_12345678", 11, 12) == "raport_12345678_czesc_11_z_12"
+
+
+def test_nazwa_pliku_grupy_jest_stabilna_i_zalezy_od_skladu() -> None:
+    a = nazwa_pliku_grupy("Podatki 2026", ["plik_tekstowy-b", "plik_tekstowy-a"])
+    b = nazwa_pliku_grupy("Podatki 2026", ["plik_tekstowy-a", "plik_tekstowy-b"])
+    inny_sklad = nazwa_pliku_grupy("Podatki 2026", ["plik_tekstowy-a", "plik_tekstowy-c"])
+
+    assert a == b
+    assert a.startswith("podatki_2026_")
+    assert a != inny_sklad
+    assert "__" not in a
+
+
+def test_nazwa_pliku_grupy_z_pusta_nazwa_uzywa_czlonu_awaryjnego() -> None:
+    nazwa = nazwa_pliku_grupy("///", ["plik_tekstowy-a"])
+
+    assert nazwa.startswith("grupa_")

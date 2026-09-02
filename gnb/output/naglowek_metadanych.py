@@ -44,6 +44,7 @@ ETYKIETA_JEZYK_NAPISOW = "Język napisów"
 ETYKIETA_RODZAJ_NAPISOW = "Rodzaj napisów"
 ETYKIETA_DATA_IMPORTU = "Data importu"
 ETYKIETA_IDENTYFIKATOR = "Identyfikator źródła"
+ETYKIETA_CZESC = "Część"
 
 # Stała kolejność pól nagłówka. Pole spoza tej listy nie trafia do wyniku, żeby
 # układ nagłówka był przewidywalny przy odsłuchu czytnikiem ekranu.
@@ -60,6 +61,7 @@ KOLEJNOSC_POL: tuple[str, ...] = (
     ETYKIETA_RODZAJ_NAPISOW,
     ETYKIETA_DATA_IMPORTU,
     ETYKIETA_IDENTYFIKATOR,
+    ETYKIETA_CZESC,
 )
 
 # Nazwy typów źródła w postaci zrozumiałej bez znajomości kodu.
@@ -99,6 +101,17 @@ def polacz_z_trescia(naglowek: str, tresc: str) -> str:
     if not tresc:
         return naglowek
     return f"{naglowek}\n\n{tresc}"
+
+
+def z_oznaczeniem_czesci(naglowek: str, numer_czesci: int, liczba_czesci: int) -> str:
+    """Dokłada do nagłówka wiersz „Część: N z M” dla źródła podzielonego na części.
+
+    Pole części jest ostatnie w stałej kolejności pól nagłówka, więc dopisanie go
+    na końcu zachowuje przewidywalny układ przy odsłuchu czytnikiem ekranu.
+    Nagłówek pusty daje sam ten wiersz.
+    """
+    wiersz = f"{ETYKIETA_CZESC}: {numer_czesci} z {liczba_czesci}"
+    return wiersz if not naglowek else f"{naglowek}\n{wiersz}"
 
 
 def opis_typu_zrodla(typ: TypZrodla) -> str:

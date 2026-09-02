@@ -48,11 +48,13 @@ class ZrodloNieprzetworzone:
 class MaterialDoSprawdzenia:
     """Źródło zapisane poprawnie, przy którym coś wymaga obejrzenia przez człowieka.
 
-    Dwie listy są rozdzielone celowo, bo mówią o różnych rzeczach. Pole `powody`
+    Listy są rozdzielone celowo, bo mówią o różnych rzeczach. Pole `powody`
     niesie wynik heurystycznej oceny jakości, czyli przypuszczenie. Pole
     `ostrzezenia` niesie to, co ekstraktor stwierdził wprost, na przykład brak
-    warstwy tekstowej w pliku PDF. Zlanie ich w jedną listę kazałoby użytkownikowi
-    zgadywać, które zdanie jest faktem, a które podejrzeniem.
+    warstwy tekstowej w pliku PDF. Pole `ostrzezenia_pakowania` niesie kompromisy
+    podziału źródła zbyt dużego, na przykład cięcie wewnątrz zdania. Zlanie ich
+    w jedną listę kazałoby użytkownikowi zgadywać, które zdanie jest faktem,
+    a które podejrzeniem.
     """
 
     identyfikator: str
@@ -60,6 +62,7 @@ class MaterialDoSprawdzenia:
     powody: tuple[str, ...] = ()
     ostrzezenia: tuple[str, ...] = ()
     mozliwe_duplikaty: tuple[str, ...] = ()
+    ostrzezenia_pakowania: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,8 +89,11 @@ class PodsumowanieProjektu:
 
 def zbuduj_raport(nazwa_projektu: str, podsumowanie: PodsumowanieProjektu) -> str:
     """Buduje treść raportu końcowego jako zwykły tekst, bez tabel i ozdobników."""
+    # Limit źródeł notatnika dotyczy plików do wgrania, a nie odrębnych materiałów
+    # źródłowych: jedno źródło podzielone na trzy części zajmuje trzy sloty, a plik
+    # grupy łączący pięć źródeł zajmuje jeden. Miarą jest więc liczba plików TXT.
     procent_limitu = _procent_wykorzystania_limitu(
-        podsumowanie.liczba_zrodel_po_deduplikacji, podsumowanie.limit_zrodel
+        podsumowanie.liczba_plikow_txt, podsumowanie.limit_zrodel
     )
     najwiekszy_plik = (
         f"{podsumowanie.najwiekszy_plik_nazwa}, {podsumowanie.najwiekszy_plik_bajtow} bajtów"
@@ -107,7 +113,8 @@ def zbuduj_raport(nazwa_projektu: str, podsumowanie: PodsumowanieProjektu) -> st
         f"Liczba plików MD: {podsumowanie.liczba_plikow_md}",
         f"Liczba plików PDF: {podsumowanie.liczba_plikow_pdf}",
         f"Wykorzystanie limitu źródeł: {procent_limitu} procent "
-        f"(limit {podsumowanie.limit_zrodel})",
+        f"(limit {podsumowanie.limit_zrodel}, plików wynikowych "
+        f"{podsumowanie.liczba_plikow_txt})",
         f"Największy plik wynikowy: {najwiekszy_plik}",
         f"Łączna liczba słów w plikach wynikowych: {podsumowanie.laczna_liczba_slow}",
         f"Czas pracy: {_opis_czasu(podsumowanie.czas_pracy_sekundy)}",
@@ -156,6 +163,9 @@ def _wiersze_materialow_do_sprawdzenia(
         if material.ostrzezenia:
             wiersze.append("  Ostrzeżenia ekstrakcji:")
             wiersze.extend(f"    - {ostrzezenie}" for ostrzezenie in material.ostrzezenia)
+        if material.ostrzezenia_pakowania:
+            wiersze.append("  Ostrzeżenia podziału:")
+            wiersze.extend(f"    - {ostrzezenie}" for ostrzezenie in material.ostrzezenia_pakowania)
         if material.powody:
             wiersze.append("  Powody podejrzenia:")
             wiersze.extend(f"    - {powod}" for powod in material.powody)

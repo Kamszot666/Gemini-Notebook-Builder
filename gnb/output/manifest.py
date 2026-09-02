@@ -54,6 +54,8 @@ class WpisZrodla:
     ocena_jakosci: str | None = None
     powody_oceny: tuple[str, ...] = ()
     ostrzezenia: tuple[str, ...] = ()
+    grupa_pakowania: str | None = None
+    ostrzezenia_pakowania: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +83,11 @@ class WpisWyniku:
     Pole `liczba_znakow_pliku` liczy zawartość pliku razem z końcowym znakiem
     nowej linii, w odróżnieniu od liczby znaków źródła, która liczy sam tekst
     dokumentu. Obie miary mają różne nazwy, bo mierzą co innego.
+
+    Pole `identyfikatory_zrodel` wymienia wszystkie źródła, których treść jest
+    w tym pliku. Dla pliku grupy jest ich kilka, dla pojedynczego źródła jedno.
+    Pola `numer_czesci` i `liczba_czesci` są wypełnione, gdy plik jest częścią
+    podzielonego źródła albo kolejnym plikiem grupy zbyt licznej na jeden plik.
     """
 
     sciezka: str
@@ -91,6 +98,9 @@ class WpisWyniku:
     rozmiar_bajtow: int
     checksum: str
     status: str
+    identyfikatory_zrodel: tuple[str, ...] = ()
+    numer_czesci: int | None = None
+    liczba_czesci: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,6 +147,8 @@ def _do_slownika(manifest: Manifest) -> dict[str, Any]:
                 "ocena_jakosci": wpis.ocena_jakosci,
                 "powody_oceny": list(wpis.powody_oceny),
                 "ostrzezenia": list(wpis.ostrzezenia),
+                "grupa_pakowania": wpis.grupa_pakowania,
+                "ostrzezenia_pakowania": list(wpis.ostrzezenia_pakowania),
             }
             for wpis in manifest.zrodla
         ],
@@ -150,6 +162,9 @@ def _do_slownika(manifest: Manifest) -> dict[str, Any]:
                 "rozmiar_bajtow": wpis.rozmiar_bajtow,
                 "checksum": wpis.checksum,
                 "status": wpis.status,
+                "identyfikatory_zrodel": list(wpis.identyfikatory_zrodel),
+                "numer_czesci": wpis.numer_czesci,
+                "liczba_czesci": wpis.liczba_czesci,
             }
             for wpis in manifest.wyniki
         ],
@@ -204,9 +219,16 @@ def zbuduj_widok_tekstowy(manifest: Manifest) -> str:
         if wpis_zrodla.uzasadnienie_md:
             wiersze.append("  Spełnione warunki reguły MD:")
             wiersze.extend(f"    - {warunek}" for warunek in wpis_zrodla.uzasadnienie_md)
+        if wpis_zrodla.grupa_pakowania:
+            wiersze.append(f"  Grupa pakowania: {wpis_zrodla.grupa_pakowania}")
         if wpis_zrodla.pliki_wynikowe:
             wiersze.append("  Pliki wynikowe:")
             wiersze.extend(f"    - {plik}" for plik in wpis_zrodla.pliki_wynikowe)
+        if wpis_zrodla.ostrzezenia_pakowania:
+            wiersze.append("  Ostrzeżenia podziału:")
+            wiersze.extend(
+                f"    - {ostrzezenie}" for ostrzezenie in wpis_zrodla.ostrzezenia_pakowania
+            )
         if wpis_zrodla.pobranie is not None:
             wiersze.extend(_wiersze_pobrania(wpis_zrodla.pobranie))
         if wpis_zrodla.metadane:
@@ -231,7 +253,14 @@ def zbuduj_widok_tekstowy(manifest: Manifest) -> str:
     for wpis_wyniku in manifest.wyniki:
         wiersze.append(f"Plik wynikowy: {wpis_wyniku.sciezka}")
         wiersze.append(f"  Format: {wpis_wyniku.format}")
+        if wpis_wyniku.numer_czesci is not None and wpis_wyniku.liczba_czesci is not None:
+            wiersze.append(f"  Część: {wpis_wyniku.numer_czesci} z {wpis_wyniku.liczba_czesci}")
         wiersze.append(f"  Liczba źródeł: {wpis_wyniku.liczba_zrodel}")
+        if wpis_wyniku.identyfikatory_zrodel:
+            wiersze.append("  Źródła w pliku:")
+            wiersze.extend(
+                f"    - {identyfikator}" for identyfikator in wpis_wyniku.identyfikatory_zrodel
+            )
         wiersze.append(f"  Liczba słów: {wpis_wyniku.liczba_slow}")
         wiersze.append(f"  Liczba znaków pliku: {wpis_wyniku.liczba_znakow_pliku}")
         wiersze.append(f"  Rozmiar w bajtach: {wpis_wyniku.rozmiar_bajtow}")

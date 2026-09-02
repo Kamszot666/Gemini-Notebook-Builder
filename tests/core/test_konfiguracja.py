@@ -7,8 +7,11 @@ from pathlib import Path
 import pytest
 
 from gnb.core.konfiguracja import (
+    DOMYSLNY_ADRES_NASLUCHU,
     DOMYSLNY_BEZPIECZNY_LIMIT_SLOW,
+    DOMYSLNY_LIMIT_ZNAKOW_INSTRUKCJI_SYSTEMOWEJ,
     DOMYSLNY_LIMIT_ZRODEL,
+    DOMYSLNY_PORT_NASLUCHU,
     wczytaj_konfiguracje,
 )
 from gnb.core.wyjatki import BladTrwaly
@@ -124,3 +127,33 @@ def test_prog_do_przegladu_wyzszy_niz_prog_duplikatu_konczy_sie_bledem(tmp_path:
     )
     with pytest.raises(BladTrwaly, match="nie może być wyższe"):
         wczytaj_konfiguracje(plik, {})
+
+
+def test_ustawienia_interfejsu_maja_wartosci_domyslne(tmp_path: Path) -> None:
+    konfiguracja = wczytaj_konfiguracje(tmp_path / "nie_ma.toml", srodowisko={})
+
+    assert konfiguracja.adres_nasluchu == DOMYSLNY_ADRES_NASLUCHU == "127.0.0.1"
+    assert konfiguracja.port_nasluchu == DOMYSLNY_PORT_NASLUCHU
+    assert (
+        konfiguracja.limit_znakow_instrukcji_systemowej
+        == DOMYSLNY_LIMIT_ZNAKOW_INSTRUKCJI_SYSTEMOWEJ
+        == 10_000
+    )
+
+
+def test_adres_nasluchu_da_sie_ustawic_na_localhost(tmp_path: Path) -> None:
+    plik = tmp_path / "konfiguracja.toml"
+    plik.write_text('adres_nasluchu = "localhost"\nport_nasluchu = 9000\n', encoding="utf-8")
+    konfiguracja = wczytaj_konfiguracje(plik, {})
+    assert konfiguracja.adres_nasluchu == "localhost"
+    assert konfiguracja.port_nasluchu == 9000
+
+
+def test_adres_nasluchu_spoza_petli_zwrotnej_konczy_sie_bledem(tmp_path: Path) -> None:
+    with pytest.raises(BladTrwaly, match="pętlę zwrotną"):
+        wczytaj_konfiguracje(tmp_path / "nie_ma.toml", srodowisko={"GNB_ADRES_NASLUCHU": "0.0.0.0"})
+
+
+def test_port_nasluchu_ponad_zakres_konczy_sie_bledem(tmp_path: Path) -> None:
+    with pytest.raises(BladTrwaly, match="numerem portu"):
+        wczytaj_konfiguracje(tmp_path / "nie_ma.toml", srodowisko={"GNB_PORT_NASLUCHU": "70000"})

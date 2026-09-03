@@ -32,8 +32,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -96,6 +97,7 @@ from gnb.ingestion.wejscie import (
     przyjmij_tekst,
     przyjmij_url,
     typ_zrodla_dla_formatu,
+    typ_zrodla_dla_pliku,
     waliduj_i_utworz_zrodlo,
     wczytaj_tresc_zrodla,
 )
@@ -215,9 +217,22 @@ _SUFIKS_TEKST_WERSJI_TXT = "wersja-txt.txt"
 # przerwaniu przed pakowaniem miało z czego zbudować PDF.
 _SUFIKS_OBRAZ_ZRODLOWY = "obraz-zrodlowy.bin"
 
-# Nazwa domyślnej grupy tematycznej dla obrazów wskazanych bez opcji --grupa.
-# Każdy obraz i tak trafia do tematycznego pliku PDF, a nie do pliku TXT.
-DOMYSLNA_GRUPA_OBRAZOW = "Obrazy"
+# Prefiks nazwy grupy nadawanej automatycznie obrazom, które podano bez opcji
+# --grupa. Zestaw obrazów z jednego wywołania polecenia jest słabym, ale
+# prawdziwym sygnałem tematycznym, więc trafia do wspólnego tematycznego pliku
+# PDF, a nie do pliku TXT. Numer rośnie w obrębie projektu, na przykład
+# „Obrazy 1”, „Obrazy 2”, żeby kolejne wywołanie nie dokładało do poprzedniego
+# pliku — łączenie obrazów z różnych wywołań byłoby łączeniem przypadkowym,
+# zakazanym przez sekcję dziesiątą CLAUDE.md. Nazwa z numerem jest też czytelna
+# przy odsłuchu, w odróżnieniu od jednego wiecznego worka „Obrazy”.
+PREFIKS_DOMYSLNEJ_GRUPY_OBRAZOW = "Obrazy"
+_WZORZEC_DOMYSLNEJ_GRUPY_OBRAZOW = re.compile(
+    rf"^{re.escape(PREFIKS_DOMYSLNEJ_GRUPY_OBRAZOW)} (\d+)$"
+)
+
+# Ostatnia deska ratunku dla obrazu, który trafił do pakowania bez żadnej grupy,
+# na przykład ze starego checkpointu sprzed wprowadzenia numerowanych grup.
+DOMYSLNA_GRUPA_OBRAZOW = f"{PREFIKS_DOMYSLNEJ_GRUPY_OBRAZOW} 1"
 
 KOMUNIKAT_DUPLIKAT = (
     "Źródło zostało uznane za duplikat źródła {glowne} (metoda: {metoda}, "
@@ -346,6 +361,88 @@ def _teraz_utc() -> datetime:
     return datetime.now(UTC)
 
 
+def _czy_pozycja_jest_obrazem(pozycja: PozycjaWejsciowa) -> bool:
+    """Zwraca prawdę, gdy wejście jest plikiem obrazu."""
+    return (
+        pozycja.wejscie.typ_wejscia is TypWejscia.PLIK
+        and typ_zrodla_dla_pliku(pozycja.format_zrodla) is TypZrodla.PLIK_OBRAZ
+    )
+
+
+def _numer_domyslnej_grupy_obrazow(nazwa: str | None) -> int | None:
+    """Wyłuskuje numer z nazwy „Obrazy N” albo zwraca ``None`` dla innej nazwy."""
+    if not nazwa:
+        return None
+    dopasowanie = _WZORZEC_DOMYSLNEJ_GRUPY_OBRAZOW.match(nazwa)
+    return int(dopasowanie.group(1)) if dopasowanie is not None else None
+
+
+def _przypisz_domyslna_grupe_obrazow(
+    pozycje: Sequence[PozycjaWejsciowa], checkpoint: Checkpoint
+) -> list[PozycjaWejsciowa]:
+    """Nadaje obrazom bez jawnej grupy wspólną numerowaną grupę tego uruchomienia.
+
+    Obrazy podane w jednym wywołaniu bez opcji ``--grupa`` trafiają do wspólnej
+    grupy o nazwie „Obrazy N”, gdzie N rośnie w obrębie projektu. Dzięki temu
+    każde wywołanie daje własny tematyczny plik PDF, zamiast dokładać do jednego
+    wiecznego pliku, co byłoby łączeniem przypadkowym zakazanym przez sekcję
+    dziesiątą CLAUDE.md.
+
+    Numer jest wyliczany z checkpointu, który kumuluje źródła między
+    uruchomieniami: brany jest najwyższy numer widziany wśród grup przypisanych
+    dotąd źródłom oraz zapamiętanym wejściom, powiększony o jeden. Przy wznowieniu
+    przerwanego uruchomienia część obrazów tej samej partii może już mieć numer
+    zapisany wśród wejść — wtedy cała partia dostaje ten sam numer, a nie nowy,
+    żeby jedno wywołanie nie zostało rozbite na dwa pliki.
+
+    Źródła tekstowe i adresy nie są tu ruszane: ich brak grupy oznacza osobny
+    plik, zgodnie z zachowaniem sprzed etapu ósmego.
+    """
+    lista = list(pozycje)
+    indeksy_obrazow_bez_grupy = [
+        numer
+        for numer, pozycja in enumerate(lista)
+        if pozycja.grupa is None and _czy_pozycja_jest_obrazem(pozycja)
+    ]
+    if not indeksy_obrazow_bez_grupy:
+        return lista
+
+    grupa_wejscia: dict[tuple[str, str], str] = {}
+    for wejscie in checkpoint.wejscia:
+        if wejscie.grupa is not None and _numer_domyslnej_grupy_obrazow(wejscie.grupa) is not None:
+            grupa_wejscia[(wejscie.typ_wejscia, wejscie.wartosc)] = wejscie.grupa
+
+    juz_przypisane = {
+        grupa_wejscia[klucz]
+        for numer in indeksy_obrazow_bez_grupy
+        if (
+            klucz := (
+                lista[numer].wejscie.typ_wejscia.value,
+                lista[numer].wejscie.wartosc,
+            )
+        )
+        in grupa_wejscia
+    }
+    if len(juz_przypisane) == 1:
+        nazwa_grupy = next(iter(juz_przypisane))
+    else:
+        numery = [
+            numer
+            for zrodlo in checkpoint.zrodla.values()
+            if (numer := _numer_domyslnej_grupy_obrazow(zrodlo.grupa_pakowania)) is not None
+        ]
+        numery += [
+            numer
+            for wejscie in checkpoint.wejscia
+            if (numer := _numer_domyslnej_grupy_obrazow(wejscie.grupa)) is not None
+        ]
+        nazwa_grupy = f"{PREFIKS_DOMYSLNEJ_GRUPY_OBRAZOW} {max(numery, default=0) + 1}"
+
+    for numer in indeksy_obrazow_bez_grupy:
+        lista[numer] = replace(lista[numer], grupa=nazwa_grupy)
+    return lista
+
+
 def _zglos_postep(
     postep: WywolanieZwrotnePostepu | None,
     faza: FazaPotoku,
@@ -409,6 +506,7 @@ def przetworz_projekt(
     istniejacy_checkpoint = wczytaj(uklad.checkpoint)
     wznowiono = istniejacy_checkpoint is not None
     checkpoint = istniejacy_checkpoint or _nowy_checkpoint(uklad, konfiguracja, zegar())
+    pozycje = _przypisz_domyslna_grupe_obrazow(pozycje, checkpoint)
     _zapamietaj_wejscia(checkpoint, pozycje)
 
     dziennik_wazny = DziennikWazny(uklad.logi / NAZWA_LOGU_WAZNEGO, zegar_lokalny)

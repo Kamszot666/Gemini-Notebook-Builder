@@ -157,3 +157,52 @@ def test_adres_nasluchu_spoza_petli_zwrotnej_konczy_sie_bledem(tmp_path: Path) -
 def test_port_nasluchu_ponad_zakres_konczy_sie_bledem(tmp_path: Path) -> None:
     with pytest.raises(BladTrwaly, match="numerem portu"):
         wczytaj_konfiguracje(tmp_path / "nie_ma.toml", srodowisko={"GNB_PORT_NASLUCHU": "70000"})
+
+
+def test_ustawienia_ocr_maja_wartosci_domyslne(tmp_path: Path) -> None:
+    konfiguracja = wczytaj_konfiguracje(tmp_path / "nie_ma.toml", srodowisko={})
+
+    assert konfiguracja.ocr_wlaczony is True
+    assert konfiguracja.ocr_jezyk == "pol"
+    assert konfiguracja.ocr_psm == 3
+    assert konfiguracja.ocr_rozdzielczosc_pdf_dpi == 300
+    assert konfiguracja.ocr_liczba_procesow == 0
+    assert konfiguracja.sciezka_tesseract == ""
+    assert konfiguracja.sciezka_tessdata == ""
+    assert konfiguracja.jakosc_grafik == 85
+    assert konfiguracja.maksymalny_wymiar_grafiki_px == 2600
+    assert konfiguracja.maksymalny_rozmiar_pdf_mb == 190
+
+
+def test_jezyk_ocr_da_sie_ustawic_na_kilka_jezykow(tmp_path: Path) -> None:
+    plik = tmp_path / "konfiguracja.toml"
+    plik.write_text('ocr_jezyk = "pol+eng"\n', encoding="utf-8")
+    assert wczytaj_konfiguracje(plik, {}).ocr_jezyk == "pol+eng"
+
+    z_srodowiska = wczytaj_konfiguracje(plik, {"GNB_OCR_WLACZONY": "nie"})
+    assert z_srodowiska.ocr_wlaczony is False
+
+
+def test_tryb_segmentacji_strony_spoza_zakresu_konczy_sie_bledem(tmp_path: Path) -> None:
+    with pytest.raises(BladTrwaly, match="od 0 do 13"):
+        wczytaj_konfiguracje(tmp_path / "nie_ma.toml", srodowisko={"GNB_OCR_PSM": "99"})
+
+
+def test_jakosc_grafik_spoza_zakresu_konczy_sie_bledem(tmp_path: Path) -> None:
+    with pytest.raises(BladTrwaly, match="od 1 do 100"):
+        wczytaj_konfiguracje(tmp_path / "nie_ma.toml", srodowisko={"GNB_JAKOSC_GRAFIK": "0"})
+
+
+def test_sciezka_tessdata_musi_wskazywac_istniejacy_katalog(tmp_path: Path) -> None:
+    with pytest.raises(BladTrwaly, match="katalog, którego nie ma"):
+        wczytaj_konfiguracje(
+            tmp_path / "nie_ma.toml",
+            srodowisko={"GNB_SCIEZKA_TESSDATA": str(tmp_path / "brak_katalogu")},
+        )
+
+    istniejacy = tmp_path / "tessdata"
+    istniejacy.mkdir()
+    konfiguracja = wczytaj_konfiguracje(
+        tmp_path / "nie_ma.toml", srodowisko={"GNB_SCIEZKA_TESSDATA": str(istniejacy)}
+    )
+    assert konfiguracja.sciezka_tessdata == str(istniejacy)

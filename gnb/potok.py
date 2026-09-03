@@ -42,6 +42,7 @@ import httpx
 
 from gnb.core.identyfikatory import suma_kontrolna_bajtow
 from gnb.core.konfiguracja import Konfiguracja
+from gnb.core.liczenie_slow import policz_slowa
 from gnb.core.model import (
     DokumentWyekstrahowany,
     DokumentZnormalizowany,
@@ -62,6 +63,7 @@ from gnb.core.youtube import rozpoznaj
 from gnb.deduplication import UstawieniaDeduplikacji, ZrodloDoDeduplikacji, deduplikuj
 from gnb.deduplication.orkiestrator import WynikDeduplikacjiZbioru
 from gnb.extractors.bazowy import (
+    PostepEkstrakcji,
     RejestrEkstraktorow,
     RejestrEkstraktorowBinarnych,
     domyslny_rejestr,
@@ -75,6 +77,8 @@ from gnb.extractors.dane_strukturalne import (
 from gnb.extractors.strona_www import KOMUNIKAT_WYMAGA_SKRYPTOW, czy_wymaga_skryptow
 from gnb.extractors.youtube import KOMUNIKAT_NAPISY_BEZ_TRESCI
 from gnb.extractors.youtube import zbuduj_dokument as zbuduj_dokument_z_napisow
+from gnb.images.pdf_tematyczny import ObrazDoPdf, UstawieniaPdf, zbuduj_pdf
+from gnb.images.tesseract import UstawieniaOcr
 from gnb.ingestion.pobieranie import (
     OdpowiedzPobrania,
     Pobieracz,
@@ -171,7 +175,7 @@ from gnb.output.raport import (
 )
 from gnb.output.skladanie import oznaczenie_pliku_grupy, zloz_plik
 from gnb.output.tekst_bez_znacznikow import zamien_markdown_na_tekst
-from gnb.output.zapis import zapisz_plik_pakietu, zapisz_wyniki
+from gnb.output.zapis import zapisz_plik_pakietu, zapisz_plik_pdf, zapisz_wyniki
 from gnb.packing import (
     LimityPakowania,
     PlanPliku,
@@ -204,6 +208,16 @@ _ROZSZERZENIE_ORYGINALU_NAPISOW = "json"
 # wersja TXT różni się od wersji MD, na przykład plików Markdown.
 _SUFIKS_TEKST_ZNORMALIZOWANY = "znormalizowany.txt"
 _SUFIKS_TEKST_WERSJI_TXT = "wersja-txt.txt"
+
+# Podkatalog wyników pośrednich trzyma też oryginalne bajty obrazu, żeby faza
+# pakowania mogła osadzić obraz w tematycznym PDF bez zależności od tego, czy
+# konfiguracja każe zachowywać oryginały źródeł, oraz żeby wznowienie po
+# przerwaniu przed pakowaniem miało z czego zbudować PDF.
+_SUFIKS_OBRAZ_ZRODLOWY = "obraz-zrodlowy.bin"
+
+# Nazwa domyślnej grupy tematycznej dla obrazów wskazanych bez opcji --grupa.
+# Każdy obraz i tak trafia do tematycznego pliku PDF, a nie do pliku TXT.
+DOMYSLNA_GRUPA_OBRAZOW = "Obrazy"
 
 KOMUNIKAT_DUPLIKAT = (
     "Źródło zostało uznane za duplikat źródła {glowne} (metoda: {metoda}, "
@@ -267,6 +281,50 @@ class _PrzygotowanyDokument:
     metadane: dict[str, str]
     tekst_zrodla: str | None = None
     tresc_porownawcza: str | None = None
+
+
+@dataclass(slots=True)
+class _WpisObrazuDoPdf:
+    """Jeden obraz grupy przygotowany do umieszczenia w tematycznym pliku PDF."""
+
+    stan: StanZrodla
+    tekst: str
+    obraz_bajty: bytes | None
+
+
+def _rozplanuj_grupe_obrazow(
+    wpisy: Sequence[_WpisObrazuDoPdf], limit_slow: int, limit_bajtow: int
+) -> list[list[_WpisObrazuDoPdf]]:
+    """Dzieli obrazy grupy na porcje, z których każda zmieści się w jednym pliku PDF.
+
+    Kryterium podziału to bezpieczny limit słów oraz limit rozmiaru pliku PDF.
+    Rozmiar wejściowych bajtów obrazu jest tu górnym oszacowaniem: w PDF obraz
+    jest ponownie zapisywany jako JPEG i zwykle się kurczy, więc porcja
+    zaplanowana na podstawie surowych bajtów mieści się z zapasem. Pojedynczy
+    obraz zawsze tworzy własną porcję, nawet gdy sam przekracza limit, bo obrazu
+    nie da się rozciąć.
+    """
+    porcje: list[list[_WpisObrazuDoPdf]] = []
+    biezaca: list[_WpisObrazuDoPdf] = []
+    slowa_biezacej = 0
+    bajty_biezacej = 0
+    for wpis in wpisy:
+        slowa_wpisu = policz_slowa(wpis.tekst)
+        bajty_wpisu = len(wpis.obraz_bajty or b"") + len(wpis.tekst.encode("utf-8"))
+        przekroczy = (
+            slowa_biezacej + slowa_wpisu > limit_slow or bajty_biezacej + bajty_wpisu > limit_bajtow
+        )
+        if biezaca and przekroczy:
+            porcje.append(biezaca)
+            biezaca = []
+            slowa_biezacej = 0
+            bajty_biezacej = 0
+        biezaca.append(wpis)
+        slowa_biezacej += slowa_wpisu
+        bajty_biezacej += bajty_wpisu
+    if biezaca:
+        porcje.append(biezaca)
+    return porcje
 
 
 @dataclass(frozen=True, slots=True)
@@ -337,7 +395,9 @@ def przetworz_projekt(
     cały potok bez korzystania z sieci.
     """
     rejestr = rejestr or domyslny_rejestr(konfiguracja.zachowuj_odnosniki)
-    rejestr_binarny = rejestr_binarny or domyslny_rejestr_binarny()
+    rejestr_binarny = rejestr_binarny or domyslny_rejestr_binarny(
+        UstawieniaOcr.z_konfiguracji(konfiguracja), ocr_wlaczony=konfiguracja.ocr_wlaczony
+    )
     czas_startu = zegar()
 
     nazwa = nazwa_projektu or _wygeneruj_nazwe_projektu(pozycje)
@@ -381,6 +441,7 @@ def przetworz_projekt(
             zegar_lokalny,
             pobrane,
             filmy,
+            postep,
         )
         liczba_pozycji = len(pozycje)
         for numer, pozycja in enumerate(pozycje, start=1):
@@ -449,6 +510,7 @@ class _Wykonanie:
         zegar_lokalny: Callable[[], datetime],
         pobrane: dict[str, WynikFazyPobrania] | None = None,
         filmy: dict[str, WynikFazyFilmu] | None = None,
+        postep: WywolanieZwrotnePostepu | None = None,
     ) -> None:
         self._uklad = uklad
         self._konfiguracja = konfiguracja
@@ -459,6 +521,7 @@ class _Wykonanie:
         self._rejestr_binarny = rejestr_binarny
         self._zegar = zegar
         self._zegar_lokalny = zegar_lokalny
+        self._postep = postep
         self._pobrane: dict[str, WynikFazyPobrania] = pobrane if pobrane is not None else {}
         self._filmy: dict[str, WynikFazyFilmu] = filmy if filmy is not None else {}
 
@@ -671,21 +734,27 @@ class _Wykonanie:
     def _przygotuj_tresc_binarna(
         self, pozycja: PozycjaWejsciowa, zrodlo: Zrodlo
     ) -> _PrzygotowanyDokument:
-        """Buduje dokument z pliku binarnego: PDF, DOCX albo EPUB.
+        """Buduje dokument z pliku binarnego: PDF, DOCX, EPUB albo obrazu.
 
         Format binarny nie przechodzi przez rozkodowanie tekstu, bo próba
         wykrycia kodowania znakowego na jego bajtach dałaby bezużyteczny wynik.
         Nie przechodzi też przez odczyt danych strukturalnych JSON-LD, bo ten
-        dotyczy wyłącznie stron internetowych.
+        dotyczy wyłącznie stron internetowych. Dla źródła będącego obrazem
+        oryginalne bajty trafiają dodatkowo do wyników pośrednich, żeby faza
+        pakowania mogła osadzić obraz w tematycznym pliku PDF.
         """
         identyfikator = zrodlo.identyfikator_zrodla
         bajty = _odczytaj_bajty_pliku(Path(pozycja.wejscie.wartosc), identyfikator)
 
         self._zachowaj_oryginal(pozycja, zrodlo, "", bajty)
+        if zrodlo.typ_zrodla is TypZrodla.PLIK_OBRAZ:
+            self._zapisz_bajty_posrednie(identyfikator, _SUFIKS_OBRAZ_ZRODLOWY, bajty)
         self._loguj(logging.INFO, identyfikator, f"Źródło {identyfikator}, plik binarny.")
 
         ekstraktor = self._rejestr_binarny.dobierz(zrodlo.typ_zrodla, pozycja.format_zrodla)
-        dokument = ekstraktor.wyekstrahuj(identyfikator, bajty)
+        dokument = ekstraktor.wyekstrahuj(
+            identyfikator, bajty, postep=self._postep_ocr(zrodlo.pochodzenie)
+        )
 
         return _PrzygotowanyDokument(
             dokument=dokument,
@@ -912,6 +981,12 @@ class _Wykonanie:
         grupy tematycznej nadanej przez użytkownika są łączone w jeden plik.
         Źródło bez grupy, które mieści się w limicie, dostaje jeden plik razem
         z warunkową wersją Markdown, dokładnie jak przed etapem szóstym.
+
+        Źródła będące obrazami są pakowane osobno: grupa obrazów daje jeden
+        tematyczny plik PDF z obrazami, ich opisami i tekstem OCR. Obraz bez
+        jawnej grupy trafia do domyślnej grupy obrazów, więc także on daje plik
+        PDF, a nie plik TXT. Grupa mieszana, w której są i obrazy, i źródła
+        tekstowe, daje dwa pliki: PDF dla obrazów i plik tekstowy dla reszty.
         """
         limity = LimityPakowania.z_konfiguracji(
             self._konfiguracja.bezpieczny_limit_slow, self._konfiguracja.bezpieczny_limit_mb
@@ -921,14 +996,152 @@ class _Wykonanie:
             for stan in self._checkpoint.zrodla.values()
             if stan.status == StatusZrodla.ZNORMALIZOWANE.value
         ]
+        obrazy = [stan for stan in do_pakowania if stan.typ == TypZrodla.PLIK_OBRAZ.value]
+        pozostale = [stan for stan in do_pakowania if stan.typ != TypZrodla.PLIK_OBRAZ.value]
+
         grupy: dict[str, list[StanZrodla]] = {}
-        for stan in do_pakowania:
+        for stan in pozostale:
             if stan.grupa_pakowania:
                 grupy.setdefault(stan.grupa_pakowania, []).append(stan)
             else:
                 self._spakuj_zrodlo_samodzielne(stan, limity)
         for nazwa_grupy, stany in grupy.items():
             self._spakuj_grupe(nazwa_grupy, stany, limity)
+
+        grupy_obrazow: dict[str, list[StanZrodla]] = {}
+        for stan in obrazy:
+            nazwa = stan.grupa_pakowania or DOMYSLNA_GRUPA_OBRAZOW
+            grupy_obrazow.setdefault(nazwa, []).append(stan)
+        for nazwa_grupy, stany in grupy_obrazow.items():
+            self._spakuj_grupe_obrazow(nazwa_grupy, stany)
+
+    def _spakuj_grupe_obrazow(self, nazwa_grupy: str, stany: list[StanZrodla]) -> None:
+        """Pakuje jedną grupę obrazów w jeden lub kilka tematycznych plików PDF.
+
+        Grupa jest dzielona na kolejne pliki PDF dopiero wtedy, gdy przekroczy
+        bezpieczny limit słów albo limit rozmiaru pliku. Pojedynczy obraz zawsze
+        mieści się w swoim pliku, nawet jeśli sam jest duży: obrazu nie da się
+        podzielić, więc taki plik dostaje ostrzeżenie zamiast być rozbity.
+        """
+        wpisy: list[_WpisObrazuDoPdf] = []
+        for stan in stany:
+            tekst = self._wczytaj_tekst_posredni(stan.identyfikator, _SUFIKS_TEKST_ZNORMALIZOWANY)
+            if tekst is None:
+                self._oznacz_brak_tekstu_posredniego(stan)
+                continue
+            obraz_bajty = self._wczytaj_bajty_posrednie(stan.identyfikator, _SUFIKS_OBRAZ_ZRODLOWY)
+            wpisy.append(_WpisObrazuDoPdf(stan=stan, tekst=tekst, obraz_bajty=obraz_bajty))
+        if not wpisy:
+            return
+
+        for wpis in wpisy:
+            wpis.stan.wyniki = []
+            wpis.stan.ostrzezenia_pakowania = []
+
+        limit_bajtow = int(self._konfiguracja.maksymalny_rozmiar_pdf_mb * 1024 * 1024)
+        porcje = _rozplanuj_grupe_obrazow(
+            wpisy, self._konfiguracja.bezpieczny_limit_slow, limit_bajtow
+        )
+        liczba = len(porcje)
+        for numer, porcja in enumerate(porcje, start=1):
+            self._zapisz_pdf_grupy_obrazow(nazwa_grupy, porcja, numer, liczba, limit_bajtow)
+
+        for wpis in wpisy:
+            if wpis.stan.wyniki:
+                wpis.stan.status = StatusZrodla.SPAKOWANE.value
+        self._zapisz_checkpoint()
+
+        sciezki = {wynik.sciezka_wzgledna for wpis in wpisy for wynik in wpis.stan.wyniki}
+        self._dziennik_wazny.zapisz(
+            f"{ZDARZENIE_GRUPA_SPAKOWANA}: {nazwa_grupy}, "
+            f"{len(wpisy)} obrazów, {len(sciezki)} plików PDF"
+        )
+        for wpis in wpisy:
+            self._dziennik_wazny.zapisz(ZDARZENIE_ZRODLO_PRZYJETE)
+            self._odnotuj_ostrzezenia_pakowania(wpis.stan, wpis.stan.ostrzezenia_pakowania)
+        for _ in sciezki:
+            self._dziennik_wazny.zapisz(ZDARZENIE_PLIK_WYNIKOWY_ZAPISANY)
+        self._loguj(
+            logging.INFO,
+            "-",
+            f"Grupa obrazów „{nazwa_grupy}”: {len(wpisy)} obrazów w {len(sciezki)} plikach PDF.",
+        )
+
+    def _zapisz_pdf_grupy_obrazow(
+        self,
+        nazwa_grupy: str,
+        porcja: list[_WpisObrazuDoPdf],
+        numer_czesci: int,
+        liczba_czesci: int,
+        limit_bajtow: int,
+    ) -> None:
+        """Buduje i zapisuje jeden tematyczny plik PDF dla porcji obrazów grupy."""
+        identyfikatory = [wpis.stan.identyfikator for wpis in porcja]
+        wieloczesciowy = liczba_czesci > 1
+
+        obrazy_pdf = [
+            ObrazDoPdf(
+                naglowek=(
+                    z_oznaczeniem_czesci(
+                        wpis.stan.naglowek_metadanych or "", numer_czesci, liczba_czesci
+                    )
+                    if wieloczesciowy
+                    else (wpis.stan.naglowek_metadanych or "")
+                ),
+                tresc=wpis.tekst,
+                obraz_png=wpis.obraz_bajty,
+            )
+            for wpis in porcja
+        ]
+        tytul = f"Grupa obrazów: {nazwa_grupy}"
+        if wieloczesciowy:
+            tytul += f", część {numer_czesci} z {liczba_czesci}"
+
+        pdf_bajty = zbuduj_pdf(
+            tytul,
+            obrazy_pdf,
+            UstawieniaPdf(
+                jakosc_grafik=self._konfiguracja.jakosc_grafik,
+                maksymalny_wymiar_px=self._konfiguracja.maksymalny_wymiar_grafiki_px,
+            ),
+        )
+
+        nazwa_bazowa = nazwa_pliku_grupy(nazwa_grupy, identyfikatory)
+        nazwa = (
+            nazwa_pliku_czesci(nazwa_bazowa, numer_czesci, liczba_czesci)
+            if wieloczesciowy
+            else nazwa_bazowa
+        )
+        laczne_slowa = sum(policz_slowa(wpis.tekst) for wpis in porcja)
+        laczne_znaki = sum(len(wpis.tekst) for wpis in porcja)
+        plik = zapisz_plik_pdf(
+            self._uklad.pliki_wynikowe,
+            nazwa,
+            pdf_bajty,
+            identyfikatory,
+            liczba_slow=laczne_slowa,
+            liczba_znakow=laczne_znaki,
+        )
+
+        ostrzezenia: list[str] = []
+        if plik.rozmiar_bajtow > limit_bajtow:
+            ostrzezenia.append(
+                f"Tematyczny plik PDF ma {plik.rozmiar_bajtow} bajtów, ponad limit "
+                f"{limit_bajtow}. Grupa ma pojedynczy obraz, którego nie da się podzielić; "
+                "zmniejsz jakość grafik albo maksymalny wymiar grafiki w konfiguracji."
+            )
+        if laczne_slowa > self._konfiguracja.bezpieczny_limit_slow:
+            ostrzezenia.append(
+                f"Tematyczny plik PDF ma {laczne_slowa} słów, ponad bezpieczny limit "
+                f"{self._konfiguracja.bezpieczny_limit_slow}."
+            )
+
+        numer = numer_czesci if wieloczesciowy else None
+        liczba = liczba_czesci if wieloczesciowy else None
+        wynik = self._stan_wyniku(plik, identyfikatory, numer, liczba)
+        for wpis in porcja:
+            wpis.stan.wyniki.append(wynik)
+            wpis.stan.ostrzezenia_pakowania.extend(ostrzezenia)
 
     def _spakuj_zrodlo_samodzielne(self, stan: StanZrodla, limity: LimityPakowania) -> None:
         """Pakuje jedno źródło spoza grupy: jeden plik albo kilka ponumerowanych części."""
@@ -1166,6 +1379,19 @@ class _Wykonanie:
             return None
         return cel.read_text(encoding="utf-8")
 
+    def _zapisz_bajty_posrednie(self, identyfikator: str, sufiks: str, bajty: bytes) -> None:
+        """Zapisuje plik binarny wyniku pośredniego, na przykład oryginał obrazu."""
+        self._uklad.wyniki_posrednie.mkdir(parents=True, exist_ok=True)
+        cel = self._uklad.wyniki_posrednie / f"{identyfikator}.{sufiks}"
+        cel.write_bytes(bajty)
+
+    def _wczytaj_bajty_posrednie(self, identyfikator: str, sufiks: str) -> bytes | None:
+        """Odczytuje binarny plik wyniku pośredniego albo zwraca nic, gdy go nie ma."""
+        cel = self._uklad.wyniki_posrednie / f"{identyfikator}.{sufiks}"
+        if not cel.is_file():
+            return None
+        return cel.read_bytes()
+
     def _ma_tekst_posredni(self, identyfikator: str) -> bool:
         cel = self._uklad.wyniki_posrednie / f"{identyfikator}.{_SUFIKS_TEKST_ZNORMALIZOWANY}"
         return cel.is_file()
@@ -1401,6 +1627,27 @@ class _Wykonanie:
         # końcowy, żeby ten log nie tonął we wpisach technicznych.
         self._checkpoint.czas_ostatniej_zmiany = self._zegar().isoformat()
         zapisz(self._uklad.checkpoint, self._checkpoint)
+
+    def _postep_ocr(self, pochodzenie: str) -> PostepEkstrakcji | None:
+        """Buduje wywołanie zwrotne postępu OCR skanu dla jednego źródła.
+
+        Bez odbiorcy postępu zwraca nic, więc ekstraktor nie płaci za budowanie
+        komunikatów, których i tak nikt nie usłyszy. Z odbiorcą zgłasza po każdej
+        rozpoznanej stronie zdanie gotowe do ogłoszenia w regionie postępu.
+        """
+        if self._postep is None:
+            return None
+
+        def zglos(wykonano: int, wszystkich: int) -> None:
+            _zglos_postep(
+                self._postep,
+                FazaPotoku.OCR,
+                wykonano,
+                wszystkich,
+                f"Rozpoznawanie tekstu ze skanu „{pochodzenie}”, strona {wykonano} z {wszystkich}",
+            )
+
+        return zglos
 
     def _loguj(self, poziom: int, identyfikator: str, komunikat: str) -> None:
         self._log.log(poziom, komunikat, extra={"identyfikator_zrodla": identyfikator})
@@ -1818,6 +2065,9 @@ def _nowy_checkpoint(
             "formaty_wynikowe": ",".join(konfiguracja.formaty_wynikowe),
             "zachowuj_oryginaly": "tak" if konfiguracja.zachowuj_oryginaly else "nie",
             "zachowuj_odnosniki": "tak" if konfiguracja.zachowuj_odnosniki else "nie",
+            "ocr_wlaczony": "tak" if konfiguracja.ocr_wlaczony else "nie",
+            "ocr_jezyk": konfiguracja.ocr_jezyk,
+            "jakosc_grafik": str(konfiguracja.jakosc_grafik),
         },
         czas_ostatniej_zmiany=moment.isoformat(),
     )
@@ -2001,7 +2251,10 @@ def _zbuduj_podsumowanie(
     )
     liczba_txt = sum(1 for wynik in wyniki if wynik.format == "txt")
     liczba_md = sum(1 for wynik in wyniki if wynik.format == "md")
-    laczna_liczba_slow = sum(wynik.liczba_slow for wynik in wyniki if wynik.format == "txt")
+    liczba_pdf = sum(1 for wynik in wyniki if wynik.format == "pdf")
+    laczna_liczba_slow = sum(
+        wynik.liczba_slow for wynik in wyniki if wynik.format in ("txt", "pdf")
+    )
     najwiekszy = max(wyniki, key=lambda wynik: wynik.rozmiar_bajtow, default=None)
 
     return PodsumowanieProjektu(
@@ -2013,7 +2266,7 @@ def _zbuduj_podsumowanie(
         liczba_zrodel_po_deduplikacji=poprawne,
         liczba_plikow_txt=liczba_txt,
         liczba_plikow_md=liczba_md,
-        liczba_plikow_pdf=0,
+        liczba_plikow_pdf=liczba_pdf,
         limit_zrodel=limit_zrodel,
         najwiekszy_plik_nazwa=(najwiekszy.sciezka_wzgledna if najwiekszy is not None else None),
         najwiekszy_plik_bajtow=najwiekszy.rozmiar_bajtow if najwiekszy is not None else 0,

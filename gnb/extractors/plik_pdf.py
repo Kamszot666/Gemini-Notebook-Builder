@@ -1,10 +1,15 @@
-"""Ekstrakcja tekstu z plików PDF zawierających warstwę tekstową.
+"""Ekstrakcja tekstu z plików PDF: warstwa tekstowa, a przy jej braku OCR skanu.
 
-Ten ekstraktor czyta wyłącznie tekst już obecny w pliku PDF. Strona zeskanowana
-bez warstwy tekstowej, czyli sam obraz strony, wymaga OCR, a to jest zadanie
-etapu ósmego. Z takiej strony ekstraktor nie odczyta nic, a ocena jakości
-ekstrakcji z `gnb.potok` to wychwyci i oznaczy źródło jako podejrzane, zamiast
-milcząco stracić treść.
+Ekstraktor najpierw czyta tekst już obecny w pliku PDF. Gdy pliku nie da się tak
+odczytać — bo jest to skan złożony z obrazów stron — i OCR jest włączony w
+konfiguracji, każda strona jest rasteryzowana przez pypdfium2 i rozpoznawana
+przez Tesseract, a wynik składany w jeden tekst z zachowaniem numerów stron.
+Tekst z OCR zawsze dostaje ostrzeżenie kierujące go do sekcji „Materiały do
+sprawdzenia”, bo rozpoznanie skanu bywa niedokładne.
+
+Gdy OCR jest wyłączony albo nie ma Tesseracta, ze skanu nie powstaje żadna
+treść, a ocena jakości ekstrakcji z `gnb.potok` to wychwyci i oznaczy źródło
+jako podejrzane, zamiast milcząco stracić treść.
 
 PDF nie ma niezawodnie odtwarzalnej struktury dokumentu: format zapisuje tekst
 jako pozycjonowane fragmenty na stronie, a nie jako drzewo nagłówków i akapitów.
@@ -38,10 +43,30 @@ from pypdf.errors import PdfReadError
 
 from gnb.core.model import DokumentWyekstrahowany
 from gnb.core.stale import PoziomPewnosciStruktury, TypZrodla
-from gnb.core.wyjatki import BladTrwaly
+from gnb.core.wyjatki import BladTrwaly, BrakNarzedzia
+from gnb.extractors.bazowy import PostepEkstrakcji
+from gnb.images.ocena_ocr import ocen_ocr
+from gnb.images.rasteryzacja import rasteryzuj_strony
+from gnb.images.tesseract import UstawieniaOcr, czy_dostepny, rozpoznaj_wiele
 
 METODA_EKSTRAKCJI = "pdf"
+METODA_EKSTRAKCJI_OCR = "pdf-ocr"
 FORMATY_PDF = frozenset({"pdf"})
+
+# Najmniejsza liczba znaków warstwy tekstowej, przy której plik jest uznawany za
+# dokument z tekstem, a nie za skan. Kilka znaków to zwykle sam artefakt, na
+# przykład numer strony wstawiony jako tekst na skan.
+_PROG_WARSTWY_TEKSTOWEJ_ZNAKI = 20
+
+NAGLOWEK_STRONY_OCR = "Strona {numer}:"
+OSTRZEZENIE_TEKST_Z_OCR = (
+    "Tekst tego pliku PDF pochodzi z OCR skanu, więc może zawierać błędy "
+    "rozpoznania. Warto porównać go z oryginałem przed wgraniem do notatnika."
+)
+OSTRZEZENIE_OCR_BEZ_TESSERACTA = (
+    "Plik PDF nie ma warstwy tekstowej, a OCR jest włączony, ale nie znaleziono "
+    "programu Tesseract. Skan zapisano bez rozpoznanego tekstu."
+)
 
 # Liczba wierszy od początku strony sprawdzanych pod kątem powtarzalnego
 # nagłówka. Prawdziwe nagłówki bywają jedno- albo dwuwierszowe (tytuł
@@ -65,22 +90,37 @@ KOMUNIKAT_USZKODZONY = (
 )
 KOMUNIKAT_BEZ_WARSTWY_TEKSTOWEJ = (
     "Plik PDF nie zawiera warstwy tekstowej, prawdopodobnie jest to skan złożony "
-    "z obrazów stron. Rozpoznawanie tekstu ze skanu, czyli OCR, jest zadaniem "
-    "etapu ósmego."
+    "z obrazów stron. Włącz OCR w konfiguracji i zainstaluj Tesseract, żeby "
+    "rozpoznać tekst ze skanu."
 )
 
 
 class EkstraktorPdf:
-    """Ekstraktor tekstu z plików PDF z warstwą tekstową."""
+    """Ekstraktor tekstu z plików PDF: warstwa tekstowa, a przy jej braku OCR skanu."""
 
     metoda = METODA_EKSTRAKCJI
     tekst_zawiera_znaczniki = False
 
+    def __init__(
+        self,
+        ustawienia_ocr: UstawieniaOcr | None = None,
+        *,
+        ocr_wlaczony: bool = False,
+    ) -> None:
+        self._ustawienia_ocr = ustawienia_ocr or UstawieniaOcr()
+        self._ocr_wlaczony = ocr_wlaczony
+
     def obsluguje(self, typ_zrodla: TypZrodla, format_zrodla: str) -> bool:
         return typ_zrodla is TypZrodla.PLIK_DOKUMENT and format_zrodla in FORMATY_PDF
 
-    def wyekstrahuj(self, identyfikator_zrodla: str, bajty: bytes) -> DokumentWyekstrahowany:
-        """Odczytuje tekst każdej strony PDF i skleja go w jeden dokument."""
+    def wyekstrahuj(
+        self,
+        identyfikator_zrodla: str,
+        bajty: bytes,
+        *,
+        postep: PostepEkstrakcji | None = None,
+    ) -> DokumentWyekstrahowany:
+        """Odczytuje tekst PDF z warstwy tekstowej, a przy jej braku z OCR skanu."""
         try:
             czytnik = PdfReader(io.BytesIO(bajty))
             if czytnik.is_encrypted:
@@ -94,15 +134,104 @@ class EkstraktorPdf:
         metadane = _metadane(czytnik)
         tytul = metadane.pop("tytul", None)
 
+        if len(tekst.strip()) >= _PROG_WARSTWY_TEKSTOWEJ_ZNAKI:
+            return DokumentWyekstrahowany(
+                identyfikator_zrodla=identyfikator_zrodla,
+                tekst=tekst,
+                poziom_pewnosci_struktury=PoziomPewnosciStruktury.NISKI,
+                metoda_ekstrakcji=METODA_EKSTRAKCJI,
+                tytul=tytul,
+                metadane=metadane,
+                ostrzezenia=[],
+            )
+
+        return self._wyekstrahuj_skan(identyfikator_zrodla, bajty, metadane, tytul, postep)
+
+    def _wyekstrahuj_skan(
+        self,
+        identyfikator_zrodla: str,
+        bajty: bytes,
+        metadane: dict[str, str],
+        tytul: str | None,
+        postep: PostepEkstrakcji | None,
+    ) -> DokumentWyekstrahowany:
+        """Rasteryzuje strony skanu i rozpoznaje z nich tekst, gdy OCR jest włączony."""
+
+        def pusty(ostrzezenie: str) -> DokumentWyekstrahowany:
+            return _pusty_skan(identyfikator_zrodla, metadane, tytul, ostrzezenie)
+
+        if not self._ocr_wlaczony:
+            return pusty(KOMUNIKAT_BEZ_WARSTWY_TEKSTOWEJ)
+        if not czy_dostepny(self._ustawienia_ocr.sciezka_tesseract):
+            return pusty(OSTRZEZENIE_OCR_BEZ_TESSERACTA)
+
+        strony_png = rasteryzuj_strony(
+            bajty,
+            rozdzielczosc_dpi=self._ustawienia_ocr.rozdzielczosc_pdf_dpi,
+            identyfikator_zrodla=identyfikator_zrodla,
+        )
+        try:
+            teksty_stron = rozpoznaj_wiele(
+                strony_png,
+                self._ustawienia_ocr,
+                przy_postepie=postep,
+                identyfikator_zrodla=identyfikator_zrodla,
+            )
+        except BrakNarzedzia:
+            return pusty(OSTRZEZENIE_OCR_BEZ_TESSERACTA)
+
+        tekst = _zloz_strony_skanu(teksty_stron)
+        if not tekst.strip():
+            return pusty(KOMUNIKAT_BEZ_WARSTWY_TEKSTOWEJ)
+
+        ostrzezenia = [OSTRZEZENIE_TEKST_Z_OCR]
+        ocena = ocen_ocr(tekst)
+        if ocena.czy_wymaga_sprawdzenia:
+            ostrzezenia.extend(ocena.powody)
+
+        metadane_skanu = {
+            **metadane,
+            "ocr_wykonany": "tak",
+            "liczba_stron_skanu": str(len(strony_png)),
+        }
         return DokumentWyekstrahowany(
             identyfikator_zrodla=identyfikator_zrodla,
             tekst=tekst,
             poziom_pewnosci_struktury=PoziomPewnosciStruktury.NISKI,
-            metoda_ekstrakcji=METODA_EKSTRAKCJI,
+            metoda_ekstrakcji=METODA_EKSTRAKCJI_OCR,
             tytul=tytul,
-            metadane=metadane,
-            ostrzezenia=[] if tekst.strip() else [KOMUNIKAT_BEZ_WARSTWY_TEKSTOWEJ],
+            metadane=metadane_skanu,
+            ostrzezenia=ostrzezenia,
         )
+
+
+def _pusty_skan(
+    identyfikator_zrodla: str,
+    metadane: dict[str, str],
+    tytul: str | None,
+    ostrzezenie: str,
+) -> DokumentWyekstrahowany:
+    """Buduje wynik dla skanu, z którego nie powstał żaden tekst."""
+    return DokumentWyekstrahowany(
+        identyfikator_zrodla=identyfikator_zrodla,
+        tekst="",
+        poziom_pewnosci_struktury=PoziomPewnosciStruktury.NISKI,
+        metoda_ekstrakcji=METODA_EKSTRAKCJI,
+        tytul=tytul,
+        metadane={**metadane, "ocr_wykonany": "nie"},
+        ostrzezenia=[ostrzezenie],
+    )
+
+
+def _zloz_strony_skanu(teksty_stron: list[str]) -> str:
+    """Skleja rozpoznane strony w jeden tekst z nagłówkiem numeru strony przed każdą."""
+    czesci: list[str] = []
+    for numer, tekst_strony in enumerate(teksty_stron, start=1):
+        oczyszczony = tekst_strony.strip()
+        if not oczyszczony:
+            continue
+        czesci.append(f"{NAGLOWEK_STRONY_OCR.format(numer=numer)}\n{oczyszczony}")
+    return "\n\n".join(czesci)
 
 
 def _usun_powtarzalne_naglowki_i_stopki(strony: list[str]) -> list[str]:

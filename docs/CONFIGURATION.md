@@ -1,4 +1,4 @@
-# Konfiguracja — stan po etapie siódmym
+# Konfiguracja — stan po etapie ósmym
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
 obsługuje po etapie siódmym. Pełna lista pól z sekcji jedenastej a pliku
@@ -185,6 +185,46 @@ nie usuwa źródła samo z siebie i w tym wydaniu nie jest jeszcze zaimplementow
    w raporcie. Musi być nie wyższa niż `deduplikacja_prog_duplikatu`. Domyślnie
    0,75.
 
+## Pola rozpoznawania tekstu z obrazów i skanów
+
+Silnikiem OCR jest wyłącznie Tesseract, wołany przez podproces. Jego brak nie
+zatrzymuje aplikacji: obrazy i skany są wtedy zapisywane bez rozpoznanego
+tekstu, z ostrzeżeniem.
+
+1. `ocr_wlaczony`, zmienna `GNB_OCR_WLACZONY`. Włączenie OCR obrazów i skanów.
+   Domyślnie włączone.
+2. `ocr_jezyk`, zmienna `GNB_OCR_JEZYK`. Język OCR w notacji Tesseracta.
+   Domyślnie `pol`. Kilka języków naraz podaje się przez plus, na przykład
+   `pol+eng`. Wymagany jest odpowiedni plik danych językowych Tesseracta;
+   polecenie `diagnostyka` wypisuje listę zainstalowanych.
+3. `ocr_psm`, zmienna `GNB_OCR_PSM`. Tryb segmentacji strony Tesseracta, liczba
+   od 0 do 13. Domyślnie 3, czyli automatyczna segmentacja bez orientacji.
+4. `ocr_rozdzielczosc_pdf_dpi`, zmienna `GNB_OCR_ROZDZIELCZOSC_PDF_DPI`.
+   Rozdzielczość rasteryzacji stron skanowanego pliku PDF przed OCR. Domyślnie
+   300. Wyższa wartość poprawia rozpoznanie i wydłuża pracę.
+5. `ocr_liczba_procesow`, zmienna `GNB_OCR_LICZBA_PROCESOW`. Liczba równoległych
+   procesów Tesseracta przy OCR wielu stron skanu. Domyślnie 0, czyli wartość
+   dobrana z liczby rdzeni, nie więcej niż cztery.
+6. `sciezka_tesseract`, zmienna `GNB_SCIEZKA_TESSERACT`. Pełna ścieżka pliku
+   wykonywalnego Tesseracta. Domyślnie pusta, co oznacza odnalezienie go w
+   zmiennej PATH oraz w znanych miejscach instalacji na Windows.
+7. `sciezka_tessdata`, zmienna `GNB_SCIEZKA_TESSDATA`. Katalog danych językowych
+   Tesseracta. Domyślnie pusty, co oznacza katalog wskazany przez samo narzędzie.
+   Wskazanie nieistniejącego katalogu jest błędem konfiguracji.
+
+## Pola grafiki i generowanych plików PDF
+
+1. `jakosc_grafik`, zmienna `GNB_JAKOSC_GRAFIK`. Jakość zapisu obrazów jako JPEG
+   w tematycznym pliku PDF, liczba od 1 do 100. Domyślnie 85. Niższa wartość
+   zmniejsza plik PDF kosztem szczegółów obrazu.
+2. `maksymalny_wymiar_grafiki_px`, zmienna `GNB_MAKSYMALNY_WYMIAR_GRAFIKI_PX`.
+   Największy dopuszczalny dłuższy bok obrazu osadzanego w PDF. Domyślnie 2600.
+   Większy obraz jest proporcjonalnie zmniejszany.
+3. `maksymalny_rozmiar_pdf_mb`, zmienna `GNB_MAKSYMALNY_ROZMIAR_PDF_MB`. Limit
+   rozmiaru pojedynczego tematycznego pliku PDF. Domyślnie 190. Grupa obrazów
+   przekraczająca ten limit jest dzielona na kilka plików PDF; pojedynczego
+   obrazu nie da się podzielić, więc taki plik dostaje ostrzeżenie.
+
 ## Pola interfejsu WWW
 
 Interfejs uruchamiasz poleceniem `python -m gnb.ui.server`.
@@ -286,6 +326,18 @@ deduplikacja_podobienstwo_wlaczone = true
 deduplikacja_embeddingi_wlaczone = false
 deduplikacja_prog_duplikatu = 0.9
 deduplikacja_prog_do_przegladu = 0.75
+
+ocr_wlaczony = true
+ocr_jezyk = "pol"
+ocr_psm = 3
+ocr_rozdzielczosc_pdf_dpi = 300
+ocr_liczba_procesow = 0
+sciezka_tesseract = ""
+sciezka_tessdata = ""
+
+jakosc_grafik = 85
+maksymalny_wymiar_grafiki_px = 2600
+maksymalny_rozmiar_pdf_mb = 190
 
 uzywaj_cache = true
 maksymalny_wiek_cache_dni = 30

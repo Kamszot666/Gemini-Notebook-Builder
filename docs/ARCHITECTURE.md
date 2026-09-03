@@ -1,4 +1,4 @@
-# Architektura — stan po etapie siódmym
+# Architektura — stan po etapie ósmym
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
 zakończeniu etapu siódmego. Pełny docelowy podział na pakiety opisuje sekcja
@@ -83,9 +83,12 @@ numeru schematu.
 
 `przetworz_projekt` przyjmuje też opcjonalny argument `postep`: wywołanie
 zwrotne z modułu `gnb/core/postep.py`, wołane na granicach faz oraz po każdym
-przetworzonym źródle z obiektem `ZdarzeniePostepu`. Brak argumentu oznacza pracę
-bez raportowania postępu, jak w wierszu poleceń. Dławienie zdarzeń jest po
-stronie odbiorcy, nie potoku.
+przetworzonym źródle z obiektem `ZdarzeniePostepu`. Faza `FazaPotoku.OCR` jest
+zgłaszana wewnątrz ekstrakcji, dla skanu PDF strona po stronie, więc użytkownik
+nie zostaje przy niemym oknie przez kilkanaście minut rozpoznawania grubego
+skanu. Wiersz poleceń też podaje tu wywołanie zwrotne, ale wypisuje wyłącznie
+dławione wiersze fazy OCR, bez pasków postępu. Dławienie pozostałych zdarzeń
+jest po stronie odbiorcy, nie potoku.
 
 ## Pakiet gnb.core
 
@@ -140,9 +143,12 @@ pliku wynikowego.
 
 - `gnb/extractors/bazowy.py` — protokół `Ekstraktor` z rejestrem
   `RejestrEkstraktorow` dla formatów tekstowych oraz protokół `EkstraktorBinarny`
-  z rejestrem `RejestrEkstraktorowBinarnych` dla PDF, DOCX i EPUB, pracujący
-  wprost na bajtach pliku. Nowy format to nowa implementacja właściwego
-  protokołu plus wpis we właściwym rejestrze.
+  z rejestrem `RejestrEkstraktorowBinarnych` dla PDF, DOCX, EPUB i obrazów,
+  pracujący wprost na bajtach pliku. Metoda `wyekstrahuj` protokołu binarnego
+  przyjmuje opcjonalne wywołanie zwrotne postępu, którym ekstraktor PDF zgłasza
+  OCR skanu strona po stronie. Nowy format to nowa implementacja właściwego
+  protokołu plus wpis we właściwym rejestrze; rejestr binarny dostaje ustawienia
+  OCR z konfiguracji.
 - `gnb/extractors/tekst.py` — tekst płaski, zawsze niski poziom pewności
   struktury, brak bloków.
 - `gnb/extractors/markdown.py` — Markdown przez `markdown-it-py` z regułą tabel,
@@ -166,7 +172,15 @@ pliku wynikowego.
   rozpoznaniem ogranicznika kolumn i pierwszym wierszem jako nagłówkiem.
 - `gnb/extractors/plik_pdf.py` — tekst z warstwy tekstowej PDF przez `pypdf`,
   z usuwaniem pozycyjnie wykrytego powtarzalnego nagłówka i numeru strony.
-  Zawsze niski poziom pewności struktury, bez bloków.
+  Przy braku warstwy tekstowej i włączonym OCR rasteryzuje strony przez
+  `gnb.images.rasteryzacja` i rozpoznaje je przez `gnb.images.tesseract`,
+  składając wynik z nagłówkiem „Strona N:” przed każdą stroną. Zawsze niski
+  poziom pewności struktury, bez bloków.
+- `gnb/extractors/plik_obraz.py` — opis merytoryczny obrazu przez
+  `gnb.images.opis` oraz, przy włączonym OCR, tekst rozpoznany przez
+  `gnb.images.tesseract`, z oceną jakości OCR z `gnb.images.ocena_ocr`.
+  Obsługuje JPG, PNG, WebP, TIFF, BMP, statyczny GIF oraz — z biblioteką
+  opcjonalną pillow-heif — HEIC i HEIF. Zawsze niski poziom pewności struktury.
 - `gnb/extractors/plik_docx.py` — akapity i tabele DOCX w kolejności
   wystąpienia przez `python-docx`, ze stylem akapitu odwzorowanym wprost na
   rodzaj bloku. Wysoki poziom pewności struktury.
@@ -187,8 +201,9 @@ pliku wynikowego.
 
 - `gnb/output/regula_md.py` — deterministyczna reguła wyboru między TXT a MD.
 - `gnb/output/zapis.py` — zapis TXT zawsze, MD warunkowo, w UTF-8 bez BOM z LF.
-  Funkcja `zapisz_plik_pakietu` zapisuje gotowy plik części albo pliku grupy,
-  zawsze wyłącznie w formacie TXT.
+  Funkcja `zapisz_plik_pakietu` zapisuje gotowy plik części albo pliku grupy w
+  formacie TXT, a `zapisz_plik_pdf` zapisuje gotowe bajty tematycznego pliku PDF
+  grupy obrazów.
 - `gnb/output/skladanie.py` — składanie treści jednego pliku z fragmentów wraz
   z nagłówkiem metadanych przed każdym oraz z wierszem „Kolejny fragment tego
   pliku:” między nimi.
@@ -205,8 +220,9 @@ pliku wynikowego.
   „Materiały do sprawdzenia” dla źródeł o podejrzanym wyniku ekstrakcji, źródeł
   z ostrzeżeniem ekstraktora, źródeł z ostrzeżeniem podziału oraz źródeł, które
   deduplikacja uznała za możliwy duplikat i zostawiła do rozstrzygnięcia.
-  Wykorzystanie limitu źródeł jest liczone po plikach wynikowych, bo to one
-  zajmują sloty notatnika, a nie po odrębnych materiałach źródłowych.
+  Wykorzystanie limitu źródeł jest liczone po sumie plików TXT i tematycznych
+  plików PDF, bo to one zajmują sloty notatnika, a nie po odrębnych materiałach
+  źródłowych.
 
 ## Pakiet gnb.deduplication
 
@@ -342,11 +358,34 @@ kolejną grupę w tym samym projekcie dodaje się osobnym wywołaniem, bo checkp
 kumuluje źródła między uruchomieniami. `pamiec` pokazuje stan wspólnej pamięci
 podręcznej i pozwala ją wyczyścić.
 
+## Pakiet gnb.images
+
+Rozpoznawanie tekstu z obrazów i skanów oraz generowanie tematycznych plików
+PDF. Pakiet nie zna potoku ani checkpointu — jest zbiorem narzędzi wołanych
+przez ekstraktory i przez fazę pakowania.
+
+- `gnb/images/tesseract.py` — odnajdywanie pliku wykonywalnego Tesseracta oraz
+  wołanie go przez podproces: obraz PNG standardowym wejściem, tekst standardowym
+  wyjściem. `rozpoznaj_wiele` uruchamia procesy Tesseracta równolegle, zachowując
+  kolejność wejścia i zgłaszając postęp po każdym gotowym obrazie. Każdy OCR to
+  osobny proces systemowy, zgodnie z sekcją piętnastą `CLAUDE.md`.
+- `gnb/images/rasteryzacja.py` — renderowanie stron pliku PDF do obrazów PNG
+  przez `pypdfium2`, w rozdzielczości z konfiguracji. Strony renderowane po
+  kolei, bo PDFium nie jest bezpieczny wątkowo.
+- `gnb/images/ocena_ocr.py` — ocena jakości tekstu z OCR: „poprawna”, „pusta”
+  albo „podejrzana”, z listą powodów.
+- `gnb/images/opis.py` — składanie opisu merytorycznego obrazu wyłącznie z
+  dostępnego materiału tekstowego, nigdy przez zewnętrzną usługę. Brak materiału
+  daje jawny komunikat, a nie pusty ciąg.
+- `gnb/images/pdf_tematyczny.py` — budowanie pliku PDF grupy obrazów przez
+  `reportlab`, z osadzoną czcionką DejaVuSans z katalogu `gnb/images/czcionki`.
+  Opis obrazu jest zwykłym tekstem akapitu, a nie tagiem alt, bo reportlab w tym
+  trybie nie tworzy struktury dostępności PDF.
+
 ## Pozostałe pakiety
 
-Pakiety `gnb.documents`, `gnb.audio`, `gnb.images`, `gnb.music`, `gnb.hotkeys`
-istnieją jako puste, importowalne pakiety z docstringiem. Logika powstanie
-w kolejnych etapach.
+Pakiety `gnb.documents`, `gnb.audio`, `gnb.music`, `gnb.hotkeys` istnieją jako
+puste, importowalne pakiety z docstringiem. Logika powstanie w kolejnych etapach.
 
 ## Testy
 

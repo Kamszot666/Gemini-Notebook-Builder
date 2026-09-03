@@ -91,10 +91,11 @@ def zbuduj_raport(nazwa_projektu: str, podsumowanie: PodsumowanieProjektu) -> st
     """Buduje treść raportu końcowego jako zwykły tekst, bez tabel i ozdobników."""
     # Limit źródeł notatnika dotyczy plików do wgrania, a nie odrębnych materiałów
     # źródłowych: jedno źródło podzielone na trzy części zajmuje trzy sloty, a plik
-    # grupy łączący pięć źródeł zajmuje jeden. Miarą jest więc liczba plików TXT.
-    procent_limitu = _procent_wykorzystania_limitu(
-        podsumowanie.liczba_plikow_txt, podsumowanie.limit_zrodel
-    )
+    # grupy łączący pięć źródeł zajmuje jeden. Miarą jest więc liczba plików do
+    # wgrania: TXT dla źródeł tekstowych oraz PDF dla grup obrazów. Pliki MD są
+    # dodatkiem do plików TXT i nie zajmują osobnego slotu.
+    liczba_slotow = podsumowanie.liczba_plikow_txt + podsumowanie.liczba_plikow_pdf
+    procent_limitu = _procent_wykorzystania_limitu(liczba_slotow, podsumowanie.limit_zrodel)
     najwiekszy_plik = (
         f"{podsumowanie.najwiekszy_plik_nazwa}, {podsumowanie.najwiekszy_plik_bajtow} bajtów"
         if podsumowanie.najwiekszy_plik_nazwa is not None
@@ -113,8 +114,7 @@ def zbuduj_raport(nazwa_projektu: str, podsumowanie: PodsumowanieProjektu) -> st
         f"Liczba plików MD: {podsumowanie.liczba_plikow_md}",
         f"Liczba plików PDF: {podsumowanie.liczba_plikow_pdf}",
         f"Wykorzystanie limitu źródeł: {procent_limitu} procent "
-        f"(limit {podsumowanie.limit_zrodel}, plików wynikowych "
-        f"{podsumowanie.liczba_plikow_txt})",
+        f"(limit {podsumowanie.limit_zrodel}, plików do wgrania {liczba_slotow})",
         f"Największy plik wynikowy: {najwiekszy_plik}",
         f"Łączna liczba słów w plikach wynikowych: {podsumowanie.laczna_liczba_slow}",
         f"Czas pracy: {_opis_czasu(podsumowanie.czas_pracy_sekundy)}",

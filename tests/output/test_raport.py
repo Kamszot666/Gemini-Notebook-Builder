@@ -144,4 +144,20 @@ def test_wykorzystanie_limitu_liczy_pliki_wynikowe_a_nie_zrodla() -> None:
     tekst = zbuduj_raport("Projekt testowy", podsumowanie)
 
     assert "Wykorzystanie limitu źródeł: 6 procent" in tekst
-    assert "plików wynikowych 6" in tekst
+    assert "plików do wgrania 6" in tekst
+
+
+def test_wykorzystanie_limitu_dolicza_tematyczne_pliki_pdf() -> None:
+    # Plik TXT źródła tekstowego i tematyczny PDF grupy obrazów zajmują po jednym
+    # slocie notatnika, więc razem są dwa sloty.
+    podsumowanie = replace(
+        _PODSUMOWANIE,
+        liczba_plikow_txt=1,
+        liczba_plikow_pdf=1,
+        limit_zrodel=100,
+    )
+
+    tekst = zbuduj_raport("Projekt testowy", podsumowanie)
+
+    assert "Wykorzystanie limitu źródeł: 2 procent" in tekst
+    assert "plików do wgrania 2" in tekst

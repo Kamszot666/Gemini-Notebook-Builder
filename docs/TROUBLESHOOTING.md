@@ -22,6 +22,9 @@ ozdobników, a polecenia do wpisania są w osobnych blokach.
 10. Interfejs WWW nie startuje: port jest zajęty.
 11. W interfejsie nie widać postępu, a licznik znaków się nie zmienia.
 12. Interfejs odrzuca wysłany plik.
+13. Skan PDF albo obraz nie został rozpoznany: brak Tesseracta.
+14. OCR rozpoznał polski tekst z błędami: brak danych językowych `pol`.
+15. Tematyczny plik PDF grupy obrazów jest za duży.
 
 ## 1. Windows blokuje plik wykonywalny narzędzia deweloperskiego
 
@@ -134,19 +137,23 @@ Objaw. Plik wynikowy ma kilkadziesiąt bajtów i zawiera wyłącznie nagłówek
 metadanych: tytuł, typ źródła, datę importu i identyfikator. Nie ma w nim
 żadnej treści.
 
-Przyczyna. Ekstrakcja nie odczytała z pliku niczego. Typowe powody to plik PDF
-bez warstwy tekstowej, czyli skan, plik CSV bez wiersza z danymi oraz plik
-napisów zawierający same znaczniki czasu.
+Przyczyna. Ekstrakcja nie odczytała z pliku niczego. Typowe powody to plik CSV
+bez wiersza z danymi, plik napisów zawierający same znaczniki czasu oraz plik
+PDF bez warstwy tekstowej, czyli skan, przy wyłączonym OCR albo braku Tesseracta.
 
 Co zrobić. Zajrzyj do raportu końcowego, do sekcji „Materiały do sprawdzenia”.
 Każde takie źródło jest tam wymienione z nazwy razem z powodem. Ten sam powód
 jest zapisany przy źródle w pliku `manifest.txt`, w polu ostrzeżeń, oraz w pliku
 `log_szczegolowy.txt`.
 
+Dla skanowanego pliku PDF włącz OCR: ustawienie `ocr_wlaczony` jest domyślnie
+włączone, więc pusty wynik oznacza zwykle brak Tesseracta — patrz przypadek
+trzynasty. Po włączeniu OCR i zainstalowaniu Tesseracta ten sam plik przetworzy
+się na tekst, choć z ostrzeżeniem o możliwych błędach rozpoznania.
+
 Źródło nie jest kasowane i liczy się do limitu źródeł notatnika, więc plik bez
 treści warto usunąć z katalogu plików wynikowych przed wgraniem materiału do
-notatnika, żeby nie zajmował slotu. Rozpoznawanie tekstu ze skanu, czyli OCR,
-jest zadaniem etapu ósmego i na razie nie działa.
+notatnika, żeby nie zajmował slotu.
 
 ## 6. Projekt z poprzedniej wersji aplikacji nie daje się wznowić
 
@@ -284,3 +291,67 @@ polem `maksymalny_rozmiar_wysylki_mb` w konfiguracji albo zmienną
 twardy limit 200 megabajtów niezależnie od planu. Przy zbyt dużej liczbie plików
 podziel je na kilka wysłań: checkpoint kumuluje źródła między uruchomieniami, więc
 kolejne wysłanie z tą samą nazwą projektu dokłada źródła do istniejącego projektu.
+
+## 13. Skan PDF albo obraz nie został rozpoznany, bo brakuje Tesseracta
+
+Objaw. Dla skanowanego pliku PDF albo obrazu w raporcie końcowym, w sekcji
+„Materiały do sprawdzenia”, jest ostrzeżenie o braku warstwy tekstowej albo
+o tym, że OCR jest włączony, ale nie znaleziono programu Tesseract. Plik
+wynikowy zawiera sam nagłówek metadanych albo, dla obrazu, sam opis bez tekstu.
+
+Przyczyna. Rozpoznawanie tekstu z obrazów i skanów wykonuje program Tesseract,
+wołany przez podproces. Aplikacja nie znalazła go ani w zmiennej PATH, ani
+w znanych miejscach instalacji na Windows, ani pod ścieżką z ustawienia
+`sciezka_tesseract`.
+
+Co zrobić. Zainstaluj Tesseract zgodnie z dokumentem `INSTALL.md` i dopisz go do
+zmiennej PATH albo wskaż pełną ścieżkę pliku wykonywalnego:
+
+```powershell
+$env:GNB_SCIEZKA_TESSERACT = "C:/Program Files/Tesseract-OCR/tesseract.exe"
+```
+
+Sprawdź wynik poleceniem `python -m gnb.cli diagnostyka`: wiersz „Tesseract”
+musi pokazywać wersję i ścieżkę. Potem przetwórz materiał pod nową nazwą
+projektu, bo źródło z ostrzeżeniem ma już status końcowy i nie jest ponawiane.
+
+## 14. OCR rozpoznał polski tekst z błędami, bo brakuje danych językowych „pol”
+
+Objaw. Tekst z OCR skanu albo obrazu jest po polsku, ale systematycznie
+przekręcony: brakuje ogonków, litery „ł” i „ż” są mylone, całe wyrazy są
+nie do odczytania. Dotyczy każdego pliku, a nie jednego.
+
+Przyczyna. Instalator Tesseracta domyślnie dokłada tylko dane językowe
+angielskiego. Bez pliku `pol.traineddata` Tesseract rozpoznaje polski tekst
+regułami angielskiego i wynik jest błędny.
+
+Co zrobić. Sprawdź listę zainstalowanych danych językowych poleceniem
+`python -m gnb.cli diagnostyka`: wiersz „Dane językowe OCR” wymienia je i
+ostrzega, gdy brakuje `pol`. Dogranie polskiego opisuje `INSTALL.md`. Najpewniej
+działa pobranie pliku `pol.traineddata` z repozytorium `tessdata_best` i
+umieszczenie go w katalogu `tessdata` instalacji Tesseracta albo we własnym
+katalogu wskazanym ustawieniem `sciezka_tessdata`. Po dograniu przetwórz
+materiał pod nową nazwą projektu.
+
+## 15. Tematyczny plik PDF grupy obrazów jest za duży
+
+Objaw. W raporcie końcowym, w sekcji „Materiały do sprawdzenia”, przy obrazach
+grupy jest ostrzeżenie, że tematyczny plik PDF przekracza limit rozmiaru i że
+grupa ma pojedynczy obraz, którego nie da się podzielić.
+
+Przyczyna. Grupa obrazów, która przekracza limit `maksymalny_rozmiar_pdf_mb`,
+jest dzielona na kilka plików PDF. Gdy jednak przekracza go już pojedynczy obraz
+— zwykle bardzo duży skan w wysokiej rozdzielczości — podział nie pomaga, bo
+obrazu nie da się rozciąć na dwa pliki.
+
+Co zrobić. Zmniejsz jakość zapisu grafik albo ich maksymalny wymiar:
+
+```powershell
+$env:GNB_JAKOSC_GRAFIK = "70"
+$env:GNB_MAKSYMALNY_WYMIAR_GRAFIKI_PX = "1800"
+```
+
+Alternatywnie zmniejsz sam obraz przed przetwarzaniem albo podnieś
+`maksymalny_rozmiar_pdf_mb`, pamiętając o twardym limicie źródła notatnika
+wynoszącym 200 megabajtów. Po zmianie przetwórz materiał pod nową nazwą
+projektu.

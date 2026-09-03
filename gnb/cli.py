@@ -20,7 +20,6 @@ znaków sterujących przerysowujących wiersz.
 from __future__ import annotations
 
 import argparse
-import io
 import shutil
 import subprocess
 import sys
@@ -158,19 +157,48 @@ def _sprawdz_narzedzie(narzedzie: Narzedzie) -> str:
     )
 
 
-def uruchom_diagnostyke() -> int:
+def zbuduj_raport_diagnostyki() -> str:
+    """Buduje pełną treść raportu diagnostyki jako jeden tekst z końcami wierszy LF."""
+
+    wiersze = [
+        "Raport diagnostyczny narzędzi zewnętrznych Gemini Notebook Builder.",
+        "",
+    ]
+    wiersze.extend(_sprawdz_narzedzie(narzedzie) for narzedzie in NARZEDZIA)
+    wiersze.append("")
+    wiersze.append(
+        "Koniec raportu. Brak narzędzia opcjonalnego nie zatrzymuje działania aplikacji."
+    )
+    return "\n".join(wiersze) + "\n"
+
+
+def uruchom_diagnostyke(sciezka_pliku: str | None = None) -> int:
     """Wypisuje czytelny tekstowo raport dostępności narzędzi zewnętrznych.
 
+    Bez opcji `sciezka_pliku` raport trafia na standardowe wyjście. Z tą opcją
+    jest zapisywany wprost do wskazanego pliku w kodowaniu UTF-8 ze znacznikiem
+    kolejności bajtów. Zapis wprost jest potrzebny, ponieważ przekierowanie
+    standardowego wyjścia operatorem ``>`` w programie PowerShell w wersji piątej
+    przekodowuje wyjście programu według strony kodowej konsoli i psuje polskie
+    znaki diakrytyczne niezależnie od tego, w jakim kodowaniu program pisze.
+    Raport diagnostyki jest przeznaczony do odczytu syntezatorem mowy, więc musi
+    dać się zapisać do czytelnego pliku bez tej pułapki.
+
     Zwraca zawsze kod zero, ponieważ brak opcjonalnego narzędzia zewnętrznego
-    nie jest błędem aplikacji, zgodnie z sekcją piątą CLAUDE.md.
+    nie jest błędem aplikacji, zgodnie z sekcją piątą CLAUDE.md. Kod jeden
+    oznacza wyłącznie to, że wskazanego pliku nie dało się zapisać.
     """
 
-    print("Raport diagnostyczny narzędzi zewnętrznych Gemini Notebook Builder.")
-    print("")
-    for narzedzie in NARZEDZIA:
-        print(_sprawdz_narzedzie(narzedzie))
-    print("")
-    print("Koniec raportu. Brak narzędzia opcjonalnego nie zatrzymuje działania aplikacji.")
+    raport = zbuduj_raport_diagnostyki()
+    if sciezka_pliku is None:
+        print(raport, end="")
+        return 0
+    try:
+        zapisz_tekst_utf8(Path(sciezka_pliku), raport)
+    except OSError as blad:
+        print(f"Nie udało się zapisać raportu do pliku {sciezka_pliku}: {blad.strerror}.")
+        return KOD_BLAD
+    print(f"Raport diagnostyczny zapisano w pliku: {sciezka_pliku}")
     return 0
 
 
@@ -327,20 +355,46 @@ def uruchom_przetwarzanie(
     return 0
 
 
+def zapisz_tekst_utf8(sciezka: Path, tresc: str) -> None:
+    """Zapisuje tekst do pliku w kodowaniu UTF-8 ze znacznikiem kolejności bajtów.
+
+    Znacznik kolejności bajtów sprawia, że edytor tekstu i czytnik ekranu
+    otwierający plik rozpoznają kodowanie UTF-8, zamiast zakładać systemową
+    stronę kodową, w której polskie znaki diakrytyczne są nieczytelne. Końce
+    wierszy są ujednolicone do znaku nowej linii.
+    """
+
+    sciezka.parent.mkdir(parents=True, exist_ok=True)
+    with sciezka.open("w", encoding="utf-8-sig", newline="\n") as plik:
+        plik.write(tresc)
+
+
 def _wymus_kodowanie_utf8() -> None:
     """Ustawia standardowe wyjście i wyjście błędów na UTF-8.
 
-    Domyślne kodowanie konsoli Windows bywa stroną kodową taką jak cp1250,
-    w której polskie znaki diakrytyczne wypisują się jako nieczytelne znaki
-    zapytania albo inne krzaki. Ponieważ raport diagnostyki musi być
-    czytelny dla czytnika ekranu, wyjście jest jawnie przełączane na UTF-8
-    niezależnie od strony kodowej odziedziczonej z systemu.
+    Domyślne kodowanie konsoli Windows oraz wyjścia przekierowanego do pliku
+    bywa stroną kodową taką jak cp1250, w której polskie znaki diakrytyczne
+    wypisują się jako nieczytelne znaki zapytania albo inne krzaki. Ponieważ
+    komunikaty aplikacji muszą być czytelne dla czytnika ekranu, wyjście jest
+    jawnie przełączane na UTF-8 niezależnie od strony kodowej odziedziczonej
+    z systemu.
+
+    Sprawdzana jest sama obecność metody ``reconfigure``, a nie konkretny typ
+    strumienia. Dzięki temu przełączenie działa także wtedy, gdy standardowe
+    wyjście zostało zastąpione własną klasą, na przykład przez narzędzie
+    przechwytujące wyjście testów. Strumień, którego nie da się przełączyć,
+    jest pomijany, ponieważ nieudane przełączenie kodowania nie jest błędem
+    zatrzymującym aplikację.
     """
 
-    if isinstance(sys.stdout, io.TextIOWrapper):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    if isinstance(sys.stderr, io.TextIOWrapper):
-        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    for strumien in (sys.stdout, sys.stderr):
+        rekonfiguruj = getattr(strumien, "reconfigure", None)
+        if not callable(rekonfiguruj):
+            continue
+        try:
+            rekonfiguruj(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            continue
 
 
 def main(argumenty: list[str] | None = None) -> int:
@@ -352,7 +406,19 @@ def main(argumenty: list[str] | None = None) -> int:
         prog="gnb", description="Gemini Notebook Builder — wiersz poleceń."
     )
     podpolecenia = parser.add_subparsers(dest="polecenie", required=True)
-    podpolecenia.add_parser("diagnostyka", help="Sprawdź dostępność narzędzi zewnętrznych.")
+    parser_diagnostyka = podpolecenia.add_parser(
+        "diagnostyka", help="Sprawdź dostępność narzędzi zewnętrznych."
+    )
+    parser_diagnostyka.add_argument(
+        "--plik",
+        metavar="SCIEZKA",
+        default=None,
+        help=(
+            "Zapisz raport wprost do wskazanego pliku w UTF-8 zamiast na standardowe "
+            "wyjście. Zapis wprost pomija pułapkę przekierowania operatorem „>” "
+            "w programie PowerShell, które psuje polskie znaki."
+        ),
+    )
 
     parser_pamiec = podpolecenia.add_parser(
         "pamiec",
@@ -439,7 +505,7 @@ def main(argumenty: list[str] | None = None) -> int:
     ustalone = parser.parse_args(argumenty)
 
     if ustalone.polecenie == "diagnostyka":
-        return uruchom_diagnostyke()
+        return uruchom_diagnostyke(ustalone.plik)
 
     if ustalone.polecenie == "pamiec":
         return uruchom_pamiec(bool(ustalone.wyczysc))

@@ -88,6 +88,7 @@ Poniższy blok zawiera komendy uruchamiania aplikacji, diagnostyki i testów. Te
 ```powershell
 python -m gnb.ui.server
 python -m gnb.cli diagnostyka
+python -m gnb.cli diagnostyka --plik SCIEZKA
 python -m gnb.cli przetworz --projekt NAZWA --plik SCIEZKA --tekst TRESC --tekst-md TRESC --url ADRES --lista-url SCIEZKA --grupa NAZWA
 python -m gnb.cli przetworz --lista-url SCIEZKA --sprawdz-liste
 python -m gnb.cli pamiec

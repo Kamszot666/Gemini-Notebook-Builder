@@ -49,6 +49,10 @@ cache/
 log_szczegolowy.txt
 log_wazne.txt
 
+# Raport diagnostyki zapisany do katalogu repozytorium podczas sprawdzania
+# środowiska. Jest to wynik lokalnego uruchomienia, a nie część kodu.
+/diagnostyka.txt
+
 # Pliki systemowe Windows i macOS.
 Thumbs.db
 desktop.ini

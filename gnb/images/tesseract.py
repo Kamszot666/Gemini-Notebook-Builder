@@ -53,10 +53,19 @@ _DOMYSLNE_SCIEZKI_WINDOWS = (
 # skończona, żeby zawieszony proces nie zatrzymał całego potoku.
 LIMIT_CZASU_WYWOLANIA_SEKUNDY = 180
 
-# Domyślna liczba równoległych procesów OCR, gdy konfiguracja podaje zero, czyli
-# „dobierz sam”. Trzymana nisko, bo każdy proces Tesseracta sam wykorzystuje
-# kilka rdzeni, a nadmiar procesów tylko odbiera pamięć.
+# Górny limit domyślnej liczby równoległych procesów OCR, gdy konfiguracja podaje
+# zero, czyli „dobierz sam”. Trzymany nisko, bo każdy proces Tesseracta sam
+# wykorzystuje kilka rdzeni, a nadmiar procesów tylko odbiera pamięć.
 _DOMYSLNA_LICZBA_PROCESOW = 4
+
+# Ile rdzeni domyślny dobór procesów OCR zostawia wolnych. Powód jest
+# dostępnościowy, nie wydajnościowy: gdy OCR obciąża wszystkie rdzenie, synteza
+# mowy czytnika ekranu zaczyna się zacinać, a użytkownik właśnie wtedy słucha
+# komunikatów o postępie rozpoznawania. Jeden wolny rdzeń wystarcza, żeby mowa
+# była płynna. Nie „poprawiaj” tego na zero jako rzekomo nieoptymalne — ustawienie
+# „ocr_liczba_procesow” nadal pozwala podnieść wartość ręcznie. Opisane też
+# w docs/CONFIGURATION.md.
+_RDZENIE_ZOSTAWIONE_WOLNE = 1
 
 KOMUNIKAT_BRAK_TESSERACTA = (
     "Nie znaleziono programu Tesseract, który rozpoznaje tekst na obrazach i "
@@ -95,7 +104,7 @@ class UstawieniaOcr:
         if self.liczba_procesow > 0:
             return self.liczba_procesow
         rdzenie = os.cpu_count() or 1
-        return max(1, min(_DOMYSLNA_LICZBA_PROCESOW, rdzenie))
+        return max(1, min(_DOMYSLNA_LICZBA_PROCESOW, rdzenie - _RDZENIE_ZOSTAWIONE_WOLNE))
 
 
 def znajdz_tesseract(sciezka_wskazana: str = "") -> Path:
@@ -166,6 +175,23 @@ def dostepne_jezyki(sciezka_wskazana: str = "") -> tuple[str, ...]:
     wiersze = (wynik.stdout or wynik.stderr).splitlines()
     jezyki = [wiersz.strip() for wiersz in wiersze[1:] if wiersz.strip()]
     return tuple(sorted(jezyki))
+
+
+def brakujace_dane_jezykowe(jezyk: str, sciezka_wskazana: str = "") -> tuple[str, ...]:
+    """Zwraca człony zapisu języka, dla których brakuje danych ``*.traineddata``.
+
+    Zapis języka Tesseracta łączy kilka języków znakiem plus, na przykład
+    ``pol+eng``. Pusta krotka oznacza, że wszystkie wymagane dane językowe są
+    zainstalowane. Gdy ``dostepne_jezyki`` nie zwróci nic — bo brakuje samego
+    programu albo katalog danych językowych jest pusty — każdy wymagany człon
+    jest zgłaszany jako brakujący.
+
+    Rozróżnienie braku programu od braku pliku danych językowych należy do
+    wołającego: strażnik pomijania testów OCR sprawdza najpierw ``czy_dostepny``.
+    """
+    zainstalowane = set(dostepne_jezyki(sciezka_wskazana))
+    wymagane = [czlon.strip() for czlon in jezyk.split("+") if czlon.strip()]
+    return tuple(czlon for czlon in wymagane if czlon not in zainstalowane)
 
 
 def rozpoznaj_tekst(

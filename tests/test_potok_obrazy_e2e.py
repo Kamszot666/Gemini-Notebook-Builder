@@ -1,7 +1,9 @@
 """Testy end-to-end potoku dla źródeł będących obrazami oraz skanami PDF.
 
-Testy zależne od OCR pomijają się z komunikatem, gdy Tesseract nie jest
-zainstalowany. Na komputerze użytkownika Tesseract jest, więc realnie się
+Testy zależne od OCR pomijają się z komunikatem, gdy nie da się rozpoznać
+polskiego tekstu: brak Tesseracta albo brak jego danych językowych
+``pol.traineddata``. Rozróżnienie tych braków niesie fikstura ``wymaga_ocr_pol``.
+Na komputerze użytkownika oba warunki są spełnione, więc testy realnie się
 wykonują.
 """
 
@@ -17,15 +19,10 @@ import pytest
 from pypdf import PdfReader
 
 from gnb.core.konfiguracja import Konfiguracja
-from gnb.images.tesseract import czy_dostepny
 from gnb.ingestion.wejscie import przyjmij_plik
 from gnb.potok import przetworz_projekt
 
 KATALOG_DANYCH = Path(__file__).resolve().parent / "dane"
-_TESSERACT_JEST = czy_dostepny()
-_wymaga_tesseracta = pytest.mark.skipif(
-    not _TESSERACT_JEST, reason="Tesseract nie jest zainstalowany w tym środowisku."
-)
 
 
 def _zegar_krokowy() -> Callable[[], datetime]:
@@ -41,8 +38,9 @@ def _zegar_krokowy() -> Callable[[], datetime]:
 _MOMENT = datetime(2026, 9, 3, 12, 0, tzinfo=UTC)
 
 
-@_wymaga_tesseracta
-def test_obraz_przechodzi_potok_i_ma_rozpoznany_tekst_w_wyniku(tmp_path: Path) -> None:
+def test_obraz_przechodzi_potok_i_ma_rozpoznany_tekst_w_wyniku(
+    wymaga_ocr_pol: None, tmp_path: Path
+) -> None:
     wynik = przetworz_projekt(
         [przyjmij_plik(KATALOG_DANYCH / "obraz_wykres.png", _MOMENT)],
         Konfiguracja(katalog_wynikow=tmp_path),
@@ -67,9 +65,8 @@ def test_obraz_przechodzi_potok_i_ma_rozpoznany_tekst_w_wyniku(tmp_path: Path) -
     assert wpis_wyniku["liczba_slow"] > 0
 
 
-@_wymaga_tesseracta
 @pytest.mark.wolne
-def test_skan_pdf_jest_rozpoznawany_strona_po_stronie(tmp_path: Path) -> None:
+def test_skan_pdf_jest_rozpoznawany_strona_po_stronie(wymaga_ocr_pol: None, tmp_path: Path) -> None:
     wynik = przetworz_projekt(
         [przyjmij_plik(KATALOG_DANYCH / "pdf_skan.pdf", _MOMENT)],
         Konfiguracja(katalog_wynikow=tmp_path, ocr_rozdzielczosc_pdf_dpi=200),
@@ -149,6 +146,92 @@ def test_obrazy_bez_grupy_tez_daja_plik_pdf(tmp_path: Path) -> None:
     pliki_txt = list((wynik.katalog_projektu / "pliki_wynikowe").glob("*.txt"))
     assert len(pliki_pdf) == 1
     assert pliki_txt == []
+
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    grupy = {zrodlo["grupa_pakowania"] for zrodlo in manifest["zrodla"]}
+    assert grupy == {"Obrazy 1"}
+
+
+def _konfiguracja_obrazy_bez_dedup(tmp_path: Path) -> Konfiguracja:
+    return Konfiguracja(
+        katalog_wynikow=tmp_path,
+        ocr_wlaczony=False,
+        deduplikacja_hash_wlaczona=False,
+        deduplikacja_kosmetyczna_wlaczona=False,
+        deduplikacja_podobienstwo_wlaczone=False,
+    )
+
+
+def test_kolejne_wywolanie_bez_grupy_daje_kolejny_numer_a_nie_ten_sam_plik(
+    tmp_path: Path,
+) -> None:
+    """Druga partia obrazów bez --grupa trafia do „Obrazy 2”, nie do pliku pierwszej partii.
+
+    Checkpoint kumuluje źródła między uruchomieniami, więc kolejne wywołanie w tym
+    samym projekcie musi dostać nowy numer grupy i własny plik PDF. Test czerwieni
+    się, gdyby obrazy drugiego wywołania dokleiły się do pliku pierwszego.
+    """
+    konfiguracja = _konfiguracja_obrazy_bez_dedup(tmp_path)
+
+    przetworz_projekt(
+        [
+            przyjmij_plik(KATALOG_DANYCH / "obraz_wykres.png", _MOMENT),
+            przyjmij_plik(KATALOG_DANYCH / "obraz.tiff", _MOMENT),
+        ],
+        konfiguracja,
+        nazwa_projektu="Partie obrazów",
+        zegar=_zegar_krokowy(),
+    )
+    wynik = przetworz_projekt(
+        [przyjmij_plik(KATALOG_DANYCH / "obraz_zdjecie.jpg", _MOMENT)],
+        konfiguracja,
+        nazwa_projektu="Partie obrazów",
+        zegar=_zegar_krokowy(),
+    )
+
+    assert wynik.wznowiono is True
+    pliki_pdf = sorted((wynik.katalog_projektu / "pliki_wynikowe").glob("*.pdf"))
+    assert len(pliki_pdf) == 2
+
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    grupy = sorted(zrodlo["grupa_pakowania"] for zrodlo in manifest["zrodla"])
+    assert grupy == ["Obrazy 1", "Obrazy 1", "Obrazy 2"]
+
+    wpisy_pdf = [w for w in manifest["wyniki"] if w["format"] == "pdf"]
+    assert sorted(w["liczba_zrodel"] for w in wpisy_pdf) == [1, 2]
+
+
+def test_ponowne_wywolanie_z_juz_znanym_obrazem_nie_zmienia_numeru_partii(
+    tmp_path: Path,
+) -> None:
+    """Wywołanie zawierające obraz z wcześniejszej partii nie dostaje nowego numeru.
+
+    Odwzorowuje wznowienie przerwanego uruchomienia oraz ponowne podanie tej samej,
+    poszerzonej listy: obraz już zapamiętany wśród wejść ma „Obrazy 1”, więc obraz
+    dołożony w tym samym wywołaniu także dostaje „Obrazy 1”, a nie „Obrazy 2”. Bez
+    tego jedno logiczne wywołanie zostałoby rozbite na dwie grupy.
+    """
+    konfiguracja = _konfiguracja_obrazy_bez_dedup(tmp_path)
+
+    przetworz_projekt(
+        [przyjmij_plik(KATALOG_DANYCH / "obraz_wykres.png", _MOMENT)],
+        konfiguracja,
+        nazwa_projektu="Wznowiona partia",
+        zegar=_zegar_krokowy(),
+    )
+    wynik = przetworz_projekt(
+        [
+            przyjmij_plik(KATALOG_DANYCH / "obraz_wykres.png", _MOMENT),
+            przyjmij_plik(KATALOG_DANYCH / "obraz.tiff", _MOMENT),
+        ],
+        konfiguracja,
+        nazwa_projektu="Wznowiona partia",
+        zegar=_zegar_krokowy(),
+    )
+
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    grupy = {zrodlo["grupa_pakowania"] for zrodlo in manifest["zrodla"]}
+    assert grupy == {"Obrazy 1"}
 
 
 def test_grupa_mieszana_daje_pdf_dla_obrazow_i_txt_dla_tekstu(tmp_path: Path) -> None:

@@ -1,8 +1,10 @@
 """Testy ekstraktora plików obrazów: opis merytoryczny i tekst z OCR.
 
-Testy używające OCR pomijają się z komunikatem, gdy Tesseract nie jest
-zainstalowany. Reszta, w tym budowanie opisu z metadanych i obsługa plików
-uszkodzonych, działa niezależnie od jego obecności.
+Testy używające OCR pomijają się z komunikatem, gdy nie da się rozpoznać
+polskiego tekstu: brak Tesseracta albo brak jego danych językowych
+``pol.traineddata``. Rozróżnienie tych braków niesie fikstura ``wymaga_ocr_pol``.
+Reszta, w tym budowanie opisu z metadanych i obsługa plików uszkodzonych, działa
+niezależnie od obecności Tesseracta.
 """
 
 from __future__ import annotations
@@ -22,10 +24,9 @@ from gnb.extractors.plik_obraz import (
     KOMUNIKAT_BRAK_PILLOW_HEIF,
     EkstraktorObrazu,
 )
-from gnb.images.tesseract import UstawieniaOcr, czy_dostepny
+from gnb.images.tesseract import UstawieniaOcr
 
 KATALOG_DANYCH = Path(__file__).resolve().parents[1] / "dane"
-_TESSERACT_JEST = czy_dostepny()
 
 
 def test_obsluguje_wylacznie_obrazy_jako_zrodlo_typu_obraz() -> None:
@@ -100,8 +101,7 @@ def test_obraz_bez_opisu_i_bez_ocr_zapisuje_jawny_brak_opisu(
     assert "pikseli" in dokument.tekst
 
 
-@pytest.mark.skipif(not _TESSERACT_JEST, reason="Tesseract nie jest zainstalowany.")
-def test_z_wlaczonym_ocr_wynik_zawiera_rozpoznany_tekst() -> None:
+def test_z_wlaczonym_ocr_wynik_zawiera_rozpoznany_tekst(wymaga_ocr_pol: None) -> None:
     bajty = (KATALOG_DANYCH / "obraz_wykres.png").read_bytes()
 
     dokument = EkstraktorObrazu(UstawieniaOcr(jezyk="pol"), ocr_wlaczony=True).wyekstrahuj(

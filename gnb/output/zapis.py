@@ -1,4 +1,4 @@
-"""Zapis plików wynikowych źródła: TXT zawsze, MD warunkowo.
+"""Zapis plików wynikowych źródła: TXT zawsze, MD warunkowo, PDF dla grup obrazów.
 
 Pliki są zapisywane w UTF-8 bez znaku kolejności bajtów, z końcami wierszy LF,
 i zawsze kończą się pojedynczym znakiem nowej linii. W etapie pierwszym każde
@@ -105,6 +105,36 @@ def zapisz_plik_pakietu(
         liczba_slow=policz_slowa(tekst),
         liczba_znakow=policz_znaki(tekst),
         rozmiar_bajtow=len(dane),
+        checksum=suma_kontrolna_pliku(sciezka),
+    )
+
+
+def zapisz_plik_pdf(
+    katalog_wynikow: Path,
+    nazwa_bazowa: str,
+    pdf_bajty: bytes,
+    identyfikatory_zrodel: list[str],
+    *,
+    liczba_slow: int,
+    liczba_znakow: int,
+) -> PlikWynikowy:
+    """Zapisuje gotowy tematyczny plik PDF i zwraca jego opis.
+
+    Bajty pliku PDF powstają w `gnb.images.pdf_tematyczny` i są tu zapisywane
+    bez zmian. Liczba słów i znaków dotyczy treści tekstowej obrazów grupy, a nie
+    binarnej zawartości pliku PDF, bo to treść jest porównywana z limitem
+    notatnika, a rozmiar pliku jest osobnym, trzecim ograniczeniem.
+    """
+    katalog_wynikow.mkdir(parents=True, exist_ok=True)
+    sciezka = katalog_wynikow / f"{nazwa_bazowa}.pdf"
+    sciezka.write_bytes(pdf_bajty)
+    return PlikWynikowy(
+        sciezka=sciezka,
+        format=FormatWynikowy.PDF,
+        identyfikatory_zrodel=list(identyfikatory_zrodel),
+        liczba_slow=liczba_slow,
+        liczba_znakow=liczba_znakow,
+        rozmiar_bajtow=len(pdf_bajty),
         checksum=suma_kontrolna_pliku(sciezka),
     )
 

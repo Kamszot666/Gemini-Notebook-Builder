@@ -2065,6 +2065,9 @@ def _nowy_checkpoint(
             "formaty_wynikowe": ",".join(konfiguracja.formaty_wynikowe),
             "zachowuj_oryginaly": "tak" if konfiguracja.zachowuj_oryginaly else "nie",
             "zachowuj_odnosniki": "tak" if konfiguracja.zachowuj_odnosniki else "nie",
+            "ocr_wlaczony": "tak" if konfiguracja.ocr_wlaczony else "nie",
+            "ocr_jezyk": konfiguracja.ocr_jezyk,
+            "jakosc_grafik": str(konfiguracja.jakosc_grafik),
         },
         czas_ostatniej_zmiany=moment.isoformat(),
     )

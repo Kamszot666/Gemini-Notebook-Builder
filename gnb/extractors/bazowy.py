@@ -130,14 +130,22 @@ def domyslny_rejestr_binarny(
     ustawienia_ocr: object | None = None,
     *,
     ocr_wlaczony: bool = False,
+    ustawienia_transkrypcji: object | None = None,
+    transkrypcja_wlaczona: bool = False,
+    prog_udzialu_mowy: float = 0.5,
+    wymus_transkrypcje: bool = False,
 ) -> RejestrEkstraktorowBinarnych:
-    """Buduje rejestr ekstraktorów formatów binarnych: PDF, DOCX, EPUB i obrazów.
+    """Buduje rejestr ekstraktorów formatów binarnych: PDF, DOCX, EPUB, obrazów i audio.
 
     Ekstraktor obrazów oraz ekstraktor PDF potrzebują ustawień OCR i informacji,
-    czy OCR jest w ogóle włączony. Oba pochodzą z konfiguracji projektu. Gdy nie
-    podano ustawień, OCR jest wyłączony, a ekstraktory zwracają samą treść bez
-    rozpoznawania tekstu z obrazu.
+    czy OCR jest w ogóle włączony. Ekstraktor audio potrzebuje ustawień
+    transkrypcji, informacji, czy transkrypcja jest włączona, progu udziału mowy
+    oraz flagi wymuszenia transkrypcji dla materiału niemownego. Wszystkie te
+    wartości pochodzą z konfiguracji projektu i z opcji wiersza poleceń. Gdy nie
+    podano ustawień, OCR i transkrypcja są wyłączone.
     """
+    from gnb.audio.transkrypcja import UstawieniaTranskrypcji
+    from gnb.extractors.plik_audio import EkstraktorAudio
     from gnb.extractors.plik_docx import EkstraktorDocx
     from gnb.extractors.plik_epub import EkstraktorEpub
     from gnb.extractors.plik_obraz import EkstraktorObrazu
@@ -145,12 +153,23 @@ def domyslny_rejestr_binarny(
     from gnb.images.tesseract import UstawieniaOcr
 
     ustawienia = ustawienia_ocr if isinstance(ustawienia_ocr, UstawieniaOcr) else UstawieniaOcr()
+    ustawienia_audio = (
+        ustawienia_transkrypcji
+        if isinstance(ustawienia_transkrypcji, UstawieniaTranskrypcji)
+        else UstawieniaTranskrypcji()
+    )
     return RejestrEkstraktorowBinarnych(
         (
             EkstraktorPdf(ustawienia, ocr_wlaczony=ocr_wlaczony),
             EkstraktorDocx(),
             EkstraktorEpub(),
             EkstraktorObrazu(ustawienia, ocr_wlaczony=ocr_wlaczony),
+            EkstraktorAudio(
+                ustawienia_audio,
+                transkrypcja_wlaczona=transkrypcja_wlaczona,
+                prog_udzialu_mowy=prog_udzialu_mowy,
+                wymus_transkrypcje=wymus_transkrypcje,
+            ),
         )
     )
 

@@ -3,10 +3,10 @@
 Udostępnia trzy polecenia. Polecenie ``diagnostyka`` sprawdza dostępność
 narzędzi zewnętrznych wymienionych w sekcji piątej CLAUDE.md. Polecenie
 ``przetworz`` uruchamia potok przetwarzania dla tekstu wklejonego, plików
-lokalnych w formacie TXT, MD, HTML, CSV, SRT, VTT, PDF, DOCX i EPUB, adresów
-stron internetowych oraz adresów filmów z serwisu YouTube, dla których
-pobierane są napisy. Polecenie ``pamiec`` pokazuje stan wspólnej pamięci
-podręcznej pobranych stron i pozwala ją wyczyścić.
+lokalnych w formacie TXT, MD, HTML, CSV, SRT, VTT, PDF, DOCX, EPUB, obrazów,
+nagrań mowy, adresów stron internetowych oraz adresów filmów z serwisu YouTube,
+dla których pobierane są napisy. Polecenie ``pamiec`` pokazuje stan wspólnej
+pamięci podręcznej pobranych stron i pozwala ją wyczyścić.
 
 Przed pobraniem czegokolwiek polecenie ``przetworz`` wypisuje podsumowanie listy
 adresów: ile jest poprawnych, ile duplikatów i ile wpisów odrzucono wraz
@@ -49,24 +49,30 @@ from gnb.potok import przetworz_projekt
 KOD_BRAK_ZRODEL = 2
 KOD_BLAD = 1
 
-# Najkrótszy odstęp między wierszami postępu OCR w wierszu poleceń. Dławienie
+# Najkrótszy odstęp między wierszami postępu w wierszu poleceń. Dławienie
 # istnieje z tego samego powodu co w interfejsie WWW: potok zgłasza postęp po
-# każdej stronie skanu, a wypisanie każdej z nich zalałoby wyjście.
+# każdej stronie skanu i po każdym segmencie transkrypcji, a wypisanie każdego
+# z nich zalałoby wyjście.
 _ODSTEP_POSTEPU_CLI_SEKUNDY = 3.0
+
+# Fazy potoku, których postęp jest wypisywany w wierszu poleceń: OCR skanu oraz
+# transkrypcja nagrania. To jedyne etapy, które potrafią trwać kilkanaście minut
+# albo dłużej bez żadnego znaku życia.
+_FAZY_POSTEPU_CLI = frozenset({FazaPotoku.OCR, FazaPotoku.TRANSKRYPCJA})
 
 
 def _postep_wiersza_polecen() -> WywolanieZwrotnePostepu:
-    """Buduje dławione wypisywanie postępu OCR dla wiersza poleceń.
+    """Buduje dławione wypisywanie postępu długich etapów dla wiersza poleceń.
 
-    Wypisywane są wyłącznie zdarzenia fazy OCR, bo to jedyny etap, który potrafi
-    trwać kilkanaście minut bez żadnego znaku życia. Wiersze są zwykłym tekstem,
-    bez pasków postępu i bez znaków sterujących przerysowujących wiersz, zgodnie
-    z sekcją piątą CLAUDE.md.
+    Wypisywane są wyłącznie zdarzenia faz OCR i transkrypcji, bo to jedyne etapy,
+    które potrafią trwać kilkanaście minut albo dłużej bez żadnego znaku życia.
+    Wiersze są zwykłym tekstem, bez pasków postępu i bez znaków sterujących
+    przerysowujących wiersz, zgodnie z sekcją piątą CLAUDE.md.
     """
     stan = {"czas": 0.0}
 
     def zglos(zdarzenie: ZdarzeniePostepu) -> None:
-        if zdarzenie.faza is not FazaPotoku.OCR:
+        if zdarzenie.faza not in _FAZY_POSTEPU_CLI:
             return
         teraz = time.monotonic()
         ostatni = zdarzenie.wykonano == zdarzenie.wszystkich
@@ -99,8 +105,11 @@ NARZEDZIA: tuple[Narzedzie, ...] = (
         nazwa="FFmpeg",
         polecenia=("ffmpeg",),
         argument_wersji="-version",
-        do_czego_sluzy="konwersja i przygotowanie plików audio",
-        co_przestanie_dzialac="przetwarzanie nagrań mowy",
+        do_czego_sluzy=(
+            "rozkodowanie każdego nagrania audio do fali dźwiękowej przed transkrypcją; "
+            "ścieżka audio używa wyłącznie FFmpega, nie dekodera wbudowanego w faster-whisper"
+        ),
+        co_przestanie_dzialac="całe przetwarzanie i transkrypcja nagrań mowy",
     ),
     Narzedzie(
         nazwa="Tesseract",
@@ -325,6 +334,7 @@ def uruchom_przetwarzanie(
     listy_adresow: list[str] | None = None,
     tylko_sprawdz_liste: bool = False,
     grupa: str | None = None,
+    wymus_transkrypcje: bool = False,
 ) -> int:
     """Buduje pozycje wejściowe, uruchamia potok i wypisuje raport dla użytkownika.
 
@@ -337,6 +347,10 @@ def uruchom_przetwarzanie(
     w możliwie najmniej plików wynikowych. Wiele grup w jednym projekcie
     uzyskuje się przez kilkukrotne uruchomienie polecenia: checkpoint kumuluje
     źródła między uruchomieniami.
+
+    Argument `wymus_transkrypcje` przełamuje odrzucenie nagrania rozpoznanego
+    jako niemowne: audio jest wtedy przepisywane nawet przy niskim udziale mowy.
+    Służy do nadpisania tej decyzji dla konkretnego nagrania mowy z głośnym tłem.
 
     Przy opcji `tylko_sprawdz_liste` polecenie kończy się po wypisaniu
     podsumowania listy adresów, z kodem zero także wtedy, gdy część wpisów jest
@@ -394,6 +408,7 @@ def uruchom_przetwarzanie(
             nazwa_projektu=nazwa_projektu,
             wlasny_katalog_projektu=Path(katalog_projektu) if katalog_projektu else None,
             postep=_postep_wiersza_polecen(),
+            wymus_transkrypcje=wymus_transkrypcje,
         )
     except BladGnb as blad:
         print(f"Przetwarzanie przerwane błędem: {blad.komunikat}")
@@ -505,7 +520,10 @@ def main(argumenty: list[str] | None = None) -> int:
         action="append",
         default=[],
         metavar="SCIEZKA",
-        help="Ścieżka pliku TXT lub MD. Opcję można podać wielokrotnie.",
+        help=(
+            "Ścieżka pliku lokalnego: tekst, dokument, obraz albo nagranie mowy. "
+            "Opcję można podać wielokrotnie."
+        ),
     )
     parser_przetworz.add_argument(
         "--tekst",
@@ -557,6 +575,15 @@ def main(argumenty: list[str] | None = None) -> int:
         ),
     )
     parser_przetworz.add_argument(
+        "--wymus-transkrypcje",
+        action="store_true",
+        dest="wymus_transkrypcje",
+        help=(
+            "Przepisz nagranie mowy nawet wtedy, gdy zostało rozpoznane jako niemowne. "
+            "Przydatne dla nagrania mowy z głośną muzyką albo szumem w tle."
+        ),
+    )
+    parser_przetworz.add_argument(
         "--katalog",
         metavar="SCIEZKA",
         default=None,
@@ -582,6 +609,7 @@ def main(argumenty: list[str] | None = None) -> int:
             list(ustalone.lista_url),
             bool(ustalone.sprawdz_liste),
             ustalone.grupa,
+            bool(ustalone.wymus_transkrypcje),
         )
 
     parser.error(f"Nieznane polecenie: {ustalone.polecenie}")

@@ -11,11 +11,51 @@ dostarczenia próbek z zewnątrz.
 
 from __future__ import annotations
 
+import functools
 import io
 from collections.abc import Callable
 
 import pytest
 from PIL import Image, ImageDraw, ImageFont
+
+
+@functools.lru_cache(maxsize=1)
+def _powod_pominiecia_ocr_pol() -> str | None:
+    """Zwraca powód pominięcia testów OCR po polsku albo ``None``, gdy OCR działa.
+
+    Strażnik rozróżnia dwa braki, które w komunikacie błędu wyglądałyby tak samo:
+    brak samego Tesseracta oraz obecny Tesseract bez danych językowych
+    ``pol.traineddata``. Drugi przypadek nie jest regresją aplikacji — wołanie
+    OCR z językiem ``pol`` kończy się wtedy błędem Tesseracta, choć kod aplikacji
+    jest sprawny — więc test ma się pominąć z czytelnym powodem, a nie
+    zaczerwienić. Wynik jest liczony raz na sesję testów.
+    """
+    from gnb.images.tesseract import brakujace_dane_jezykowe, czy_dostepny
+
+    if not czy_dostepny():
+        return "Tesseract nie jest zainstalowany w tym środowisku."
+    brakujace = brakujace_dane_jezykowe("pol")
+    if brakujace:
+        return (
+            "Tesseract jest zainstalowany, ale brakuje jego danych językowych dla "
+            f"języka: {', '.join(brakujace)} (plik pol.traineddata). OCR polskiego "
+            "tekstu nie zadziała, dopóki polskie dane językowe nie zostaną doinstalowane."
+        )
+    return None
+
+
+@pytest.fixture
+def wymaga_ocr_pol() -> None:
+    """Pomija test, gdy w środowisku nie da się wykonać OCR polskiego tekstu.
+
+    Test wołający Tesseract z językiem ``pol`` używa tej fikstury zamiast markera
+    sprawdzającego samą obecność programu. Dzięki temu środowisko z Tesseractem,
+    ale bez pliku ``pol.traineddata``, daje pominięcie z jasnym powodem, a nie
+    serię błędów wyglądających jak regresja.
+    """
+    powod = _powod_pominiecia_ocr_pol()
+    if powod is not None:
+        pytest.skip(powod)
 
 
 def _obraz_z_tekstem(

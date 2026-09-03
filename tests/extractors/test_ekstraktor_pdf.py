@@ -19,10 +19,9 @@ from gnb.core.stale import PoziomPewnosciStruktury, TypZrodla
 from gnb.core.wyjatki import BladTrwaly
 from gnb.extractors import plik_pdf
 from gnb.extractors.plik_pdf import METODA_EKSTRAKCJI_OCR, OSTRZEZENIE_TEKST_Z_OCR, EkstraktorPdf
-from gnb.images.tesseract import UstawieniaOcr, czy_dostepny
+from gnb.images.tesseract import UstawieniaOcr
 
 KATALOG_DANYCH = Path(__file__).resolve().parents[1] / "dane"
-_TESSERACT_JEST = czy_dostepny()
 
 
 def _pdf_z_tekstem(*strony_tekstow: str) -> bytes:
@@ -141,8 +140,7 @@ def test_plik_uszkodzony_z_danych_testowych_konczy_sie_bledem_trwalym() -> None:
         EkstraktorPdf().wyekstrahuj("plik_dokument-8", dane)
 
 
-@pytest.mark.skipif(not _TESSERACT_JEST, reason="Tesseract nie jest zainstalowany.")
-def test_skan_z_wlaczonym_ocr_rozpoznaje_tekst_stron() -> None:
+def test_skan_z_wlaczonym_ocr_rozpoznaje_tekst_stron(wymaga_ocr_pol: None) -> None:
     dane = (KATALOG_DANYCH / "pdf_skan.pdf").read_bytes()
 
     dokument = EkstraktorPdf(UstawieniaOcr(jezyk="pol"), ocr_wlaczony=True).wyekstrahuj(
@@ -157,8 +155,7 @@ def test_skan_z_wlaczonym_ocr_rozpoznaje_tekst_stron() -> None:
     assert dokument.metadane["liczba_stron_skanu"] == "2"
 
 
-@pytest.mark.skipif(not _TESSERACT_JEST, reason="Tesseract nie jest zainstalowany.")
-def test_pdf_z_warstwa_tekstowa_nie_uruchamia_ocr() -> None:
+def test_pdf_z_warstwa_tekstowa_nie_uruchamia_ocr(wymaga_ocr_pol: None) -> None:
     """Plik z prawdziwą warstwą tekstową jest czytany wprost, nawet gdy OCR jest włączony."""
     dane = (KATALOG_DANYCH / "pdf_tekstowy.pdf").read_bytes()
 

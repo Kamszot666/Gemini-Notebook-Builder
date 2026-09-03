@@ -1,9 +1,10 @@
 """Testy wołania Tesseracta: odnajdywanie narzędzia i rozpoznawanie tekstu.
 
-Testy rozpoznawania pomijają się z czytelnym komunikatem, gdy Tesseract nie jest
-zainstalowany, tak samo jak testy kanaryjne serwisu wideo pomijają się przy
-braku sieci. Na komputerze użytkownika Tesseract jest, więc realnie się
-wykonują.
+Testy rozpoznawania po polsku pomijają się z czytelnym komunikatem, gdy nie da
+się wykonać OCR polskiego tekstu: albo brakuje samego Tesseracta, albo jest on
+zainstalowany bez pliku danych językowych ``pol.traineddata``. Rozróżnienie tych
+dwóch braków niesie fikstura ``wymaga_ocr_pol``. Na komputerze użytkownika oba
+warunki są spełnione, więc testy realnie się wykonują.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from gnb.core.wyjatki import BrakNarzedzia
 from gnb.images import tesseract
 from gnb.images.tesseract import (
     UstawieniaOcr,
+    brakujace_dane_jezykowe,
     czy_dostepny,
     rozpoznaj_tekst,
     rozpoznaj_wiele,
@@ -25,9 +27,6 @@ from gnb.images.tesseract import (
 )
 
 _TESSERACT_JEST = czy_dostepny()
-_wymaga_tesseracta = pytest.mark.skipif(
-    not _TESSERACT_JEST, reason="Tesseract nie jest zainstalowany w tym środowisku."
-)
 
 
 def test_znajdz_tesseract_zwraca_istniejacy_plik_gdy_jest_w_path() -> None:
@@ -63,8 +62,8 @@ def test_znajdz_tesseract_zglasza_brak_gdy_nigdzie_go_nie_ma(
         znajdz_tesseract()
 
 
-@_wymaga_tesseracta
 def test_rozpoznaj_tekst_odczytuje_wyrazne_wielkie_litery(
+    wymaga_ocr_pol: None,
     obraz_z_tekstem: Callable[..., bytes],
 ) -> None:
     obraz = obraz_z_tekstem(["GEMINI NOTEBOOK", "BUILDER 2026"])
@@ -75,8 +74,8 @@ def test_rozpoznaj_tekst_odczytuje_wyrazne_wielkie_litery(
     assert "\r" not in tekst
 
 
-@_wymaga_tesseracta
 def test_rozpoznaj_wiele_zachowuje_kolejnosc_i_zglasza_postep(
+    wymaga_ocr_pol: None,
     obraz_z_tekstem: Callable[..., bytes],
 ) -> None:
     obrazy = [
@@ -105,6 +104,64 @@ def test_rozpoznaj_wiele_dla_pustej_listy_nie_wola_tesseracta() -> None:
 def test_efektywna_liczba_procesow_zamienia_zero_na_wartosc_dobrana() -> None:
     assert UstawieniaOcr(liczba_procesow=2).efektywna_liczba_procesow == 2
     assert UstawieniaOcr(liczba_procesow=0).efektywna_liczba_procesow >= 1
+
+
+def test_efektywna_liczba_procesow_zostawia_jeden_rdzen_wolny(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Domyślny dobór procesów OCR nie zajmuje wszystkich rdzeni.
+
+    Powód jest dostępnościowy: przy pełnym obciążeniu wszystkich rdzeni synteza
+    mowy czytnika ekranu się zacina, a użytkownik właśnie wtedy słucha komunikatów
+    o postępie OCR. Test czerwieni się, gdyby ktoś „zoptymalizował” dobór z powrotem
+    do pełnej liczby rdzeni.
+    """
+    monkeypatch.setattr(tesseract.os, "cpu_count", lambda: 8)
+    assert UstawieniaOcr(liczba_procesow=0).efektywna_liczba_procesow == 4
+
+    monkeypatch.setattr(tesseract.os, "cpu_count", lambda: 3)
+    assert UstawieniaOcr(liczba_procesow=0).efektywna_liczba_procesow == 2
+
+    monkeypatch.setattr(tesseract.os, "cpu_count", lambda: 1)
+    assert UstawieniaOcr(liczba_procesow=0).efektywna_liczba_procesow == 1
+
+    monkeypatch.setattr(tesseract.os, "cpu_count", lambda: None)
+    assert UstawieniaOcr(liczba_procesow=0).efektywna_liczba_procesow == 1
+
+    monkeypatch.setattr(tesseract.os, "cpu_count", lambda: 20)
+    assert UstawieniaOcr(liczba_procesow=7).efektywna_liczba_procesow == 7
+
+
+def test_brakujace_dane_jezykowe_wskazuje_brakujacy_czlon(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Strażnik pomijania testów OCR rozpoznaje brak konkretnego pliku danych językowych."""
+    monkeypatch.setattr(tesseract, "dostepne_jezyki", lambda _sciezka="": ("eng", "osd"))
+
+    assert brakujace_dane_jezykowe("pol") == ("pol",)
+    assert brakujace_dane_jezykowe("pol+eng") == ("pol",)
+    assert brakujace_dane_jezykowe("eng") == ()
+
+
+def test_brakujace_dane_jezykowe_puste_gdy_wszystkie_dane_sa(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tesseract, "dostepne_jezyki", lambda _sciezka="": ("eng", "pol"))
+
+    assert brakujace_dane_jezykowe("pol+eng") == ()
+
+
+def test_brakujace_dane_jezykowe_zglasza_wszystko_gdy_lista_jest_pusta(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pusta lista języków — brak programu albo pusty katalog danych — to brak wszystkiego.
+
+    Rozróżnienie braku programu od braku pliku danych językowych należy do
+    strażnika w conftest, który najpierw sprawdza ``czy_dostepny``.
+    """
+    monkeypatch.setattr(tesseract, "dostepne_jezyki", lambda _sciezka="": ())
+
+    assert brakujace_dane_jezykowe("pol+eng") == ("pol", "eng")
 
 
 def test_ustawienia_ocr_z_konfiguracji(tmp_path: Path) -> None:

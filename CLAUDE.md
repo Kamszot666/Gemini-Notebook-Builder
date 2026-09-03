@@ -53,6 +53,8 @@ Te reguły mają pierwszeństwo przed wygodą implementacji i przed szybkością
 9. Nie deklaruj ukończenia bez sprawdzenia rzeczywistego rezultatu. To, że plik się uruchamia, nie znaczy, że funkcja działa.
 10. Nie przedstawiaj przypuszczenia jako faktu. Wyraźnie rozdzielaj: informację z dokumentacji projektu, informację zweryfikowaną w aktualnym źródle zewnętrznym, wniosek techniczny oraz propozycję.
 
+Uwaga do punktu szóstego. Atrapa modułu `av` w `gnb/audio/transkrypcja.py` NIE jest omijaniem zabezpieczenia. Inteligentne sterowanie aplikacjami Windows blokuje niepodpisane biblioteki natywne PyAV, a biblioteka faster-whisper importuje PyAV bezwarunkowo w swoim pliku `__init__`. Wstawienie pustej atrapy do `sys.modules` nie ładuje zablokowanego pliku, nie wyłącza żadnej ochrony i nie obchodzi kontroli aplikacji — rezygnuje jedynie z zależności, której i tak nie używamy, bo dekodujemy dźwięk własnym narzędziem, czyli FFmpegiem. Rozumowanie jest identyczne jak przy regule uruchamiania narzędzi deweloperskich przez `python -m` z sekcji piątej: kod wykonuje się tak samo, zmienia się tylko to, którego pliku system nie musi wpuszczać.
+
 ## 4. Priorytety przy konfliktach
 
 Kolejność jest wiążąca. Wyższy priorytet wygrywa z niższym.
@@ -498,6 +500,14 @@ Te rozwiązania zostały rozważone i odrzucone. Zapis istnieje po to, żeby nie
 2. ODRZUCONE: frameworki crawlerowe, czyli Crawlee for Python oraz Scrapy razem ze `scrapy-playwright`. Powody. Po pierwsze, te narzędzia rozwiązują zadanie, którego ten projekt nie ma: odkrywanie nowych adresów przez podążanie za odnośnikami, kolejkowanie tysięcy żądań i zarządzanie wieloma sesjami. Aplikacja dostaje od użytkownika gotową listę adresów, a limit notatnika wynosi sto źródeł na planie Plus, więc skala rzędu tysiąca artykułów, dla której te frameworki są projektowane, tutaj nie występuje. Po drugie, mechanizmy, dla których zwykle się je dobiera, czyli ponowienia, rosnący odstęp, ograniczanie częstotliwości na domenę, wykrywanie duplikatów i kolejkowanie, są już zaimplementowane w `gnb/ingestion` i pokryte testami. Po trzecie, Scrapy stoi na Twisted, a nasz klient na asyncio, więc jego dołożenie oznaczałoby konflikt pętli zdarzeń i przepisanie działającego kodu. Warunek rewizji: gdyby projekt kiedyś miał sam odkrywać adresy, na przykład z mapy witryny albo kanału RSS, wtedy warto wrócić do tej oceny, ale nadal osobno rozważyć, czy nie wystarczy prosty moduł czytający `sitemap.xml`.
 
 3. ODRZUCONE: wciąganie źródeł tekstowych grupy mieszanej do tego samego pliku PDF, co obrazy tej grupy. Stan obecny: grupa złożona z obrazów i źródeł tekstowych daje dwa pliki wynikowe, czyli tematyczny plik PDF dla obrazów oraz plik tekstowy dla reszty, i zajmuje w ten sposób dwa sloty notatnika. Powód odrzucenia scalenia w jeden PDF: podstawową decyzją projektu jest TXT jako format wynikowy, a takie połączenie odwracałoby tę decyzję i kazałoby logice podziału według trzech limitów obsługiwać dwa formaty naraz, przy oszczędności jednego slotu w rzadkim przypadku. Warunek rewizji: jeżeli limit stu źródeł zacznie być w praktyce wyczerpywany właśnie przez grupy mieszane.
+
+### Reguła doboru zależności pod kontrolą aplikacji Windows
+
+Na komputerze deweloperskim Inteligentne sterowanie aplikacjami, czyli Smart App Control, jest włączone i wymuszane. Klucz rejestru `HKLM\SYSTEM\CurrentControlSet\Control\CI\Policy`, wartość `VerifiedAndReputablePolicyState`, wynosi jeden. Ta funkcja blokuje niepodpisane pliki wykonywalne i biblioteki DLL bez reputacji w chmurze Microsoftu, a wyłączenia nie da się cofnąć bez ponownej instalacji systemu.
+
+Dotychczas zablokowane zostały trzy rzeczy: biblioteka DLL wymagana przez nowszą wersję mypy, nakładka `pytest.exe` przepisana podczas instalacji zależności etapu trzeciego oraz pakiet PyAV, konkretnie plik `av\audio\frame`, który niesie kilkadziesiąt niepodpisanych bibliotek FFmpega.
+
+Z tego wynika reguła obowiązująca przy każdej nowej zależności. Po pierwsze, preferuj bibliotekę w czystym Pythonie. Po drugie, jeżeli komponent natywny jest konieczny, sprawdź jego import zaraz po instalacji, zanim zbudujesz na nim całą warstwę — inaczej blokada wyjdzie na jaw dopiero na końcu etapu. Po trzecie, jeżeli komponent natywny da się obejść, bo służy funkcji, którą realizuje inne, już zaufane narzędzie, obejdź go: tak zrobiono z dekodowaniem audio, które idzie przez FFmpega zamiast przez wbudowany w faster-whisper PyAV, z atrapą modułu `av` wstawianą wyłącznie awaryjnie. Warunek rewizji dla konkretnej zależności: gdy jej wydawca zacznie podpisywać biblioteki natywne albo gdy zyskają one reputację w chmurze Microsoftu.
 
 ## 18e. Zagadnienia otwarte
 

@@ -1,9 +1,9 @@
-# Konfiguracja — stan po etapie ósmym
+# Konfiguracja — stan po etapie dziewiątym
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
-obsługuje po etapie siódmym. Pełna lista pól z sekcji jedenastej a pliku
-`CLAUDE.md`, w tym ustawienia OCR, transkrypcji i generowania PDF, powstanie
-w kolejnych etapach razem z funkcjami, których dotyczy. Treść dwóch pól
+obsługuje po etapie dziewiątym. Pełna lista pól z sekcji jedenastej a pliku
+`CLAUDE.md` powstanie w kolejnych etapach razem z funkcjami, których dotyczy.
+Treść dwóch pól
 tekstowych notatnika, czyli instrukcji systemowej i promptu wyszukiwania, nie
 jest polem pliku konfiguracji: zapisuje się ją razem z projektem, w pliku
 `pola_notatnika.json` w katalogu projektu, przez interfejs WWW.
@@ -52,10 +52,10 @@ Nazwa pola w pliku TOML, odpowiadająca zmienna środowiskowa oraz znaczenie:
 4. `bezpieczny_limit_mb`, zmienna `GNB_BEZPIECZNY_LIMIT_MB`. Bezpieczny limit
    rozmiaru w megabajtach. Dotyczy jednocześnie pliku wynikowego, którego treść
    przekraczająca ten limit jest dzielona na części, oraz surowego pliku
-   binarnego przy wejściu — plik PDF, DOCX albo EPUB tej wielkości jest pomijany,
-   bo nie da się go bezpiecznie wczytać do pamięci w całości. Domyślnie 190.
-   Dla plików tekstowych rozmiar surowego pliku nie jest ograniczeniem wejścia,
-   bo nadmiarową treścią zajmuje się podział.
+   binarnego przy wejściu — plik PDF, DOCX, EPUB, obraz albo nagranie audio tej
+   wielkości jest pomijany, bo nie da się go bezpiecznie wczytać do pamięci
+   w całości. Domyślnie 190. Dla plików tekstowych rozmiar surowego pliku nie
+   jest ograniczeniem wejścia, bo nadmiarową treścią zajmuje się podział.
 5. `formaty_wynikowe`, zmienna `GNB_FORMATY_WYNIKOWE`. Lista formatów plików
    wynikowych. Dozwolone wartości to `txt` i `md`. Format `txt` jest zawsze
    obecny, nawet gdy go nie wymienisz, bo plik TXT powstaje zawsze. Pozostawienie
@@ -217,6 +217,53 @@ tekstu, z ostrzeżeniem.
    Tesseracta. Domyślnie pusty, co oznacza katalog wskazany przez samo narzędzie.
    Wskazanie nieistniejącego katalogu jest błędem konfiguracji.
 
+## Pola transkrypcji nagrań mowy
+
+Transkrypcję wykonuje biblioteka faster-whisper na modelu Whisper. Rozkodowanie
+nagrania do fali dźwiękowej robi program FFmpeg — jest on wymagany dla nagrań
+na każdym systemie.
+
+1. `transkrypcja_wlaczona`, zmienna `GNB_TRANSKRYPCJA_WLACZONA`. Włączenie
+   transkrypcji nagrań mowy. Domyślnie prawda. Przy wartości fałsz nagranie
+   audio dostaje status „pominiete” z czytelnym powodem.
+2. `transkrypcja_model`, zmienna `GNB_TRANSKRYPCJA_MODEL`. Nazwa modelu Whisper:
+   `tiny`, `base`, `small`, `medium` albo `large-v3`. Domyślnie `medium`. Model
+   średni robi na polskim zauważalnie mniej błędów niż mały, a błędna
+   transkrypcja to cicha korupcja materiału źródłowego — ten sam argument, dla
+   którego przy OCR wybrano dane językowe „best” zamiast „fast”. Zmiana na
+   mniejszy model to zmiana tej jednej wartości, bez dotykania kodu.
+3. `transkrypcja_jezyk`, zmienna `GNB_TRANSKRYPCJA_JEZYK`. Kod języka mowy
+   w nagraniu, na przykład `pl`. Domyślnie `pl`.
+4. `transkrypcja_urzadzenie`, zmienna `GNB_TRANSKRYPCJA_URZADZENIE`. Urządzenie
+   obliczeniowe. Dopuszczalne są wyłącznie wartości `procesor` i `cpu`, obie
+   znaczą to samo. Domyślnie `procesor`. Ustawienie karty graficznej kończy się
+   jawnym błędem konfiguracji: aktualna macierz zgodności ROCm dla systemu
+   Windows nie wymienia grafiki zintegrowanej Vega w procesorach serii 7030,
+   a stos DirectML to osobny ciężki stos natywny. Aplikacja nie przełącza po
+   cichu z powrotem na procesor, bo cicha podmiana jest gorsza niż jawna odmowa.
+5. `transkrypcja_typ_obliczen`, zmienna `GNB_TRANSKRYPCJA_TYP_OBLICZEN`. Typ
+   obliczeń modelu, na przykład `int8`, `int8_float32` albo `float32`. Domyślnie
+   `int8`, czyli kwantyzacja ośmiobitowa — najszybsza na procesorze.
+6. `transkrypcja_liczba_watkow`, zmienna `GNB_TRANSKRYPCJA_LICZBA_WATKOW`. Liczba
+   wątków procesora dla transkrypcji. Domyślnie 0, czyli wartość dobrana z liczby
+   rdzeni pomniejszonej o jeden, nie mniej niż jeden. Jeden rdzeń zostaje wolny
+   z powodu dostępnościowego, nie wydajnościowego: przy pełnym obciążeniu
+   wszystkich rdzeni synteza mowy czytnika ekranu się zacina, a użytkownik
+   właśnie wtedy słucha komunikatów o postępie. Wpisanie wartości większej od
+   zera podnosi liczbę wątków ręcznie i znosi ten margines. Tak samo dobierana
+   jest liczba procesów OCR.
+7. `transkrypcja_prog_vad`, zmienna `GNB_TRANSKRYPCJA_PROG_VAD`. Próg filtra
+   wykrywania aktywności mowy Silero, liczba od zera wyłącznie do jednego
+   włącznie. Domyślnie 0,5. Wyższa wartość odrzuca więcej cichych fragmentów.
+8. `transkrypcja_prog_udzialu_mowy`, zmienna `GNB_TRANSKRYPCJA_PROG_UDZIALU_MOWY`.
+   Najmniejszy udział mowy w długości nagrania, przy którym nagranie jest
+   uznawane za mowę i przechodzi do transkrypcji. Liczba od zera do jednego
+   włącznie. Domyślnie 0,5. Nagranie poniżej tego progu jest pomijane jako
+   materiał niemowny. Wartość zero oznacza „nigdy nie odrzucaj”, czyli globalny
+   odpowiednik opcji `--wymus-transkrypcje` z wiersza poleceń. To jest
+   heurystyka, a nie klasyfikator muzyki: utwór ze śpiewem może częściowo
+   zarejestrować się jako mowa.
+
 ## Pola grafiki i generowanych plików PDF
 
 1. `jakosc_grafik`, zmienna `GNB_JAKOSC_GRAFIK`. Jakość zapisu obrazów jako JPEG
@@ -339,6 +386,15 @@ ocr_rozdzielczosc_pdf_dpi = 300
 ocr_liczba_procesow = 0
 sciezka_tesseract = ""
 sciezka_tessdata = ""
+
+transkrypcja_wlaczona = true
+transkrypcja_model = "medium"
+transkrypcja_jezyk = "pl"
+transkrypcja_urzadzenie = "procesor"
+transkrypcja_typ_obliczen = "int8"
+transkrypcja_liczba_watkow = 0
+transkrypcja_prog_vad = 0.5
+transkrypcja_prog_udzialu_mowy = 0.5
 
 jakosc_grafik = 85
 maksymalny_wymiar_grafiki_px = 2600

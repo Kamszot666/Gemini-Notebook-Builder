@@ -1,8 +1,8 @@
-# Obsługiwane formaty — stan po etapie ósmym
+# Obsługiwane formaty — stan po etapie dziewiątym
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
-Kolejne formaty, czyli ODT, PPTX, obrazy oraz materiały nutowe, dojdą
-w etapach opisanych w sekcji osiemnastej pliku `CLAUDE.md`.
+Kolejne formaty, czyli ODT, PPTX oraz materiały nutowe, dojdą w etapach
+opisanych w sekcji osiemnastej pliku `CLAUDE.md`.
 
 ## Wejście
 
@@ -16,8 +16,11 @@ Obsługiwane są następujące rodzaje wejścia:
 4. Plik obrazu: JPG, PNG, WebP, TIFF, BMP oraz statyczna klatka GIF, a przy
    zainstalowanej bibliotece opcjonalnej pillow-heif także HEIC i HEIF.
    Obsługę obrazów opisuje sekcja „Obrazy”.
-5. Adres strony internetowej, podany pojedynczo albo listą.
-6. Adres filmu z serwisu YouTube, dla którego pobierane są napisy.
+5. Nagranie audio: MP3, WAV, M4A, FLAC, OGG, OPUS albo AAC. Obsługiwane są
+   wyłącznie nagrania mowy — obsługę opisuje sekcja „Nagrania audio
+   i transkrypcja mowy”.
+6. Adres strony internetowej, podany pojedynczo albo listą.
+7. Adres filmu z serwisu YouTube, dla którego pobierane są napisy.
 
 Plik w innym formacie kończy się kontrolowanym błędem `FormatNieobslugiwany`.
 Nie zatrzymuje to przetwarzania pozostałych źródeł.
@@ -518,7 +521,65 @@ internetowa, bo struktura jest tam dopiero rozpoznawana przez `trafilatura`.
 PDF nie ma niezawodnie odtwarzalnej struktury, więc zawsze dostaje poziom
 niski, tak samo jak obraz. Plik CSV dostaje wysoki poziom mimo braku nagłówków
 czy list, bo jego jedyna struktura — tabela — jest odczytywana wprost, bez
-zgadywania.
+zgadywania. Nagranie audio dostaje poziom niski, bo transkrypcja mowy nie ma
+nagłówków, list ani tabel.
+
+## Nagrania audio i transkrypcja mowy
+
+Obsługiwane formaty nagrań to MP3, WAV, M4A, FLAC, OGG, OPUS i AAC. Plik audio
+daje źródło typu „nagranie”. Moduł audio obsługuje wyłącznie nagrania mowy;
+nagranie muzyczne jest rozpoznawane i pomijane, nigdy transkrybowane.
+
+### Kolejność kroków
+
+1. Rozkodowanie nagrania do fali dźwiękowej. Robi to program FFmpeg, wołany
+   przez podproces, dokładnie tak jak Tesseract przy OCR. Ścieżka audio używa
+   wyłącznie FFmpega, nie dekodera wbudowanego w bibliotekę transkrypcji, więc
+   FFmpeg jest dla nagrań wymagany na każdym systemie. Jego brak nie wywraca
+   aplikacji — nagranie dostaje wtedy status błędu z czytelnym komunikatem,
+   a pozostałe źródła są przetwarzane normalnie.
+2. Pomiar udziału mowy. Filtr wykrywania aktywności mowy Silero, wbudowany
+   w bibliotekę transkrypcji, podaje, jaka część długości nagrania to mowa.
+3. Decyzja o odrzuceniu. Nagranie o udziale mowy poniżej progu
+   `transkrypcja_prog_udzialu_mowy` jest pomijane ze statusem „pominiete”
+   i komunikatem mówiącym wprost, że to materiał niemowny. To jest heurystyka,
+   a nie klasyfikator muzyki: utwór ze śpiewem może częściowo zarejestrować się
+   jako mowa, a nagranie mowy z bardzo głośnym tłem może zejść poniżej progu.
+   Decyzję dla konkretnego pliku można nadpisać opcją `--wymus-transkrypcje`
+   w wierszu poleceń albo obniżyć próg w konfiguracji.
+4. Transkrypcja. Wykonuje ją biblioteka faster-whisper na modelu Whisper.
+   Domyślny model to model średni z kwantyzacją ośmiobitową; przy pierwszym
+   uruchomieniu model pobiera się z sieci, patrz `docs/INSTALL.md`.
+5. Sklejenie segmentów w akapity. Ten sam mechanizm, który składa napisy filmu
+   z krótkich fragmentów w czytelne akapity, jest używany dla transkrypcji mowy.
+
+### Obrona przed halucynacjami modelu
+
+Modele Whisper na fragmentach bez mowy generują halucynacje w postaci
+powtarzanych fraz. Obrona jest wpięta w dwóch miejscach. Filtr wykrywania
+aktywności mowy jest włączony w samej transkrypcji, więc model nie dostaje
+fragmentów bez mowy. Dodatkowo wynik jest oceniany: jeżeli ten sam segment
+powtarza się co najmniej trzy razy albo znaczna część segmentów ma niską pewność
+rozpoznania, transkrypcja dostaje ocenę „podejrzana”, a źródło trafia do sekcji
+„Materiały do sprawdzenia” w raporcie końcowym. Segment niepewny nie znika po
+cichu.
+
+### Nagłówek metadanych nagrania
+
+Nagłówek pliku wynikowego zawiera dla nagrania typ źródła „nagranie”, nazwę
+pliku, długość nagrania oraz język rozpoznany przez model. Gdy transkrypcja
+została wymuszona mimo niskiego udziału mowy, informacja o tym jest zapisywana
+w manifeście.
+
+### Ograniczenia
+
+Nagranie jest wczytywane do pamięci w całości, więc obowiązuje je bezpieczny
+limit megabajtów, tak jak pliki PDF, DOCX i EPUB. Bardzo długie nagranie
+w formacie nieskompresowanym może ten limit przekroczyć — wtedy dostaje status
+„pominiete”. Rozwiązaniem jest podanie nagrania w formacie skompresowanym.
+
+Transkrypcja działa wyłącznie na procesorze. Ustawienie karty graficznej kończy
+się jawnym błędem konfiguracji; powód opisuje `docs/CONFIGURATION.md`.
 
 ## Czym różni się wersja TXT od wersji MD
 

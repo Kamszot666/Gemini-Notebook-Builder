@@ -1,7 +1,7 @@
-# Architektura — stan po etapie ósmym
+# Architektura — stan po etapie dziewiątym
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
-zakończeniu etapu siódmego. Pełny docelowy podział na pakiety opisuje sekcja
+zakończeniu etapu dziewiątego. Pełny docelowy podział na pakiety opisuje sekcja
 szósta `CLAUDE.md`.
 
 ## Potok przetwarzania
@@ -84,11 +84,17 @@ numeru schematu.
 `przetworz_projekt` przyjmuje też opcjonalny argument `postep`: wywołanie
 zwrotne z modułu `gnb/core/postep.py`, wołane na granicach faz oraz po każdym
 przetworzonym źródle z obiektem `ZdarzeniePostepu`. Faza `FazaPotoku.OCR` jest
-zgłaszana wewnątrz ekstrakcji, dla skanu PDF strona po stronie, więc użytkownik
-nie zostaje przy niemym oknie przez kilkanaście minut rozpoznawania grubego
-skanu. Wiersz poleceń też podaje tu wywołanie zwrotne, ale wypisuje wyłącznie
-dławione wiersze fazy OCR, bez pasków postępu. Dławienie pozostałych zdarzeń
-jest po stronie odbiorcy, nie potoku.
+zgłaszana wewnątrz ekstrakcji, dla skanu PDF strona po stronie, a faza
+`FazaPotoku.TRANSKRYPCJA` wewnątrz ekstrakcji nagrania mowy, z licznikiem
+w minutach nagrania, bo transkrypcja godzinnego nagrania trwa około godziny.
+Dzięki temu użytkownik nie zostaje przy niemym oknie. Wiersz poleceń też podaje
+tu wywołanie zwrotne, ale wypisuje wyłącznie dławione wiersze faz OCR
+i transkrypcji, bez pasków postępu. Dławienie pozostałych zdarzeń jest po
+stronie odbiorcy, nie potoku.
+
+`przetworz_projekt` przyjmuje ponadto flagę `wymus_transkrypcje`, która
+przełamuje odrzucenie nagrania rozpoznanego jako niemowne. W wierszu poleceń
+ustawia ją opcja `--wymus-transkrypcje`.
 
 ## Pakiet gnb.core
 
@@ -143,12 +149,13 @@ pliku wynikowego.
 
 - `gnb/extractors/bazowy.py` — protokół `Ekstraktor` z rejestrem
   `RejestrEkstraktorow` dla formatów tekstowych oraz protokół `EkstraktorBinarny`
-  z rejestrem `RejestrEkstraktorowBinarnych` dla PDF, DOCX, EPUB i obrazów,
-  pracujący wprost na bajtach pliku. Metoda `wyekstrahuj` protokołu binarnego
-  przyjmuje opcjonalne wywołanie zwrotne postępu, którym ekstraktor PDF zgłasza
-  OCR skanu strona po stronie. Nowy format to nowa implementacja właściwego
-  protokołu plus wpis we właściwym rejestrze; rejestr binarny dostaje ustawienia
-  OCR z konfiguracji.
+  z rejestrem `RejestrEkstraktorowBinarnych` dla PDF, DOCX, EPUB, obrazów
+  i nagrań audio, pracujący wprost na bajtach pliku. Metoda `wyekstrahuj`
+  protokołu binarnego przyjmuje opcjonalne wywołanie zwrotne postępu, którym
+  ekstraktor PDF zgłasza OCR skanu strona po stronie, a ekstraktor audio
+  transkrypcję segment po segmencie. Nowy format to nowa implementacja
+  właściwego protokołu plus wpis we właściwym rejestrze; rejestr binarny
+  dostaje ustawienia OCR oraz transkrypcji z konfiguracji.
 - `gnb/extractors/tekst.py` — tekst płaski, zawsze niski poziom pewności
   struktury, brak bloków.
 - `gnb/extractors/markdown.py` — Markdown przez `markdown-it-py` z regułą tabel,
@@ -181,6 +188,12 @@ pliku wynikowego.
   `gnb.images.tesseract`, z oceną jakości OCR z `gnb.images.ocena_ocr`.
   Obsługuje JPG, PNG, WebP, TIFF, BMP, statyczny GIF oraz — z biblioteką
   opcjonalną pillow-heif — HEIC i HEIF. Zawsze niski poziom pewności struktury.
+- `gnb/extractors/plik_audio.py` — transkrypcja nagrania mowy: dekodowanie
+  FFmpegiem przez `gnb.audio.dekodowanie`, pomiar udziału mowy przez
+  `gnb.audio.wykrywanie_mowy`, odrzucenie materiału niemownego wyjątkiem
+  `PominietoZrodlo`, transkrypcja przez `gnb.audio.transkrypcja` i ocena
+  halucynacji przez `gnb.audio.ocena`. Obsługuje MP3, WAV, M4A, FLAC, OGG,
+  OPUS i AAC. Zawsze niski poziom pewności struktury.
 - `gnb/extractors/plik_docx.py` — akapity i tabele DOCX w kolejności
   wystąpienia przez `python-docx`, ze stylem akapitu odwzorowanym wprost na
   rodzaj bloku. Wysoki poziom pewności struktury.
@@ -349,14 +362,16 @@ istniejący potok z żądaniem HTTP przez semantyczny, dostępny HTML.
 ## Wiersz poleceń
 
 `gnb/cli.py` udostępnia trzy polecenia. `diagnostyka` sprawdza narzędzia
-zewnętrzne. `przetworz` uruchamia potok dla tekstu wklejonego, plików w formatach
-etapów pierwszego do czwartego oraz adresów stron i filmów, z opcjami
-`--projekt`, `--plik`, `--tekst`, `--tekst-md`, `--url`, `--lista-url`,
-`--sprawdz-liste`, `--katalog` oraz `--grupa`. Opcja `--grupa` przypisuje
-wszystkie źródła jednego wywołania do wspólnej grupy tematycznej pakowania;
-kolejną grupę w tym samym projekcie dodaje się osobnym wywołaniem, bo checkpoint
-kumuluje źródła między uruchomieniami. `pamiec` pokazuje stan wspólnej pamięci
-podręcznej i pozwala ją wyczyścić.
+zewnętrzne. `przetworz` uruchamia potok dla tekstu wklejonego, plików
+tekstowych, dokumentowych, obrazów i nagrań mowy oraz adresów stron i filmów,
+z opcjami `--projekt`, `--plik`, `--tekst`, `--tekst-md`, `--url`,
+`--lista-url`, `--sprawdz-liste`, `--katalog`, `--grupa` oraz
+`--wymus-transkrypcje`. Opcja `--grupa` przypisuje wszystkie źródła jednego
+wywołania do wspólnej grupy tematycznej pakowania; kolejną grupę w tym samym
+projekcie dodaje się osobnym wywołaniem, bo checkpoint kumuluje źródła między
+uruchomieniami. Opcja `--wymus-transkrypcje` przełamuje odrzucenie nagrania
+rozpoznanego jako niemowne. `pamiec` pokazuje stan wspólnej pamięci podręcznej
+i pozwala ją wyczyścić.
 
 ## Pakiet gnb.images
 
@@ -382,10 +397,34 @@ przez ekstraktory i przez fazę pakowania.
   Opis obrazu jest zwykłym tekstem akapitu, a nie tagiem alt, bo reportlab w tym
   trybie nie tworzy struktury dostępności PDF.
 
+## Pakiet gnb.audio
+
+Transkrypcja nagrań mowy oraz odrzucanie materiału niemownego. Pakiet nie zna
+potoku ani checkpointu — jest zbiorem narzędzi wołanych przez ekstraktor audio.
+
+- `gnb/audio/dekodowanie.py` — rozkodowanie dowolnego nagrania przez podproces
+  FFmpeg do fali 16 kHz mono float32. Nagranie trafia do FFmpega jako plik
+  tymczasowy, bo kontenery MP4 i M4A trzymają nagłówek na końcu pliku i wymagają
+  wejścia, po którym można się przemieszczać. Brak FFmpega kończy się
+  `BrakNarzedzia`.
+- `gnb/audio/transkrypcja.py` — adapter biblioteki faster-whisper. Strażnik
+  atrapy modułu `av` wstawia puste atrapy do `sys.modules` wyłącznie wtedy, gdy
+  prawdziwy import PyAV zawiedzie, i zapisuje powód — Inteligentne sterowanie
+  aplikacjami Windows blokuje niepodpisane biblioteki natywne PyAV. Do biblioteki
+  trafia tablica NumPy, nigdy ścieżka pliku, więc dekoder PyAV nie jest wołany.
+  Model jest zapamiętywany między wywołaniami. Liczba wątków dobierana jak
+  procesy OCR: rdzenie minus jeden, z powodu dostępnościowego.
+- `gnb/audio/wykrywanie_mowy.py` — pomiar udziału mowy filtrem Silero wbudowanym
+  w faster-whisper oraz decyzja o odrzuceniu nagrania niemownego przed
+  transkrypcją. Heurystyka, nie klasyfikator muzyki.
+- `gnb/audio/ocena.py` — obrona przed halucynacjami Whispera: powtórzona fraza
+  i wysoki udział segmentów niskiej pewności dają ocenę „podejrzana”, a źródło
+  trafia do sekcji „Materiały do sprawdzenia”.
+
 ## Pozostałe pakiety
 
-Pakiety `gnb.documents`, `gnb.audio`, `gnb.music`, `gnb.hotkeys` istnieją jako
-puste, importowalne pakiety z docstringiem. Logika powstanie w kolejnych etapach.
+Pakiety `gnb.documents`, `gnb.music`, `gnb.hotkeys` istnieją jako puste,
+importowalne pakiety z docstringiem. Logika powstanie w kolejnych etapach.
 
 ## Testy
 

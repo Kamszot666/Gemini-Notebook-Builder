@@ -25,6 +25,11 @@ ozdobników, a polecenia do wpisania są w osobnych blokach.
 13. Skan PDF albo obraz nie został rozpoznany: brak Tesseracta.
 14. OCR rozpoznał polski tekst z błędami: brak danych językowych `pol`.
 15. Tematyczny plik PDF grupy obrazów jest za duży.
+16. Nagranie mowy nie zostało przepisane: brak FFmpega.
+17. Pierwsza transkrypcja długo stoi bez znaku życia: pobiera się model.
+18. Nagranie muzyczne trafiło do transkrypcji albo mowa została odrzucona jako
+    materiał niemowny.
+19. W logu szczegółowym jest wpis o wstawieniu atrapy modułu „av”.
 
 ## 1. Windows blokuje plik wykonywalny narzędzia deweloperskiego
 
@@ -355,3 +360,71 @@ Alternatywnie zmniejsz sam obraz przed przetwarzaniem albo podnieś
 `maksymalny_rozmiar_pdf_mb`, pamiętając o twardym limicie źródła notatnika
 wynoszącym 200 megabajtów. Po zmianie przetwórz materiał pod nową nazwą
 projektu.
+
+## 16. Nagranie mowy nie zostało przepisane, bo brakuje FFmpega
+
+Objaw. Nagranie audio w raporcie końcowym ma status błędu z komunikatem, że nie
+znaleziono programu FFmpeg. Pozostałe źródła zostały przetworzone normalnie.
+
+Przyczyna. Ścieżka audio rozkodowuje każde nagranie programem FFmpeg, wołanym
+przez podproces, zanim trafi ono do transkrypcji. Aplikacja celowo nie korzysta
+z dekodera wbudowanego w bibliotekę transkrypcji, więc FFmpeg jest dla nagrań
+wymagany. Aplikacja nie znalazła go w zmiennej PATH.
+
+Co zrobić. Zainstaluj FFmpeg zgodnie z dokumentem `INSTALL.md` i dopisz go do
+zmiennej PATH. Sprawdź wynik poleceniem `python -m gnb.cli diagnostyka`: wiersz
+„FFmpeg” musi pokazywać wersję i ścieżkę. Potem przetwórz nagranie pod nową
+nazwą projektu, bo źródło z błędem ma już status końcowy.
+
+## 17. Pierwsza transkrypcja długo stoi bez znaku życia
+
+Objaw. Pierwsze w życiu uruchomienie transkrypcji zatrzymuje się na kilka albo
+kilkanaście minut, zanim pojawi się jakikolwiek postęp. Kolejne uruchomienia są
+już szybkie.
+
+Przyczyna. Model transkrypcji Whisper nie jest dołączony do aplikacji. Przy
+pierwszym użyciu pobiera się z sieci. Model domyślny, czyli średni, waży około
+półtora gigabajta.
+
+Co zrobić. Nie przerywaj pierwszego pobrania — przerwane pobranie zostawia model
+w stanie, z którego trzeba go pobrać od nowa. Model ląduje w katalogu pamięci
+podręcznej biblioteki Hugging Face w katalogu domowym użytkownika i jest
+pobierany tylko raz. Jeżeli zależy Ci na szybszym pierwszym uruchomieniu, ustaw
+tymczasowo mniejszy model, na przykład `transkrypcja_model = "small"`, mając na
+uwadze, że mniejszy model robi na polskim więcej błędów. Postęp transkrypcji
+jest potem raportowany w minutach nagrania, w wierszu poleceń i w interfejsie WWW.
+
+## 18. Nagranie muzyczne trafiło do transkrypcji albo mowa została odrzucona
+
+Objaw. Nagranie muzyczne bez mowy zostało przepisane i w pliku wynikowym jest
+bełkot. Albo odwrotnie: nagranie mowy z głośnym tłem dostało status „pominiete”
+z komunikatem, że to materiał niemowny.
+
+Przyczyna. Odrzucanie materiału niemownego jest heurystyką: filtr wykrywania
+aktywności mowy mierzy, jaka część nagrania to mowa, i porównuje ją z progiem
+`transkrypcja_prog_udzialu_mowy`. Utwór ze śpiewem może częściowo zarejestrować
+się jako mowa, a mowa zagłuszona muzyką może zejść poniżej progu.
+
+Co zrobić. Dla nagrania mowy błędnie odrzuconego użyj opcji wiersza poleceń
+`--wymus-transkrypcje` przy nowej nazwie projektu — przełamuje ona odrzucenie
+dla wszystkich nagrań tego wywołania. Dla nagrania muzycznego błędnie
+przepisanego podnieś próg, na przykład `GNB_TRANSKRYPCJA_PROG_UDZIALU_MOWY`
+na `0.7`. Zmiana progu działa globalnie; opcja wiersza poleceń dotyczy jednego
+wywołania.
+
+## 19. W logu szczegółowym jest wpis o wstawieniu atrapy modułu „av”
+
+Objaw. W pliku `log_szczegolowy.txt` przy przetwarzaniu nagrania audio pojawia
+się ostrzeżenie, że biblioteka PyAV jest zablokowana i że wstawiono atrapę
+modułu „av”.
+
+Przyczyna. Biblioteka transkrypcji faster-whisper importuje PyAV bezwarunkowo,
+a PyAV niesie niepodpisane biblioteki natywne, które Inteligentne sterowanie
+aplikacjami Windows blokuje. Aplikacja wykrywa to przy pierwszym użyciu
+transkrypcji i wstawia pustą atrapę modułu, żeby reszta biblioteki dała się
+zaimportować. Dekodowanie dźwięku i tak idzie przez FFmpega, więc PyAV nie jest
+w ogóle potrzebny.
+
+Co zrobić. Nic. To jest informacja, a nie błąd — transkrypcja działa normalnie.
+Wpis istnieje po to, żeby dało się prześledzić, dlaczego na tym komputerze
+biblioteka jest ładowana inną drogą niż na maszynie bez tej blokady.

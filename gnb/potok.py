@@ -62,6 +62,7 @@ from gnb.core.youtube import rozpoznaj
 from gnb.deduplication import UstawieniaDeduplikacji, ZrodloDoDeduplikacji, deduplikuj
 from gnb.deduplication.orkiestrator import WynikDeduplikacjiZbioru
 from gnb.extractors.bazowy import (
+    PostepEkstrakcji,
     RejestrEkstraktorow,
     RejestrEkstraktorowBinarnych,
     domyslny_rejestr,
@@ -75,6 +76,7 @@ from gnb.extractors.dane_strukturalne import (
 from gnb.extractors.strona_www import KOMUNIKAT_WYMAGA_SKRYPTOW, czy_wymaga_skryptow
 from gnb.extractors.youtube import KOMUNIKAT_NAPISY_BEZ_TRESCI
 from gnb.extractors.youtube import zbuduj_dokument as zbuduj_dokument_z_napisow
+from gnb.images.tesseract import UstawieniaOcr
 from gnb.ingestion.pobieranie import (
     OdpowiedzPobrania,
     Pobieracz,
@@ -337,7 +339,9 @@ def przetworz_projekt(
     cały potok bez korzystania z sieci.
     """
     rejestr = rejestr or domyslny_rejestr(konfiguracja.zachowuj_odnosniki)
-    rejestr_binarny = rejestr_binarny or domyslny_rejestr_binarny()
+    rejestr_binarny = rejestr_binarny or domyslny_rejestr_binarny(
+        UstawieniaOcr.z_konfiguracji(konfiguracja), ocr_wlaczony=konfiguracja.ocr_wlaczony
+    )
     czas_startu = zegar()
 
     nazwa = nazwa_projektu or _wygeneruj_nazwe_projektu(pozycje)
@@ -381,6 +385,7 @@ def przetworz_projekt(
             zegar_lokalny,
             pobrane,
             filmy,
+            postep,
         )
         liczba_pozycji = len(pozycje)
         for numer, pozycja in enumerate(pozycje, start=1):
@@ -449,6 +454,7 @@ class _Wykonanie:
         zegar_lokalny: Callable[[], datetime],
         pobrane: dict[str, WynikFazyPobrania] | None = None,
         filmy: dict[str, WynikFazyFilmu] | None = None,
+        postep: WywolanieZwrotnePostepu | None = None,
     ) -> None:
         self._uklad = uklad
         self._konfiguracja = konfiguracja
@@ -459,6 +465,7 @@ class _Wykonanie:
         self._rejestr_binarny = rejestr_binarny
         self._zegar = zegar
         self._zegar_lokalny = zegar_lokalny
+        self._postep = postep
         self._pobrane: dict[str, WynikFazyPobrania] = pobrane if pobrane is not None else {}
         self._filmy: dict[str, WynikFazyFilmu] = filmy if filmy is not None else {}
 
@@ -685,7 +692,9 @@ class _Wykonanie:
         self._loguj(logging.INFO, identyfikator, f"Źródło {identyfikator}, plik binarny.")
 
         ekstraktor = self._rejestr_binarny.dobierz(zrodlo.typ_zrodla, pozycja.format_zrodla)
-        dokument = ekstraktor.wyekstrahuj(identyfikator, bajty)
+        dokument = ekstraktor.wyekstrahuj(
+            identyfikator, bajty, postep=self._postep_ocr(zrodlo.pochodzenie)
+        )
 
         return _PrzygotowanyDokument(
             dokument=dokument,
@@ -1402,6 +1411,27 @@ class _Wykonanie:
         self._checkpoint.czas_ostatniej_zmiany = self._zegar().isoformat()
         zapisz(self._uklad.checkpoint, self._checkpoint)
 
+    def _postep_ocr(self, pochodzenie: str) -> PostepEkstrakcji | None:
+        """Buduje wywołanie zwrotne postępu OCR skanu dla jednego źródła.
+
+        Bez odbiorcy postępu zwraca nic, więc ekstraktor nie płaci za budowanie
+        komunikatów, których i tak nikt nie usłyszy. Z odbiorcą zgłasza po każdej
+        rozpoznanej stronie zdanie gotowe do ogłoszenia w regionie postępu.
+        """
+        if self._postep is None:
+            return None
+
+        def zglos(wykonano: int, wszystkich: int) -> None:
+            _zglos_postep(
+                self._postep,
+                FazaPotoku.OCR,
+                wykonano,
+                wszystkich,
+                f"Rozpoznawanie tekstu ze skanu „{pochodzenie}”, strona {wykonano} z {wszystkich}",
+            )
+
+        return zglos
+
     def _loguj(self, poziom: int, identyfikator: str, komunikat: str) -> None:
         self._log.log(poziom, komunikat, extra={"identyfikator_zrodla": identyfikator})
 
@@ -2001,7 +2031,10 @@ def _zbuduj_podsumowanie(
     )
     liczba_txt = sum(1 for wynik in wyniki if wynik.format == "txt")
     liczba_md = sum(1 for wynik in wyniki if wynik.format == "md")
-    laczna_liczba_slow = sum(wynik.liczba_slow for wynik in wyniki if wynik.format == "txt")
+    liczba_pdf = sum(1 for wynik in wyniki if wynik.format == "pdf")
+    laczna_liczba_slow = sum(
+        wynik.liczba_slow for wynik in wyniki if wynik.format in ("txt", "pdf")
+    )
     najwiekszy = max(wyniki, key=lambda wynik: wynik.rozmiar_bajtow, default=None)
 
     return PodsumowanieProjektu(
@@ -2013,7 +2046,7 @@ def _zbuduj_podsumowanie(
         liczba_zrodel_po_deduplikacji=poprawne,
         liczba_plikow_txt=liczba_txt,
         liczba_plikow_md=liczba_md,
-        liczba_plikow_pdf=0,
+        liczba_plikow_pdf=liczba_pdf,
         limit_zrodel=limit_zrodel,
         najwiekszy_plik_nazwa=(najwiekszy.sciezka_wzgledna if najwiekszy is not None else None),
         najwiekszy_plik_bajtow=najwiekszy.rozmiar_bajtow if najwiekszy is not None else 0,

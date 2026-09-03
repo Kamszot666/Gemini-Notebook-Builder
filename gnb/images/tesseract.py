@@ -72,6 +72,7 @@ class UstawieniaOcr:
 
     jezyk: str = "pol"
     tryb_segmentacji: int = 3
+    rozdzielczosc_pdf_dpi: int = 300
     sciezka_tesseract: str = ""
     sciezka_tessdata: str = ""
     liczba_procesow: int = 0
@@ -82,6 +83,7 @@ class UstawieniaOcr:
         return cls(
             jezyk=konfiguracja.ocr_jezyk,
             tryb_segmentacji=konfiguracja.ocr_psm,
+            rozdzielczosc_pdf_dpi=konfiguracja.ocr_rozdzielczosc_pdf_dpi,
             sciezka_tesseract=konfiguracja.sciezka_tesseract,
             sciezka_tessdata=konfiguracja.sciezka_tessdata,
             liczba_procesow=konfiguracja.ocr_liczba_procesow,

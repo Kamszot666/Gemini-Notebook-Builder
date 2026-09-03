@@ -3,21 +3,25 @@
 from __future__ import annotations
 
 import io
+from collections.abc import Callable
 
 import pytest
 from PIL import Image
-from pomoce import pdf_ze_stron_z_tekstem
 
 from gnb.core.wyjatki import BladTrwaly
 from gnb.images.rasteryzacja import liczba_stron, rasteryzuj_strony
 
+_Skan = Callable[[list[list[str]]], bytes]
 
-def test_liczba_stron_liczy_strony_skanu() -> None:
+
+def test_liczba_stron_liczy_strony_skanu(pdf_ze_stron_z_tekstem: _Skan) -> None:
     pdf = pdf_ze_stron_z_tekstem([["A"], ["B"], ["C"]])
     assert liczba_stron(pdf) == 3
 
 
-def test_rasteryzuj_strony_zwraca_obraz_na_strone_w_kolejnosci() -> None:
+def test_rasteryzuj_strony_zwraca_obraz_na_strone_w_kolejnosci(
+    pdf_ze_stron_z_tekstem: _Skan,
+) -> None:
     pdf = pdf_ze_stron_z_tekstem([["PIERWSZA"], ["DRUGA"]])
 
     strony = rasteryzuj_strony(pdf, rozdzielczosc_dpi=150)
@@ -29,7 +33,7 @@ def test_rasteryzuj_strony_zwraca_obraz_na_strone_w_kolejnosci() -> None:
         assert obraz.width > 0 and obraz.height > 0
 
 
-def test_wyzsza_rozdzielczosc_daje_wiekszy_obraz() -> None:
+def test_wyzsza_rozdzielczosc_daje_wiekszy_obraz(pdf_ze_stron_z_tekstem: _Skan) -> None:
     pdf = pdf_ze_stron_z_tekstem([["JEDNA STRONA"]])
 
     maly = Image.open(io.BytesIO(rasteryzuj_strony(pdf, rozdzielczosc_dpi=72)[0]))
@@ -38,7 +42,9 @@ def test_wyzsza_rozdzielczosc_daje_wiekszy_obraz() -> None:
     assert duzy.width > maly.width
 
 
-def test_rasteryzuj_strony_zglasza_postep_po_kazdej_stronie() -> None:
+def test_rasteryzuj_strony_zglasza_postep_po_kazdej_stronie(
+    pdf_ze_stron_z_tekstem: _Skan,
+) -> None:
     pdf = pdf_ze_stron_z_tekstem([["A"], ["B"], ["C"]])
     postep: list[tuple[int, int]] = []
 

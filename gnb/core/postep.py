@@ -23,12 +23,15 @@ class FazaPotoku(StrEnum):
     Kolejność wartości odpowiada kolejności etapów z sekcji ósmej CLAUDE.md
     w części obsługiwanej przez dotychczasowe etapy. Faza pobierania napisów jest
     osobna od fazy pobierania stron, bo filmy pobierają się po kolei, a strony
-    równolegle.
+    równolegle. Faza OCR jest zgłaszana wewnątrz ekstrakcji, dla skanu PDF strona
+    po stronie, żeby użytkownik nie został przy niemym oknie przez kilkanaście
+    minut rozpoznawania grubego skanu.
     """
 
     POBIERANIE_STRON = "pobieranie_stron"
     POBIERANIE_NAPISOW = "pobieranie_napisow"
     EKSTRAKCJA = "ekstrakcja"
+    OCR = "ocr"
     DEDUPLIKACJA = "deduplikacja"
     PAKOWANIE = "pakowanie"
     ZAKONCZENIE = "zakonczenie"

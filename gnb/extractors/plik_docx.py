@@ -45,6 +45,7 @@ from docx.text.paragraph import Paragraph
 from gnb.core.model import BlokTresci, DokumentWyekstrahowany
 from gnb.core.stale import PoziomPewnosciStruktury, RodzajBloku, TypZrodla
 from gnb.core.wyjatki import BladTrwaly
+from gnb.extractors.bazowy import PostepEkstrakcji
 from gnb.extractors.bloki_markdown import zapisz_bloki_jako_markdown
 
 METODA_EKSTRAKCJI = "docx"
@@ -73,8 +74,18 @@ class EkstraktorDocx:
     def obsluguje(self, typ_zrodla: TypZrodla, format_zrodla: str) -> bool:
         return typ_zrodla is TypZrodla.PLIK_DOKUMENT and format_zrodla in FORMATY_DOCX
 
-    def wyekstrahuj(self, identyfikator_zrodla: str, bajty: bytes) -> DokumentWyekstrahowany:
-        """Odczytuje dokument DOCX zachowując nagłówki, listy i tabele w kolejności."""
+    def wyekstrahuj(
+        self,
+        identyfikator_zrodla: str,
+        bajty: bytes,
+        *,
+        postep: PostepEkstrakcji | None = None,
+    ) -> DokumentWyekstrahowany:
+        """Odczytuje dokument DOCX zachowując nagłówki, listy i tabele w kolejności.
+
+        Ekstrakcja DOCX nie ma etapu długotrwałego, więc argument `postep` jest
+        przyjmowany dla zgodności z kontraktem i nie jest używany.
+        """
         try:
             dokument_docx = Document(io.BytesIO(bajty))
         except _BLEDY_ODCZYTU_DOCX as blad:

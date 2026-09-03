@@ -17,12 +17,17 @@ w ogóle spróbuje rozkodować zawartość jako tekst.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Protocol
 
 from gnb.core.model import DokumentWyekstrahowany
 from gnb.core.stale import TypZrodla
 from gnb.core.wyjatki import FormatNieobslugiwany
+
+# Wywołanie zwrotne postępu długiej ekstrakcji, na przykład OCR skanu strona po
+# stronie. Argumenty to liczba jednostek już gotowych i liczba wszystkich.
+# Ekstraktory bez etapu długotrwałego po prostu go nie wołają.
+PostepEkstrakcji = Callable[[int, int], None]
 
 
 class Ekstraktor(Protocol):
@@ -84,8 +89,19 @@ class EkstraktorBinarny(Protocol):
         """Zwraca prawdę, jeżeli ten ekstraktor potrafi przetworzyć dane źródło."""
         ...
 
-    def wyekstrahuj(self, identyfikator_zrodla: str, bajty: bytes) -> DokumentWyekstrahowany:
-        """Buduje `DokumentWyekstrahowany` wprost z bajtów pliku."""
+    def wyekstrahuj(
+        self,
+        identyfikator_zrodla: str,
+        bajty: bytes,
+        *,
+        postep: PostepEkstrakcji | None = None,
+    ) -> DokumentWyekstrahowany:
+        """Buduje `DokumentWyekstrahowany` wprost z bajtów pliku.
+
+        Argument `postep` jest opcjonalnym wywołaniem zwrotnym do raportowania
+        postępu długiego etapu, na przykład OCR skanu PDF strona po stronie.
+        Ekstraktory bez takiego etapu go pomijają.
+        """
         ...
 
 
@@ -110,13 +126,33 @@ class RejestrEkstraktorowBinarnych:
         )
 
 
-def domyslny_rejestr_binarny() -> RejestrEkstraktorowBinarnych:
-    """Buduje rejestr ekstraktorów formatów binarnych: PDF, DOCX i EPUB."""
+def domyslny_rejestr_binarny(
+    ustawienia_ocr: object | None = None,
+    *,
+    ocr_wlaczony: bool = False,
+) -> RejestrEkstraktorowBinarnych:
+    """Buduje rejestr ekstraktorów formatów binarnych: PDF, DOCX, EPUB i obrazów.
+
+    Ekstraktor obrazów oraz ekstraktor PDF potrzebują ustawień OCR i informacji,
+    czy OCR jest w ogóle włączony. Oba pochodzą z konfiguracji projektu. Gdy nie
+    podano ustawień, OCR jest wyłączony, a ekstraktory zwracają samą treść bez
+    rozpoznawania tekstu z obrazu.
+    """
     from gnb.extractors.plik_docx import EkstraktorDocx
     from gnb.extractors.plik_epub import EkstraktorEpub
+    from gnb.extractors.plik_obraz import EkstraktorObrazu
     from gnb.extractors.plik_pdf import EkstraktorPdf
+    from gnb.images.tesseract import UstawieniaOcr
 
-    return RejestrEkstraktorowBinarnych((EkstraktorPdf(), EkstraktorDocx(), EkstraktorEpub()))
+    ustawienia = ustawienia_ocr if isinstance(ustawienia_ocr, UstawieniaOcr) else UstawieniaOcr()
+    return RejestrEkstraktorowBinarnych(
+        (
+            EkstraktorPdf(ustawienia, ocr_wlaczony=ocr_wlaczony),
+            EkstraktorDocx(),
+            EkstraktorEpub(),
+            EkstraktorObrazu(ustawienia, ocr_wlaczony=ocr_wlaczony),
+        )
+    )
 
 
 def domyslny_rejestr(zachowuj_odnosniki: bool = True) -> RejestrEkstraktorow:

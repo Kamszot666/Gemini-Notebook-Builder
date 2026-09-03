@@ -8,10 +8,10 @@ wykonują.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from pomoce import obraz_z_tekstem
 
 from gnb.core.konfiguracja import wczytaj_konfiguracje
 from gnb.core.wyjatki import BrakNarzedzia
@@ -64,7 +64,9 @@ def test_znajdz_tesseract_zglasza_brak_gdy_nigdzie_go_nie_ma(
 
 
 @_wymaga_tesseracta
-def test_rozpoznaj_tekst_odczytuje_wyrazne_wielkie_litery() -> None:
+def test_rozpoznaj_tekst_odczytuje_wyrazne_wielkie_litery(
+    obraz_z_tekstem: Callable[..., bytes],
+) -> None:
     obraz = obraz_z_tekstem(["GEMINI NOTEBOOK", "BUILDER 2026"])
 
     tekst = rozpoznaj_tekst(obraz, UstawieniaOcr(jezyk="pol"))
@@ -74,7 +76,9 @@ def test_rozpoznaj_tekst_odczytuje_wyrazne_wielkie_litery() -> None:
 
 
 @_wymaga_tesseracta
-def test_rozpoznaj_wiele_zachowuje_kolejnosc_i_zglasza_postep() -> None:
+def test_rozpoznaj_wiele_zachowuje_kolejnosc_i_zglasza_postep(
+    obraz_z_tekstem: Callable[..., bytes],
+) -> None:
     obrazy = [
         obraz_z_tekstem(["STRONA PIERWSZA"]),
         obraz_z_tekstem(["STRONA DRUGA"]),

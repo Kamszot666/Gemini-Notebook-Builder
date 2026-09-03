@@ -39,6 +39,7 @@ from lxml import etree, html
 from gnb.core.model import BlokTresci, DokumentWyekstrahowany
 from gnb.core.stale import PoziomPewnosciStruktury, RodzajBloku, TypZrodla
 from gnb.core.wyjatki import BladTrwaly
+from gnb.extractors.bazowy import PostepEkstrakcji
 from gnb.extractors.bloki_markdown import zapisz_bloki_jako_markdown
 
 METODA_EKSTRAKCJI = "epub"
@@ -87,8 +88,18 @@ class EkstraktorEpub:
     def obsluguje(self, typ_zrodla: TypZrodla, format_zrodla: str) -> bool:
         return typ_zrodla is TypZrodla.PLIK_DOKUMENT and format_zrodla in FORMATY_EPUB
 
-    def wyekstrahuj(self, identyfikator_zrodla: str, bajty: bytes) -> DokumentWyekstrahowany:
-        """Czyta rozdziały EPUB w kolejności lektury i zamienia je na bloki treści."""
+    def wyekstrahuj(
+        self,
+        identyfikator_zrodla: str,
+        bajty: bytes,
+        *,
+        postep: PostepEkstrakcji | None = None,
+    ) -> DokumentWyekstrahowany:
+        """Czyta rozdziały EPUB w kolejności lektury i zamienia je na bloki treści.
+
+        Ekstrakcja EPUB nie ma etapu długotrwałego, więc argument `postep` jest
+        przyjmowany dla zgodności z kontraktem i nie jest używany.
+        """
         try:
             ksiazka = epub.read_epub(io.BytesIO(bajty))
         except _BLEDY_ODCZYTU_EPUB as blad:

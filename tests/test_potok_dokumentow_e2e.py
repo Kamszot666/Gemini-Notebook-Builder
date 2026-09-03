@@ -259,12 +259,15 @@ def test_pdf_bez_warstwy_tekstowej_ostrzega_w_manifescie(tmp_path: Path) -> None
     """Skan PDF bez warstwy tekstowej daje ostrzeżenie widoczne w manifeście i raporcie.
 
     Dokumentacja formatów obiecywała to zachowanie, zanim ostrzeżenia zaczęły
-    docierać gdziekolwiek poza obiekt dokumentu.
+    docierać gdziekolwiek poza obiekt dokumentu. OCR jest tu wyłączony celowo:
+    sprawdzana jest sama droga ostrzeżenia o braku warstwy tekstowej, niezależnie
+    od tego, czy w środowisku jest Tesseract. Rozpoznawanie skanu przez OCR ma
+    własny test end-to-end w zestawie etapu ósmego.
     """
     moment = datetime(2026, 8, 28, 9, 0, tzinfo=UTC)
     wynik = przetworz_projekt(
         [przyjmij_plik(KATALOG_DANYCH / "pdf_skan.pdf", moment)],
-        Konfiguracja(katalog_wynikow=tmp_path),
+        Konfiguracja(katalog_wynikow=tmp_path, ocr_wlaczony=False),
         nazwa_projektu="Test skanu PDF",
         zegar=_zegar_krokowy(),
     )

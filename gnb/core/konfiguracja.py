@@ -14,8 +14,13 @@ domenę, respektowanie pliku robots, pamięć podręczna i dodatkowe parametry
 i tłumaczone oraz znaczniki czasu, włączenie i progi kolejnych etapów
 deduplikacji, a także ustawienia interfejsu WWW: adres i port nasłuchu, limit
 znaków pola instrukcji systemowej notatnika oraz limit rozmiaru wysyłanego
-pliku. Pozostałe pola wymienione w sekcji jedenastej a pliku CLAUDE.md dojdą
-w kolejnych etapach.
+pliku, a od etapu ósmego także ustawienia rozpoznawania tekstu z obrazów
+i skanów: włączenie OCR, język OCR w notacji Tesseracta, tryb segmentacji
+strony, rozdzielczość rasteryzacji stron PDF, liczba równoległych procesów OCR,
+ścieżka pliku wykonywalnego Tesseracta i katalogu danych językowych, jakość
+zapisu grafik, maksymalny wymiar grafiki w pikselach oraz maksymalny rozmiar
+generowanego pliku PDF. Pozostałe pola wymienione w sekcji jedenastej a pliku
+CLAUDE.md dojdą w kolejnych etapach.
 
 Adres nasłuchu musi wskazywać pętlę zwrotną. Sekcja jedenasta CLAUDE.md zakazuje
 nasłuchu na innym adresie, ponieważ interfejs nie ma uwierzytelniania, więc
@@ -92,6 +97,30 @@ DOMYSLNE_DEDUPLIKACJA_EMBEDDINGI_WLACZONE = False
 DOMYSLNY_DEDUPLIKACJA_PROG_DUPLIKATU = 0.9
 DOMYSLNY_DEDUPLIKACJA_PROG_DO_PRZEGLADU = 0.75
 
+# Ustawienia rozpoznawania tekstu z obrazów i skanów, czyli etapu ósmego.
+# Silnikiem OCR jest wyłącznie Tesseract, wołany przez podproces z pełną ścieżką
+# znalezioną tak jak w module diagnostyki. Domyślnym językiem jest polski; język
+# można podać w notacji Tesseracta z kilkoma językami naraz, na przykład
+# „pol+eng”. Rozdzielczość rasteryzacji stron PDF jest głównym regulatorem
+# kompromisu między jakością rozpoznania a czasem pracy. Pusta ścieżka pliku
+# wykonywalnego oraz pusta ścieżka katalogu danych językowych oznaczają
+# odnalezienie ich w zmiennej PATH i w domyślnym miejscu instalacji.
+DOMYSLNE_OCR_WLACZONY = True
+DOMYSLNY_OCR_JEZYK = "pol"
+DOMYSLNY_OCR_PSM = 3
+DOMYSLNA_OCR_ROZDZIELCZOSC_PDF_DPI = 300
+DOMYSLNA_OCR_LICZBA_PROCESOW = 0
+DOMYSLNA_SCIEZKA_TESSERACT = ""
+DOMYSLNA_SCIEZKA_TESSDATA = ""
+
+# Ustawienia grafiki i generowanych plików PDF. Jakość grafik dotyczy ponownego
+# zapisu obrazów w PDF jako JPEG, a maksymalny wymiar w pikselach ogranicza
+# rozmiar dłuższego boku, żeby tematyczny PDF nie urósł ponad limit źródła
+# notatnika. Maksymalny rozmiar PDF jest sufitem pojedynczego pliku wynikowego.
+DOMYSLNA_JAKOSC_GRAFIK = 85
+DOMYSLNY_MAKSYMALNY_WYMIAR_GRAFIKI_PX = 2600
+DOMYSLNY_MAKSYMALNY_ROZMIAR_PDF_MB = 190
+
 # Ustawienia interfejsu WWW. Adres nasłuchu jest domyślnie pętlą zwrotną i musi
 # nią pozostać, dopóki interfejs nie ma uwierzytelniania, zgodnie z sekcją
 # jedenastą CLAUDE.md. Limit znaków instrukcji systemowej wynika wprost z sekcji
@@ -156,6 +185,16 @@ _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
     PREFIKS_ZMIENNYCH + "DEDUPLIKACJA_EMBEDDINGI_WLACZONE": "deduplikacja_embeddingi_wlaczone",
     PREFIKS_ZMIENNYCH + "DEDUPLIKACJA_PROG_DUPLIKATU": "deduplikacja_prog_duplikatu",
     PREFIKS_ZMIENNYCH + "DEDUPLIKACJA_PROG_DO_PRZEGLADU": "deduplikacja_prog_do_przegladu",
+    PREFIKS_ZMIENNYCH + "OCR_WLACZONY": "ocr_wlaczony",
+    PREFIKS_ZMIENNYCH + "OCR_JEZYK": "ocr_jezyk",
+    PREFIKS_ZMIENNYCH + "OCR_PSM": "ocr_psm",
+    PREFIKS_ZMIENNYCH + "OCR_ROZDZIELCZOSC_PDF_DPI": "ocr_rozdzielczosc_pdf_dpi",
+    PREFIKS_ZMIENNYCH + "OCR_LICZBA_PROCESOW": "ocr_liczba_procesow",
+    PREFIKS_ZMIENNYCH + "SCIEZKA_TESSERACT": "sciezka_tesseract",
+    PREFIKS_ZMIENNYCH + "SCIEZKA_TESSDATA": "sciezka_tessdata",
+    PREFIKS_ZMIENNYCH + "JAKOSC_GRAFIK": "jakosc_grafik",
+    PREFIKS_ZMIENNYCH + "MAKSYMALNY_WYMIAR_GRAFIKI_PX": "maksymalny_wymiar_grafiki_px",
+    PREFIKS_ZMIENNYCH + "MAKSYMALNY_ROZMIAR_PDF_MB": "maksymalny_rozmiar_pdf_mb",
     PREFIKS_ZMIENNYCH + "ADRES_NASLUCHU": "adres_nasluchu",
     PREFIKS_ZMIENNYCH + "PORT_NASLUCHU": "port_nasluchu",
     PREFIKS_ZMIENNYCH + "LIMIT_ZNAKOW_INSTRUKCJI_SYSTEMOWEJ": "limit_znakow_instrukcji_systemowej",
@@ -223,6 +262,16 @@ class Konfiguracja:
     deduplikacja_embeddingi_wlaczone: bool = DOMYSLNE_DEDUPLIKACJA_EMBEDDINGI_WLACZONE
     deduplikacja_prog_duplikatu: float = DOMYSLNY_DEDUPLIKACJA_PROG_DUPLIKATU
     deduplikacja_prog_do_przegladu: float = DOMYSLNY_DEDUPLIKACJA_PROG_DO_PRZEGLADU
+    ocr_wlaczony: bool = DOMYSLNE_OCR_WLACZONY
+    ocr_jezyk: str = DOMYSLNY_OCR_JEZYK
+    ocr_psm: int = DOMYSLNY_OCR_PSM
+    ocr_rozdzielczosc_pdf_dpi: int = DOMYSLNA_OCR_ROZDZIELCZOSC_PDF_DPI
+    ocr_liczba_procesow: int = DOMYSLNA_OCR_LICZBA_PROCESOW
+    sciezka_tesseract: str = DOMYSLNA_SCIEZKA_TESSERACT
+    sciezka_tessdata: str = DOMYSLNA_SCIEZKA_TESSDATA
+    jakosc_grafik: int = DOMYSLNA_JAKOSC_GRAFIK
+    maksymalny_wymiar_grafiki_px: int = DOMYSLNY_MAKSYMALNY_WYMIAR_GRAFIKI_PX
+    maksymalny_rozmiar_pdf_mb: int = DOMYSLNY_MAKSYMALNY_ROZMIAR_PDF_MB
     adres_nasluchu: str = DOMYSLNY_ADRES_NASLUCHU
     port_nasluchu: int = DOMYSLNY_PORT_NASLUCHU
     limit_znakow_instrukcji_systemowej: int = DOMYSLNY_LIMIT_ZNAKOW_INSTRUKCJI_SYSTEMOWEJ
@@ -355,6 +404,30 @@ def wczytaj_konfiguracje(
         ),
         deduplikacja_prog_do_przegladu=_jako_ulamek(
             scalone, "deduplikacja_prog_do_przegladu", domyslna.deduplikacja_prog_do_przegladu
+        ),
+        ocr_wlaczony=_jako_prawda_falsz(scalone, "ocr_wlaczony", domyslna.ocr_wlaczony),
+        ocr_jezyk=_jako_napis(scalone, "ocr_jezyk", domyslna.ocr_jezyk),
+        ocr_psm=_jako_liczba_w_zakresie(scalone, "ocr_psm", domyslna.ocr_psm, dolny=0, gorny=13),
+        ocr_rozdzielczosc_pdf_dpi=_jako_liczba(
+            scalone, "ocr_rozdzielczosc_pdf_dpi", domyslna.ocr_rozdzielczosc_pdf_dpi
+        ),
+        ocr_liczba_procesow=_jako_liczba_nieujemna(
+            scalone, "ocr_liczba_procesow", domyslna.ocr_liczba_procesow
+        ),
+        sciezka_tesseract=_jako_sciezka_pliku(
+            scalone, "sciezka_tesseract", domyslna.sciezka_tesseract
+        ),
+        sciezka_tessdata=_jako_sciezka_katalogu(
+            scalone, "sciezka_tessdata", domyslna.sciezka_tessdata
+        ),
+        jakosc_grafik=_jako_liczba_w_zakresie(
+            scalone, "jakosc_grafik", domyslna.jakosc_grafik, dolny=1, gorny=100
+        ),
+        maksymalny_wymiar_grafiki_px=_jako_liczba(
+            scalone, "maksymalny_wymiar_grafiki_px", domyslna.maksymalny_wymiar_grafiki_px
+        ),
+        maksymalny_rozmiar_pdf_mb=_jako_liczba(
+            scalone, "maksymalny_rozmiar_pdf_mb", domyslna.maksymalny_rozmiar_pdf_mb
         ),
         adres_nasluchu=_jako_adres_nasluchu(scalone, "adres_nasluchu", domyslna.adres_nasluchu),
         port_nasluchu=_jako_port(scalone, "port_nasluchu", domyslna.port_nasluchu),
@@ -528,6 +601,56 @@ def _jako_ulamek(scalone: Mapping[str, object], pole: str, domyslna: float) -> f
             f"a jest {liczba}."
         )
     return liczba
+
+
+def _jako_liczba_w_zakresie(
+    scalone: Mapping[str, object], pole: str, domyslna: int, *, dolny: int, gorny: int
+) -> int:
+    """Zwraca wartość pola jako liczbę całkowitą z domkniętego przedziału.
+
+    Wartość spoza przedziału jest błędem konfiguracji, a nie ostrzeżeniem do
+    zignorowania: tryb segmentacji strony Tesseracta oraz jakość zapisu JPEG
+    mają sens tylko w swoich zakresach.
+    """
+    if pole not in scalone:
+        return domyslna
+    surowa = scalone[pole]
+    if isinstance(surowa, bool) or not isinstance(surowa, (int, str)):
+        raise BladTrwaly(f"Ustawienie „{pole}” musi być liczbą całkowitą.")
+    try:
+        liczba = int(str(surowa).strip())
+    except ValueError as blad:
+        raise BladTrwaly(
+            f"Ustawienie „{pole}” musi być liczbą całkowitą, a jest „{surowa}”."
+        ) from blad
+    if not dolny <= liczba <= gorny:
+        raise BladTrwaly(
+            f"Ustawienie „{pole}” musi mieścić się w przedziale od {dolny} do {gorny}, "
+            f"a jest {liczba}."
+        )
+    return liczba
+
+
+def _jako_sciezka_katalogu(scalone: Mapping[str, object], pole: str, domyslna: str) -> str:
+    """Zwraca ścieżkę katalogu podaną w konfiguracji, sprawdzając, czy katalog istnieje.
+
+    Wartość pusta jest poprawna i oznacza użycie miejsca domyślnego, na przykład
+    katalogu danych językowych Tesseracta wskazanego przez samo narzędzie.
+    Wskazanie nieistniejącego katalogu jest błędem trwałym, ponieważ cicha praca
+    z pominięciem tego ustawienia kończyłaby się niezrozumiałym błędem OCR przy
+    każdym obrazie.
+    """
+    if pole not in scalone:
+        return domyslna
+    napis = str(scalone[pole]).strip()
+    if not napis:
+        return ""
+    if not Path(napis).is_dir():
+        raise BladTrwaly(
+            f"Ustawienie „{pole}” wskazuje katalog, którego nie ma: {napis}. "
+            "Podaj poprawną ścieżkę albo usuń to ustawienie."
+        )
+    return napis
 
 
 def _jako_sciezka_pliku(scalone: Mapping[str, object], pole: str, domyslna: str) -> str:

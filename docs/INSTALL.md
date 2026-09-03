@@ -1,4 +1,4 @@
-# Instalacja — stan po etapie ósmym
+# Instalacja — stan po etapie dziewiątym
 
 Ten dokument opisuje przygotowanie środowiska do pracy z aplikacją: Pythona,
 środowiska wirtualnego, zależności oraz narzędzi zewnętrznych. Narzędzia
@@ -76,6 +76,17 @@ tylko wtedy, gdy będziesz przetwarzać takie pliki:
 pip install -e ".[obrazy-heic]"
 ```
 
+Transkrypcja nagrań mowy wymaga biblioteki faster-whisper, również zależności
+opcjonalnej. Grupa `dev` już ją zawiera, więc do pracy deweloperskiej nie trzeba
+nic dokładać. Do samego uruchamiania aplikacji doinstaluj ją tak:
+
+```powershell
+pip install -e ".[audio]"
+```
+
+Bez tej biblioteki wszystkie pozostałe formaty działają normalnie, a nagranie
+audio dostaje status błędu z czytelnym komunikatem.
+
 ## 5. Sprawdzenie środowiska
 
 ```powershell
@@ -125,15 +136,45 @@ Dogranie polskich danych językowych opisuje osobno sekcja siódma. Jest ono
 konieczne: bez pliku `pol.traineddata` OCR polskiego tekstu daje wynik
 systematycznie błędny.
 
-### Etap dziewiąty: FFmpeg — przygotowanie nagrań mowy
+### Etap dziewiąty: FFmpeg — rozkodowanie nagrań mowy
 
 ```powershell
 winget install --id Gyan.FFmpeg --exact
 ```
 
-FFmpeg jest potrzebny do konwersji plików audio przed transkrypcją mowy. Etap
-dziewiąty nie jest jeszcze zrealizowany, więc na razie to narzędzie nie jest
-używane.
+FFmpeg rozkodowuje każde nagranie audio do fali dźwiękowej, zanim trafi ono do
+transkrypcji. Ścieżka audio używa wyłącznie FFmpega, nie dekodera wbudowanego
+w bibliotekę transkrypcji, więc dla nagrań jest on wymagany na każdym systemie.
+Po instalacji uruchom nową sesję programu PowerShell, żeby zmiana zmiennej PATH
+weszła w życie, i sprawdź wynik: wiersz „FFmpeg” w raporcie `python -m gnb.cli
+diagnostyka` musi pokazywać wersję i ścieżkę.
+
+Brak FFmpega nie wywraca aplikacji — nagranie audio dostaje wtedy status błędu
+z czytelnym komunikatem, a pozostałe formaty źródeł są przetwarzane normalnie.
+
+#### Model transkrypcji Whisper — pobiera się sam przy pierwszym uruchomieniu
+
+Model rozpoznawania mowy nie jest dołączony do aplikacji ani do repozytorium.
+Przy pierwszym uruchomieniu transkrypcji biblioteka faster-whisper pobiera go
+z sieci. Model domyślny, czyli średni z kwantyzacją ośmiobitową, waży około
+półtora gigabajta. Ląduje w katalogu pamięci podręcznej biblioteki Hugging Face
+w katalogu domowym użytkownika, w podkatalogu `.cache\huggingface\hub`, i jest
+pobierany tylko raz.
+
+Pierwszego pobrania nie należy przerywać: przerwane pobranie zostawia model
+w stanie, z którego trzeba go pobrać od nowa. Podczas pierwszego uruchomienia
+transkrypcja może przez kilka albo kilkanaście minut stać bez znaku życia —
+to jest pobieranie modelu, a nie zawieszenie.
+
+Jeżeli zależy Ci na szybszym pierwszym uruchomieniu, ustaw tymczasowo mniejszy
+model, pamiętając, że mniejszy model robi na polskim więcej błędów:
+
+```powershell
+$env:GNB_TRANSKRYPCJA_MODEL = "small"
+```
+
+Transkrypcja działa wyłącznie na procesorze. Ustawienie karty graficznej kończy
+się jawnym błędem konfiguracji — powód opisuje `CONFIGURATION.md`.
 
 ### Etap dziesiąty: MuseScore, Java, Audiveris — materiały nutowe
 
@@ -199,8 +240,8 @@ Wiersz poleceń:
 python -m gnb.cli przetworz --projekt "Nazwa" --plik SCIEZKA
 ```
 
-Pliki obrazów podajesz tą samą opcją `--plik` co dokumenty. Pełny wykaz opcji
-jest w `ARCHITECTURE.md`, a obsługiwane formaty w `FORMATS.md`.
+Pliki obrazów i nagrania mowy podajesz tą samą opcją `--plik` co dokumenty.
+Pełny wykaz opcji jest w `ARCHITECTURE.md`, a obsługiwane formaty w `FORMATS.md`.
 
 ## 9. Narzędzia deweloperskie
 
@@ -215,5 +256,8 @@ python -m ruff format --check .
 python -m mypy gnb
 ```
 
-Testy OCR pomijają się z komunikatem, gdy Tesseract nie jest zainstalowany, więc
-komplet testów przechodzi także w środowisku bez tego narzędzia.
+Testy OCR pomijają się z komunikatem, gdy Tesseract nie jest zainstalowany.
+Testy transkrypcji pomijają się, gdy brakuje FFmpega, biblioteki faster-whisper
+albo pobranego modelu Whisper, a testy długotrwałe są domyślnie wyłączone
+markerem `wolne`. Komplet testów przechodzi więc także w środowisku bez tych
+narzędzi — bez ani jednego błędu, wyłącznie z pominięciami.

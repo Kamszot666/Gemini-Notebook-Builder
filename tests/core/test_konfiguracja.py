@@ -206,3 +206,57 @@ def test_sciezka_tessdata_musi_wskazywac_istniejacy_katalog(tmp_path: Path) -> N
         tmp_path / "nie_ma.toml", srodowisko={"GNB_SCIEZKA_TESSDATA": str(istniejacy)}
     )
     assert konfiguracja.sciezka_tessdata == str(istniejacy)
+
+
+def test_domyslne_ustawienia_transkrypcji(tmp_path: Path) -> None:
+    konfiguracja = wczytaj_konfiguracje(tmp_path / "nie_ma.toml", srodowisko={})
+    assert konfiguracja.transkrypcja_wlaczona is True
+    assert konfiguracja.transkrypcja_model == "medium"
+    assert konfiguracja.transkrypcja_jezyk == "pl"
+    assert konfiguracja.transkrypcja_urzadzenie == "procesor"
+    assert konfiguracja.transkrypcja_typ_obliczen == "int8"
+    assert konfiguracja.transkrypcja_liczba_watkow == 0
+    assert konfiguracja.transkrypcja_prog_vad == 0.5
+    assert konfiguracja.transkrypcja_prog_udzialu_mowy == 0.5
+
+
+def test_ustawienia_transkrypcji_ze_srodowiska(tmp_path: Path) -> None:
+    konfiguracja = wczytaj_konfiguracje(
+        tmp_path / "nie_ma.toml",
+        srodowisko={
+            "GNB_TRANSKRYPCJA_MODEL": "small",
+            "GNB_TRANSKRYPCJA_LICZBA_WATKOW": "4",
+            "GNB_TRANSKRYPCJA_PROG_UDZIALU_MOWY": "0",
+        },
+    )
+    assert konfiguracja.transkrypcja_model == "small"
+    assert konfiguracja.transkrypcja_liczba_watkow == 4
+    assert konfiguracja.transkrypcja_prog_udzialu_mowy == 0.0
+
+
+def test_transkrypcja_urzadzenie_karta_graficzna_konczy_sie_bledem(tmp_path: Path) -> None:
+    """Decyzja trzecia etapu dziewiątego: karta graficzna to jawny błąd konfiguracji.
+
+    Test czerwieni się, gdyby ustawienie zaczęło po cichu wracać do wartości
+    „procesor” zamiast zgłaszać, że ta ścieżka nie jest w tej wersji obsługiwana.
+    """
+    with pytest.raises(BladTrwaly, match="wyłącznie na procesorze"):
+        wczytaj_konfiguracje(
+            tmp_path / "nie_ma.toml",
+            srodowisko={"GNB_TRANSKRYPCJA_URZADZENIE": "cuda"},
+        )
+
+
+def test_transkrypcja_urzadzenie_cpu_jest_dozwolone(tmp_path: Path) -> None:
+    konfiguracja = wczytaj_konfiguracje(
+        tmp_path / "nie_ma.toml", srodowisko={"GNB_TRANSKRYPCJA_URZADZENIE": "cpu"}
+    )
+    assert konfiguracja.transkrypcja_urzadzenie == "procesor"
+
+
+def test_transkrypcja_prog_udzialu_mowy_powyzej_jednego_konczy_sie_bledem(tmp_path: Path) -> None:
+    with pytest.raises(BladTrwaly, match="od zera do jednego"):
+        wczytaj_konfiguracje(
+            tmp_path / "nie_ma.toml",
+            srodowisko={"GNB_TRANSKRYPCJA_PROG_UDZIALU_MOWY": "1.5"},
+        )

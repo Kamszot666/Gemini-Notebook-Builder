@@ -17,6 +17,11 @@ dependencies = [
     "EbookLib>=0.18",
     "httpx>=0.27",
     "markdown-it-py>=3.0",
+    # Fala dźwiękowa nagrania jest tablicą NumPy: tak przyjmuje ją zarówno filtr
+    # wykrywania mowy, jak i transkrypcja. NumPy jest zależnością podstawową, bo
+    # dekodowanie audio FFmpegiem działa bez faster-whisper, a fala musi wtedy
+    # mieć w co trafić.
+    "numpy>=1.26",
     "Pillow>=10.4",
     "pypdf>=5.0",
     "pypdfium2>=4.30",
@@ -33,10 +38,18 @@ dependencies = [
 obrazy-heic = [
     "pillow-heif>=0.18",
 ]
+# Transkrypcja nagrań mowy. Biblioteka faster-whisper na silniku CTranslate2,
+# licencja MIT. Jej brak wyłącza wyłącznie ścieżkę audio, a nie całą aplikację,
+# tak jak brak pillow-heif wyłącza tylko formaty HEIC i HEIF. Model pobiera się
+# sam przy pierwszym uruchomieniu, patrz docs/INSTALL.md.
+audio = [
+    "faster-whisper>=1.2.1",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.6",
     "lxml-stubs>=0.5",
+    "faster-whisper>=1.2.1",
     # Przypięte na mypy 1.13.0: nowsze wersje wymagają pakietu librt z natywnym
     # DLL, które zasady kontroli aplikacji Windows blokują na komputerze
     # deweloperskim. Odpiąć, gdy problem zniknie albo znajdzie się inne obejście.
@@ -70,7 +83,14 @@ strict = true
 # wąskim adapterem z własnymi typami, więc brak ich typów nie rozlewa się na
 # resztę pakietu.
 [[tool.mypy.overrides]]
-module = ["yt_dlp.*", "ebooklib.*", "pypdfium2.*", "reportlab.*", "pillow_heif.*"]
+module = [
+    "yt_dlp.*",
+    "ebooklib.*",
+    "pypdfium2.*",
+    "reportlab.*",
+    "pillow_heif.*",
+    "faster_whisper.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

@@ -36,3 +36,15 @@ class BrakNarzedzia(BladGnb):
 
 class PrzekroczonoLimit(BladGnb):
     """Przekroczono limit słów w źródle, rozmiaru pliku albo liczby źródeł w notatniku."""
+
+
+class PominietoZrodlo(BladGnb):
+    """Ekstraktor świadomie pomija źródło, bo materiał nie nadaje się do przetworzenia.
+
+    W odróżnieniu od `BladTrwaly` nie oznacza awarii. Jest zgłaszany wtedy, gdy
+    ekstraktor rozpoznał, że materiał celowo pozostaje poza jego zakresem, na
+    przykład nagranie muzyczne w module obsługującym wyłącznie mowę albo audio
+    z wyłączoną w konfiguracji transkrypcją. Potok zamienia go na status
+    „pominiete”, tak samo jak przekroczenie limitu, a nie na status „blad”,
+    i zapisuje jego komunikat w manifeście oraz w raporcie końcowym.
+    """

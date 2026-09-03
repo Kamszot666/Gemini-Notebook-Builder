@@ -41,6 +41,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from gnb.audio.transkrypcja import UstawieniaTranskrypcji, powod_atrapy_av
 from gnb.core.identyfikatory import suma_kontrolna_bajtow
 from gnb.core.konfiguracja import Konfiguracja
 from gnb.core.liczenie_slow import policz_slowa
@@ -59,7 +60,7 @@ from gnb.core.nazwy import (
 )
 from gnb.core.postep import FazaPotoku, WywolanieZwrotnePostepu, ZdarzeniePostepu
 from gnb.core.stale import StatusZrodla, TypWejscia, TypZrodla, WynikDeduplikacji
-from gnb.core.wyjatki import BladGnb, BladTrwaly, PrzekroczonoLimit
+from gnb.core.wyjatki import BladGnb, BladTrwaly, PominietoZrodlo, PrzekroczonoLimit
 from gnb.core.youtube import rozpoznaj
 from gnb.deduplication import UstawieniaDeduplikacji, ZrodloDoDeduplikacji, deduplikuj
 from gnb.deduplication.orkiestrator import WynikDeduplikacjiZbioru
@@ -156,6 +157,7 @@ from gnb.output.naglowek_metadanych import (
     ETYKIETA_DATA_PUBLIKACJI,
     ETYKIETA_DLUGOSC,
     ETYKIETA_IDENTYFIKATOR,
+    ETYKIETA_JEZYK,
     ETYKIETA_JEZYK_NAPISOW,
     ETYKIETA_KANAL,
     ETYKIETA_PLIK,
@@ -473,6 +475,7 @@ def przetworz_projekt(
     transport_http: httpx.AsyncBaseTransport | None = None,
     pobieracz_youtube: PobieraczYouTube | None = None,
     postep: WywolanieZwrotnePostepu | None = None,
+    wymus_transkrypcje: bool = False,
 ) -> WynikPrzetwarzania:
     """Przetwarza listę wejść w ramach jednego projektu i zwraca podsumowanie.
 
@@ -487,13 +490,23 @@ def przetworz_projekt(
     poleceń. Interfejs WWW podaje tu funkcję, która zamienia zdarzenia na dławione
     komunikaty regionu ``role="status"``.
 
+    Argument `wymus_transkrypcje` przełamuje odrzucenie nagrania rozpoznanego jako
+    niemowne: audio jest wtedy przepisywane nawet przy niskim udziale mowy.
+    Sekcja piętnasta CLAUDE.md wymaga, żeby użytkownik mógł nadpisać tę decyzję
+    dla konkretnego pliku — w wierszu poleceń robi to opcja ``--wymus-transkrypcje``.
+
     Argumenty `transport_http` oraz `pobieracz_youtube` służą wyłącznie testom.
     Pozwalają podstawić sztuczny transport oraz przygotowane napisy i sprawdzić
     cały potok bez korzystania z sieci.
     """
     rejestr = rejestr or domyslny_rejestr(konfiguracja.zachowuj_odnosniki)
     rejestr_binarny = rejestr_binarny or domyslny_rejestr_binarny(
-        UstawieniaOcr.z_konfiguracji(konfiguracja), ocr_wlaczony=konfiguracja.ocr_wlaczony
+        UstawieniaOcr.z_konfiguracji(konfiguracja),
+        ocr_wlaczony=konfiguracja.ocr_wlaczony,
+        ustawienia_transkrypcji=UstawieniaTranskrypcji.z_konfiguracji(konfiguracja),
+        transkrypcja_wlaczona=konfiguracja.transkrypcja_wlaczona,
+        prog_udzialu_mowy=konfiguracja.transkrypcja_prog_udzialu_mowy,
+        wymus_transkrypcje=wymus_transkrypcje,
     )
     czas_startu = zegar()
 
@@ -665,6 +678,12 @@ class _Wykonanie:
 
         try:
             self._przetworz_zrodlo(pozycja, zrodlo)
+        except PominietoZrodlo as blad:
+            # Ekstraktor rozpoznał, że materiał celowo pozostaje poza jego
+            # zakresem, na przykład nagranie muzyczne w module obsługującym
+            # wyłącznie mowę. To nie jest błąd — dostaje status pominięcia
+            # z komunikatem ekstraktora, tak jak przekroczenie limitu.
+            self._pomin(zrodlo, pozycja, blad.komunikat)
         except PrzekroczonoLimit as blad:
             # Limit słów źródła jest teraz obsługiwany podziałem w fazie pakowania,
             # więc tu trafia już tylko przekroczenie limitu zgłoszone wprost przez
@@ -772,6 +791,7 @@ class _Wykonanie:
             ETYKIETA_DLUGOSC: _opis_dlugosci_z_metadanych(metadane),
             ETYKIETA_JEZYK_NAPISOW: metadane.get("jezyk_napisow", ""),
             ETYKIETA_RODZAJ_NAPISOW: _opis_rodzaju_napisow(metadane),
+            ETYKIETA_JEZYK: metadane.get("jezyk", ""),
             ETYKIETA_DATA_IMPORTU: self._zegar_lokalny().strftime("%Y-%m-%d"),
             ETYKIETA_IDENTYFIKATOR: zrodlo.identyfikator_zrodla,
         }
@@ -832,7 +852,7 @@ class _Wykonanie:
     def _przygotuj_tresc_binarna(
         self, pozycja: PozycjaWejsciowa, zrodlo: Zrodlo
     ) -> _PrzygotowanyDokument:
-        """Buduje dokument z pliku binarnego: PDF, DOCX, EPUB albo obrazu.
+        """Buduje dokument z pliku binarnego: PDF, DOCX, EPUB, obrazu albo nagrania audio.
 
         Format binarny nie przechodzi przez rozkodowanie tekstu, bo próba
         wykrycia kodowania znakowego na jego bajtach dałaby bezużyteczny wynik.
@@ -840,6 +860,11 @@ class _Wykonanie:
         dotyczy wyłącznie stron internetowych. Dla źródła będącego obrazem
         oryginalne bajty trafiają dodatkowo do wyników pośrednich, żeby faza
         pakowania mogła osadzić obraz w tematycznym pliku PDF.
+
+        Postęp długiego etapu ekstrakcji jest raportowany inną fazą zależnie od
+        źródła: OCR dla skanu PDF, transkrypcja dla nagrania audio. Dla nagrania
+        audio zapisywany jest też jednorazowo powód wstawienia atrapy modułu
+        ``av``, jeżeli PyAV był na tej maszynie zablokowany.
         """
         identyfikator = zrodlo.identyfikator_zrodla
         bajty = _odczytaj_bajty_pliku(Path(pozycja.wejscie.wartosc), identyfikator)
@@ -849,10 +874,16 @@ class _Wykonanie:
             self._zapisz_bajty_posrednie(identyfikator, _SUFIKS_OBRAZ_ZRODLOWY, bajty)
         self._loguj(logging.INFO, identyfikator, f"Źródło {identyfikator}, plik binarny.")
 
+        if zrodlo.typ_zrodla is TypZrodla.PLIK_AUDIO:
+            postep_ekstrakcji = self._postep_transkrypcji(zrodlo.pochodzenie)
+        else:
+            postep_ekstrakcji = self._postep_ocr(zrodlo.pochodzenie)
+
         ekstraktor = self._rejestr_binarny.dobierz(zrodlo.typ_zrodla, pozycja.format_zrodla)
-        dokument = ekstraktor.wyekstrahuj(
-            identyfikator, bajty, postep=self._postep_ocr(zrodlo.pochodzenie)
-        )
+        dokument = ekstraktor.wyekstrahuj(identyfikator, bajty, postep=postep_ekstrakcji)
+
+        if zrodlo.typ_zrodla is TypZrodla.PLIK_AUDIO:
+            self._odnotuj_atrape_av()
 
         return _PrzygotowanyDokument(
             dokument=dokument,
@@ -1746,6 +1777,50 @@ class _Wykonanie:
             )
 
         return zglos
+
+    def _postep_transkrypcji(self, pochodzenie: str) -> PostepEkstrakcji | None:
+        """Buduje wywołanie zwrotne postępu transkrypcji nagrania dla jednego źródła.
+
+        Licznik jest wyrażony w minutach nagrania, bo transkrypcja godzinnego
+        nagrania trwa około godziny i sam procent nie mówi użytkownikowi, ile
+        jeszcze czekać. Ekstraktor woła to wywołanie z parą liczb w sekundach,
+        a tutaj są one zamieniane na minuty.
+        """
+        if self._postep is None:
+            return None
+
+        def zglos(przetworzone_sekundy: int, calkowite_sekundy: int) -> None:
+            minut_wykonano = przetworzone_sekundy // 60
+            minut_wszystkich = max(1, -(-calkowite_sekundy // 60))
+            _zglos_postep(
+                self._postep,
+                FazaPotoku.TRANSKRYPCJA,
+                przetworzone_sekundy,
+                max(calkowite_sekundy, 1),
+                f"Transkrypcja nagrania „{pochodzenie}”, przetworzono "
+                f"{minut_wykonano} z {minut_wszystkich} minut",
+            )
+
+        return zglos
+
+    def _odnotuj_atrape_av(self) -> None:
+        """Zapisuje w logu szczegółowym powód wstawienia atrapy modułu ``av``.
+
+        Rejestrator modułu `gnb.audio.transkrypcja` nie trafia do pliku logu
+        projektu, więc informacja o awaryjnym obejściu blokady PyAV jest tu
+        przepisywana przez rejestrator projektu. Zapis jest idempotentny w skali
+        raportu: powód pojawia się przy każdym nagraniu, ale to dane techniczne
+        w logu szczegółowym, a nie w logu ważnym.
+        """
+        powod = powod_atrapy_av()
+        if powod is None:
+            return
+        self._loguj(
+            logging.WARNING,
+            "-",
+            "Biblioteka PyAV jest na tej maszynie zablokowana, więc wstawiono atrapę "
+            f"modułu „av”. Dekodowanie dźwięku i tak idzie przez FFmpeg. Powód: {powod}",
+        )
 
     def _loguj(self, poziom: int, identyfikator: str, komunikat: str) -> None:
         self._log.log(poziom, komunikat, extra={"identyfikator_zrodla": identyfikator})

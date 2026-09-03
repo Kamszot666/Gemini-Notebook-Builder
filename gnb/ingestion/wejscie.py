@@ -2,11 +2,12 @@
 
 Obsługiwane są cztery rodzaje wejścia: tekst wklejony bezpośrednio, plik
 lokalny, adres strony internetowej oraz adres filmu z serwisu YouTube. Plik
-lokalny dostaje jeden z trzech typów źródła w zależności od formatu: TXT i MD
+lokalny dostaje jeden z typów źródła w zależności od formatu: TXT i MD
 są plikami tekstowymi; HTML, CSV, SRT, VTT, PDF, DOCX i EPUB dokumentami;
-JPG, PNG, WebP, TIFF, BMP, GIF oraz HEIC i HEIF obrazami. Rozróżnienie decyduje
-później o wyborze ekstraktora oraz o tym, czy plik jest oceniany pod względem
-jakości ekstrakcji, zgodnie z `gnb.potok`.
+JPG, PNG, WebP, TIFF, BMP, GIF oraz HEIC i HEIF obrazami; MP3, WAV, M4A, FLAC,
+OGG, OPUS i AAC nagraniami audio. Rozróżnienie decyduje później o wyborze
+ekstraktora oraz o tym, czy plik jest oceniany pod względem jakości ekstrakcji,
+zgodnie z `gnb.potok`.
 
 Moduł zamienia wejście na `PozycjaWejsciowa`, a następnie na zwalidowane
 `Zrodlo` z deterministycznym identyfikatorem i pełną sumą kontrolną.
@@ -61,13 +62,28 @@ FORMATY_PLIKOW_OBRAZOW = frozenset(
     {"jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp", "gif", "heic", "heif"}
 )
 
-# Formaty binarne wśród plików. Nie da się ich rozkodować jako tekst, bo to
-# kontenery ze swoją wewnętrzną strukturą albo dane obrazu, a próba dekodowania
-# przez wykrywanie kodowania znakowego dałaby bezużyteczny wynik. Obejmuje
-# dokumenty PDF, DOCX i EPUB oraz wszystkie formaty obrazów.
-FORMATY_PLIKOW_BINARNYCH = frozenset({"pdf", "docx", "epub"}) | FORMATY_PLIKOW_OBRAZOW
+# Formaty nagrań audio z etapu dziewiątego. Dekodowaniem zajmuje się FFmpeg, więc
+# lista jest szeroka; jej brak zgłasza ekstraktor, gdy FFmpeg nie rozkoduje pliku.
+# Moduł audio obsługuje wyłącznie nagrania mowy — nagranie muzyczne jest
+# rozpoznawane i pomijane, nigdy transkrybowane.
+FORMATY_PLIKOW_AUDIO = frozenset({"mp3", "wav", "m4a", "flac", "ogg", "opus", "aac"})
 
-FORMATY_PLIKOW = FORMATY_PLIKOW_TEKSTOWYCH | FORMATY_PLIKOW_DOKUMENTOW | FORMATY_PLIKOW_OBRAZOW
+# Formaty binarne wśród plików. Nie da się ich rozkodować jako tekst, bo to
+# kontenery ze swoją wewnętrzną strukturą albo dane obrazu lub dźwięku, a próba
+# dekodowania przez wykrywanie kodowania znakowego dałaby bezużyteczny wynik.
+# Obejmuje dokumenty PDF, DOCX i EPUB, wszystkie formaty obrazów oraz nagrania
+# audio. Rozmiar pliku binarnego jest ograniczony bezpiecznym limitem megabajtów,
+# bo taki plik trzeba wczytać do pamięci w całości.
+FORMATY_PLIKOW_BINARNYCH = (
+    frozenset({"pdf", "docx", "epub"}) | FORMATY_PLIKOW_OBRAZOW | FORMATY_PLIKOW_AUDIO
+)
+
+FORMATY_PLIKOW = (
+    FORMATY_PLIKOW_TEKSTOWYCH
+    | FORMATY_PLIKOW_DOKUMENTOW
+    | FORMATY_PLIKOW_OBRAZOW
+    | FORMATY_PLIKOW_AUDIO
+)
 FORMATY_TEKSTU_WKLEJONEGO = frozenset({"txt", "md"})
 FORMAT_STRONY_WWW = "html"
 FORMAT_YOUTUBE = "youtube"
@@ -291,7 +307,8 @@ def _zrodlo_z_pliku(
         raise FormatNieobslugiwany(
             f"Nieobsługiwany format pliku: „{pozycja.format_zrodla or 'brak rozszerzenia'}”. "
             "Obsługiwane są: txt, md, html, htm, xhtml, csv, srt, vtt, pdf, docx, epub, "
-            "jpg, jpeg, png, webp, tif, tiff, bmp, gif, heic, heif."
+            "jpg, jpeg, png, webp, tif, tiff, bmp, gif, heic, heif, "
+            "mp3, wav, m4a, flac, ogg, opus, aac."
         )
     _sprawdz_rozmiar_pliku(sciezka, pozycja.format_zrodla, konfiguracja)
     suma = suma_kontrolna_pliku(sciezka)
@@ -339,6 +356,8 @@ def typ_zrodla_dla_pliku(format_zrodla: str) -> TypZrodla:
         return TypZrodla.PLIK_TEKSTOWY
     if format_zrodla in FORMATY_PLIKOW_OBRAZOW:
         return TypZrodla.PLIK_OBRAZ
+    if format_zrodla in FORMATY_PLIKOW_AUDIO:
+        return TypZrodla.PLIK_AUDIO
     return TypZrodla.PLIK_DOKUMENT
 
 

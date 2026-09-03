@@ -58,6 +58,78 @@ def wymaga_ocr_pol() -> None:
         pytest.skip(powod)
 
 
+# Model transkrypcji używany w testach. Model średni z konfiguracji domyślnej
+# służy jakości rozpoznania polskiego, a testy sprawdzają działanie kodu, nie
+# jakość, więc biorą model najmniejszy.
+MODEL_WHISPER_DO_TESTOW = "tiny"
+
+
+@functools.lru_cache(maxsize=1)
+def _powod_pominiecia_faster_whisper() -> str | None:
+    """Zwraca powód pominięcia testów wymagających biblioteki faster-whisper.
+
+    Na komputerze deweloperskim Inteligentne sterowanie aplikacjami blokuje PyAV,
+    więc `czy_dostepna_biblioteka` sprawdza też, czy strażnik atrapy modułu ``av``
+    pozwolił zaimportować resztę biblioteki. Wynik jest liczony raz na sesję.
+    """
+    from gnb.audio.transkrypcja import czy_dostepna_biblioteka
+
+    if not czy_dostepna_biblioteka():
+        return (
+            "Biblioteka faster-whisper nie jest dostępna w tym środowisku "
+            "(zainstaluj ją poleceniem „pip install gnb[audio]”)."
+        )
+    return None
+
+
+@functools.lru_cache(maxsize=1)
+def _powod_pominiecia_modelu_whisper() -> str | None:
+    """Zwraca powód pominięcia testów wymagających pobranego modelu Whispera.
+
+    Strażnik rozróżnia dwa braki: brak samej biblioteki oraz obecną bibliotekę
+    bez pobranego modelu. Drugi przypadek nie jest regresją aplikacji — bez sieci
+    modelu nie da się pobrać — więc test ma się pominąć z czytelnym powodem,
+    a nie zaczerwienić. Wzoruje się na `_powod_pominiecia_ocr_pol`.
+    """
+    powod = _powod_pominiecia_faster_whisper()
+    if powod is not None:
+        return powod
+    from gnb.audio.transkrypcja import model_dostepny_lokalnie
+
+    if not model_dostepny_lokalnie(MODEL_WHISPER_DO_TESTOW, "int8"):
+        return (
+            f"Model transkrypcji „{MODEL_WHISPER_DO_TESTOW}” nie jest pobrany na dysk, "
+            "a testy nie korzystają z sieci. Pobierz go raz, uruchamiając transkrypcję "
+            "dowolnego nagrania mowy, albo uruchom te testy z markerem „siec”."
+        )
+    return None
+
+
+@pytest.fixture
+def wymaga_faster_whisper() -> None:
+    """Pomija test, gdy biblioteki faster-whisper nie da się zaimportować."""
+    powod = _powod_pominiecia_faster_whisper()
+    if powod is not None:
+        pytest.skip(powod)
+
+
+@pytest.fixture
+def wymaga_model_whisper() -> None:
+    """Pomija test, gdy nie da się wykonać transkrypcji: brak biblioteki albo modelu."""
+    powod = _powod_pominiecia_modelu_whisper()
+    if powod is not None:
+        pytest.skip(powod)
+
+
+@pytest.fixture
+def wymaga_ffmpeg() -> None:
+    """Pomija test, gdy w środowisku nie ma programu FFmpeg."""
+    from gnb.audio.dekodowanie import czy_dostepny
+
+    if not czy_dostepny():
+        pytest.skip("FFmpeg nie jest zainstalowany w tym środowisku.")
+
+
 def _obraz_z_tekstem(
     wiersze: list[str],
     *,

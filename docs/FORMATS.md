@@ -1,4 +1,4 @@
-# Obsługiwane formaty — stan po etapie piątym
+# Obsługiwane formaty — stan po etapie ósmym
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
 Kolejne formaty, czyli ODT, PPTX, obrazy oraz materiały nutowe, dojdą
@@ -6,15 +6,18 @@ w etapach opisanych w sekcji osiemnastej pliku `CLAUDE.md`.
 
 ## Wejście
 
-Obsługiwane jest pięć rodzajów wejścia:
+Obsługiwane są następujące rodzaje wejścia:
 
 1. Tekst wklejony bezpośrednio przez użytkownika, traktowany jako tekst płaski.
 2. Tekst wklejony zadeklarowany przez użytkownika jako Markdown.
-3. Plik lokalny w jednym z dziewięciu formatów: TXT, MD, HTML, CSV, SRT, VTT,
-   PDF, DOCX albo EPUB. Pierwsze dwa są plikiem tekstowym, pozostałe siedem
-   plikiem dokumentem — rozróżnienie opisuje sekcja „Pliki dokumentowe”.
-4. Adres strony internetowej, podany pojedynczo albo listą.
-5. Adres filmu z serwisu YouTube, dla którego pobierane są napisy.
+3. Plik lokalny w jednym z formatów tekstowych i dokumentowych: TXT, MD, HTML,
+   CSV, SRT, VTT, PDF, DOCX albo EPUB. Pierwsze dwa są plikiem tekstowym,
+   pozostałe plikiem dokumentem — rozróżnienie opisuje sekcja „Pliki dokumentowe”.
+4. Plik obrazu: JPG, PNG, WebP, TIFF, BMP oraz statyczna klatka GIF, a przy
+   zainstalowanej bibliotece opcjonalnej pillow-heif także HEIC i HEIF.
+   Obsługę obrazów opisuje sekcja „Obrazy”.
+5. Adres strony internetowej, podany pojedynczo albo listą.
+6. Adres filmu z serwisu YouTube, dla którego pobierane są napisy.
 
 Plik w innym formacie kończy się kontrolowanym błędem `FormatNieobslugiwany`.
 Nie zatrzymuje to przetwarzania pozostałych źródeł.
@@ -373,14 +376,28 @@ jakości ekstrakcji.
 
 ### PDF
 
-Ekstraktor czyta wyłącznie tekst już obecny w pliku PDF. Strona zeskanowana
-bez warstwy tekstowej, czyli sam obraz strony, daje pusty wynik i ostrzeżenie
-zapisane w manifeście, w logu szczegółowym oraz w sekcji „Materiały do
-sprawdzenia” raportu końcowego — rozpoznawanie tekstu ze skanu, czyli OCR, jest
-zadaniem etapu ósmego. Plik zaszyfrowany albo zabezpieczony przed kopiowaniem kończy się
-błędem trwałym z czytelnym komunikatem: taki plik nie zaimportuje się także
-wprost do notatnika, niezależnie od planu. Plik uszkodzony albo o nieprawidłowej
-strukturze kończy się tym samym rodzajem błędu, a nie awarią programu.
+Ekstraktor najpierw czyta tekst już obecny w pliku PDF. Gdy warstwy tekstowej
+nie ma — plik jest skanem złożonym z obrazów stron — i OCR jest włączony w
+konfiguracji, każda strona jest rasteryzowana biblioteką pypdfium2 w
+rozdzielczości `ocr_rozdzielczosc_pdf_dpi` i rozpoznawana programem Tesseract.
+Wynik jest składany w jeden tekst, w którym przed treścią każdej strony stoi
+wiersz „Strona N:”, więc numery stron nie giną. Metoda ekstrakcji zapisana w
+manifeście to wtedy `pdf-ocr`, a nie `pdf`.
+
+Tekst z OCR zawsze dostaje ostrzeżenie „Tekst tego pliku PDF pochodzi z OCR
+skanu, więc może zawierać błędy rozpoznania”, więc trafia do sekcji „Materiały
+do sprawdzenia” raportu końcowego. Jeżeli rozpoznany tekst wygląda na przekłamany
+— dużo znaków nietekstowych albo słów bez samogłosek — dochodzi drugie
+ostrzeżenie z powodem.
+
+Gdy OCR jest wyłączony albo nie znaleziono Tesseracta, ze skanu nie powstaje
+żadna treść, a plik dostaje ostrzeżenie o braku warstwy tekstowej, zapisane w
+manifeście, w logu szczegółowym oraz w sekcji „Materiały do sprawdzenia”.
+
+Plik zaszyfrowany albo zabezpieczony przed kopiowaniem kończy się błędem trwałym
+z czytelnym komunikatem: taki plik nie zaimportuje się także wprost do notatnika,
+niezależnie od planu. Plik uszkodzony albo o nieprawidłowej strukturze kończy się
+tym samym rodzajem błędu, a nie awarią programu.
 
 Nagłówek i numer strony, powtarzane na każdej stronie dłuższego dokumentu, są
 usuwane, żeby nie zaśmiecały wyniku tyloma powtórzeniami, ile jest stron.
@@ -452,6 +469,38 @@ z nazwą pliku rozdziału, więc nie znika po cichu. Pozostałe rozdziały są
 odczytywane normalnie. Plik uszkodzony albo niebędący książką EPUB kończy się
 błędem trwałym z czytelnym komunikatem, a nie awarią programu.
 
+### Obrazy
+
+Plik obrazu daje źródło typu „obraz”. Wynik ekstrakcji to opis merytoryczny
+złożony wyłącznie z materiału, który aplikacja już ma, oraz, osobną oznaczoną
+sekcją, tekst rozpoznany przez OCR. Treść wizualna nigdy nie jest interpretowana
+ani wysyłana do zewnętrznej usługi.
+
+Opis merytoryczny powstaje z opisowej nazwy pliku, formatu i wymiarów obrazu,
+pola opisowego z metadanych EXIF lub pól tekstowych formatu PNG, a dla obrazu
+wyjętego z treści strony także z tekstu alternatywnego, podpisu figury i
+otaczającego akapitu. Gdy nie ma z czego zbudować opisu, w pliku wynikowym
+pojawia się jawny komunikat o jego braku wraz z formatem i wymiarami — obraz
+wskazany przez użytkownika nie jest pomijany po cichu. Sam tekst OCR nie jest
+w opisie powtarzany w całości, tylko odnotowany; pełny tekst stoi w osobnej
+sekcji.
+
+OCR obrazu jest wykonywany, gdy jest włączony w konfiguracji i gdy znaleziono
+Tesseract. Wynik pusty albo złożony ze śmieci dostaje ostrzeżenie i trafia do
+sekcji „Materiały do sprawdzenia”, zamiast zniknąć po cichu. Struktura dokumentu
+obrazu jest zawsze na poziomie niskim, więc dla obrazu nigdy nie powstaje wersja
+Markdown.
+
+Animowany plik GIF jest przetwarzany z pierwszej klatki, z ostrzeżeniem o tym.
+Formaty HEIC i HEIF wymagają biblioteki opcjonalnej pillow-heif; jej brak
+kończy się błędem `FormatNieobslugiwany` ze wskazówką instalacji, a nie
+wyłączeniem całej obsługi obrazów. Plik uszkodzony kończy się tym samym rodzajem
+błędu, a nie awarią programu.
+
+Pliki obrazów nie są zapisywane jako TXT: cała grupa obrazów trafia do jednego
+tematycznego pliku PDF, opisanego w sekcji „Pakowanie i podział plików
+wynikowych”.
+
 ### Poziom pewności struktury plików dokumentowych
 
 DOCX i EPUB niosą znaczniki semantyczne wprost z formatu — styl akapitu albo
@@ -459,8 +508,9 @@ znacznik XHTML — więc ich struktura jest odwzorowywana, a nie zgadywana,
 i dostaje wysoki poziom pewności. HTML lokalny dostaje ten sam poziom co strona
 internetowa, bo struktura jest tam dopiero rozpoznawana przez `trafilatura`.
 PDF nie ma niezawodnie odtwarzalnej struktury, więc zawsze dostaje poziom
-niski, a plik CSV dostaje wysoki poziom mimo braku nagłówków czy list, bo jego
-jedyna struktura — tabela — jest odczytywana wprost, bez zgadywania.
+niski, tak samo jak obraz. Plik CSV dostaje wysoki poziom mimo braku nagłówków
+czy list, bo jego jedyna struktura — tabela — jest odczytywana wprost, bez
+zgadywania.
 
 ## Czym różni się wersja TXT od wersji MD
 
@@ -573,12 +623,37 @@ Pliki części i pliki grupy powstają wyłącznie w formacie TXT. Fragment ani
 kompilacja kilku źródeł nie są jednym dokumentem, więc gwarancja wiernej struktury
 Markdown by tu nie obowiązywała. Decyzja jest zapisana w manifeście.
 
+### Tematyczne pliki PDF z obrazami
+
+Źródła będące obrazami są pakowane osobno. Grupa obrazów — nadana opcją
+`--grupa`, a w jej braku domyślna grupa „Obrazy” — daje jeden tematyczny plik
+PDF. W pliku każdy obraz ma osobną stronę: nagłówek metadanych, osadzony obraz
+oraz opis merytoryczny wraz z tekstem OCR. Do pliku PDF osadzana jest czcionka
+DejaVuSans, więc polskie znaki są czytelne niezależnie od czcionek systemu.
+
+Obraz przed osadzeniem jest sprowadzany do RGB, ograniczany w wymiarze do
+`maksymalny_wymiar_grafiki_px` i zapisywany jako JPEG o jakości `jakosc_grafik`,
+żeby rozmiar pliku PDF mieścił się w limicie źródła notatnika. Grupa jest
+dzielona na kilka plików PDF dopiero po przekroczeniu bezpiecznego limitu słów
+albo limitu `maksymalny_rozmiar_pdf_mb`. Pojedynczy obraz zawsze tworzy własny
+plik, nawet gdy sam przekracza limit — obrazu nie da się rozciąć, więc taki plik
+dostaje ostrzeżenie kierujące do zmniejszenia jakości albo wymiaru grafiki.
+
+Opis obrazu w pliku PDF jest zwykłym tekstem akapitu pod obrazem, a nie tagiem
+alternatywnym: biblioteka reportlab w tym trybie nie tworzy rzeczywistej
+struktury dostępności PDF, więc nazywanie opisu tagiem alt byłoby nieuczciwe.
+
+Grupa mieszana, w której są i obrazy, i źródła tekstowe, daje dwa pliki: PDF dla
+obrazów i plik tekstowy dla reszty. Taka grupa zajmuje wtedy dwa sloty
+notatnika. Jest to świadomie przyjęte uproszczenie.
+
 ### Limit liczby źródeł
 
 Limit liczby źródeł notatnika dotyczy plików do wgrania, a nie odrębnych
 materiałów źródłowych. Jedno źródło podzielone na trzy części zajmuje trzy sloty,
-a plik grupy łączący pięć źródeł zajmuje jeden. Raport końcowy liczy wykorzystanie
-limitu po liczbie plików TXT.
+a plik grupy łączący pięć źródeł zajmuje jeden. Tematyczny plik PDF grupy obrazów
+zajmuje jeden slot niezależnie od liczby obrazów. Raport końcowy liczy
+wykorzystanie limitu po sumie plików TXT i plików PDF do wgrania.
 
 ## Metadane z danych strukturalnych strony
 
@@ -616,7 +691,13 @@ przechodzące przez rozpoznawanie treści dostaje ocenę jakości: „poprawna�
 Oceniane są strony internetowe i filmy, bo ich treść powstaje przez ekstrakcję
 albo przez napisy, a od etapu czwartego także pliki PDF, DOCX, EPUB i HTML
 lokalny, z tego samego powodu. Tekst wklejony oraz pliki TXT i MD nie są
-oceniane, bo ich treść jest dokładnie tym, co podał użytkownik. Plik CSV oraz
+oceniane, bo ich treść jest dokładnie tym, co podał użytkownik.
+
+Obrazy mają własną, osobną ocenę: jakość tekstu rozpoznanego przez OCR. Wynik
+pusty jest oceniany jako „pusta”, a wynik z wysokim udziałem znaków
+nietekstowych albo słów bez samogłosek jako „podejrzana”. Obie oceny kierują
+obraz do sekcji „Materiały do sprawdzenia”. Ten sam mechanizm obejmuje tekst z
+OCR skanowanego pliku PDF. Plik CSV oraz
 napisy z pliku SRT i VTT też nie są oceniane: z natury formatu nie mają tytułu
 ani podziału na akapity, więc dostałyby nienaprawialne ostrzeżenie przy każdym
 pliku. Ostrzeżenie, którego nie da się naprawić, uczyłoby tylko pomijania

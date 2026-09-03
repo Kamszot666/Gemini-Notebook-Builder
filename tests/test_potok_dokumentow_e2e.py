@@ -109,7 +109,16 @@ def test_pdf_skanu_bez_warstwy_tekstowej_trafia_do_materialow_do_sprawdzenia(
     moment = datetime(2026, 8, 28, 9, 0, tzinfo=UTC)
     pozycje = [przyjmij_plik(KATALOG_DANYCH / "pdf_skan.pdf", moment)]
 
-    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path)
+    # OCR jest tu wymuszony na wyłączony, mimo że od etapu ósmego pole
+    # `ocr_wlaczony` ma domyślnie wartość prawda. Ten test sprawdza ścieżkę bez
+    # OCR: skan bez warstwy tekstowej ma dać ocenę „podejrzana” i trafić do
+    # „Materiałów do sprawdzenia”. Wymuszenie sprawia, że wynik nie zależy od
+    # tego, czy w środowisku jest Tesseract i polskie dane językowe. Dodanie tu
+    # fikstury `wymaga_ocr_pol` byłoby błędem: test pominięty niczego nie chroni,
+    # a ta ścieżka ma być sprawdzana zawsze. Ścieżka z włączonym OCR jest osobno
+    # pokryta przez test_skan_pdf_jest_rozpoznawany_strona_po_stronie
+    # w tests/test_potok_obrazy_e2e.py.
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path, ocr_wlaczony=False)
     wynik = przetworz_projekt(
         pozycje, konfiguracja, nazwa_projektu="Test skanu bez OCR", zegar=_zegar_krokowy()
     )

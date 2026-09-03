@@ -19,8 +19,11 @@ i skanów: włączenie OCR, język OCR w notacji Tesseracta, tryb segmentacji
 strony, rozdzielczość rasteryzacji stron PDF, liczba równoległych procesów OCR,
 ścieżka pliku wykonywalnego Tesseracta i katalogu danych językowych, jakość
 zapisu grafik, maksymalny wymiar grafiki w pikselach oraz maksymalny rozmiar
-generowanego pliku PDF. Pozostałe pola wymienione w sekcji jedenastej a pliku
-CLAUDE.md dojdą w kolejnych etapach.
+generowanego pliku PDF, a od etapu dziewiątego także ustawienia transkrypcji
+nagrań mowy: włączenie transkrypcji, model Whisper, język, urządzenie, typ
+obliczeń, liczba wątków procesora, próg wykrywania aktywności mowy oraz próg
+udziału mowy decydujący o odrzuceniu nagrania niemownego. Pozostałe pola
+wymienione w sekcji jedenastej a pliku CLAUDE.md dojdą w kolejnych etapach.
 
 Adres nasłuchu musi wskazywać pętlę zwrotną. Sekcja jedenasta CLAUDE.md zakazuje
 nasłuchu na innym adresie, ponieważ interfejs nie ma uwierzytelniania, więc
@@ -113,6 +116,40 @@ DOMYSLNA_OCR_LICZBA_PROCESOW = 0
 DOMYSLNA_SCIEZKA_TESSERACT = ""
 DOMYSLNA_SCIEZKA_TESSDATA = ""
 
+# Ustawienia transkrypcji nagrań mowy, czyli etapu dziewiątego. Biblioteką jest
+# faster-whisper na silniku CTranslate2. Transkrypcja działa wyłącznie na
+# procesorze: aktualna macierz zgodności ROCm dla Windows nie wymienia grafiki
+# zintegrowanej Vega w procesorach serii 7030, a stos DirectML to ta sama klasa
+# ryzyka co ciężki stos natywny odrzucony w sekcji osiemnastej d CLAUDE.md.
+# Domyślnym modelem jest model średni z kwantyzacją ośmiobitową „int8”: model
+# mały robi na polskim zauważalnie więcej błędów, a błędna transkrypcja to cicha
+# korupcja materiału źródłowego, ten sam argument, dla którego przy OCR wybrano
+# dane „best” zamiast „fast”. Liczba wątków zero oznacza dobór „rdzenie minus
+# jeden”. Próg udziału mowy poniżej wartości progu kończy się odrzuceniem
+# nagrania jako niemownego, bez transkrypcji.
+DOMYSLNA_TRANSKRYPCJA_WLACZONA = True
+DOMYSLNY_TRANSKRYPCJA_MODEL = "medium"
+DOMYSLNY_TRANSKRYPCJA_JEZYK = "pl"
+DOMYSLNE_TRANSKRYPCJA_URZADZENIE = "procesor"
+DOMYSLNY_TRANSKRYPCJA_TYP_OBLICZEN = "int8"
+DOMYSLNA_TRANSKRYPCJA_LICZBA_WATKOW = 0
+DOMYSLNY_TRANSKRYPCJA_PROG_VAD = 0.5
+DOMYSLNY_TRANSKRYPCJA_PROG_UDZIALU_MOWY = 0.5
+
+# Wartości ustawienia urządzenia uznawane za procesor. Każda inna wartość, w tym
+# nazwy kart graficznych, kończy się jawnym błędem konfiguracji: cicha podmiana
+# na procesor jest gorsza niż jawna odmowa, zgodnie z decyzją trzecią etapu
+# dziewiątego.
+URZADZENIA_PROCESORA = frozenset({"procesor", "cpu"})
+KOMUNIKAT_URZADZENIE_NIEOBSLUGIWANE = (
+    "Ustawienie „transkrypcja_urzadzenie” ma wartość „{wartosc}”, a w tej wersji "
+    "aplikacji transkrypcja działa wyłącznie na procesorze (wartość „procesor”). "
+    "Ścieżka na karcie graficznej nie jest obsługiwana: macierz zgodności ROCm dla "
+    "systemu Windows nie wymienia grafiki zintegrowanej Vega w procesorach serii "
+    "7030, a stos DirectML to osobny ciężki stos natywny. Nie przełączam po cichu "
+    "z powrotem na procesor, bo cicha podmiana jest gorsza niż jawna odmowa."
+)
+
 # Ustawienia grafiki i generowanych plików PDF. Jakość grafik dotyczy ponownego
 # zapisu obrazów w PDF jako JPEG, a maksymalny wymiar w pikselach ogranicza
 # rozmiar dłuższego boku, żeby tematyczny PDF nie urósł ponad limit źródła
@@ -192,6 +229,14 @@ _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
     PREFIKS_ZMIENNYCH + "OCR_LICZBA_PROCESOW": "ocr_liczba_procesow",
     PREFIKS_ZMIENNYCH + "SCIEZKA_TESSERACT": "sciezka_tesseract",
     PREFIKS_ZMIENNYCH + "SCIEZKA_TESSDATA": "sciezka_tessdata",
+    PREFIKS_ZMIENNYCH + "TRANSKRYPCJA_WLACZONA": "transkrypcja_wlaczona",
+    PREFIKS_ZMIENNYCH + "TRANSKRYPCJA_MODEL": "transkrypcja_model",
+    PREFIKS_ZMIENNYCH + "TRANSKRYPCJA_JEZYK": "transkrypcja_jezyk",
+    PREFIKS_ZMIENNYCH + "TRANSKRYPCJA_URZADZENIE": "transkrypcja_urzadzenie",
+    PREFIKS_ZMIENNYCH + "TRANSKRYPCJA_TYP_OBLICZEN": "transkrypcja_typ_obliczen",
+    PREFIKS_ZMIENNYCH + "TRANSKRYPCJA_LICZBA_WATKOW": "transkrypcja_liczba_watkow",
+    PREFIKS_ZMIENNYCH + "TRANSKRYPCJA_PROG_VAD": "transkrypcja_prog_vad",
+    PREFIKS_ZMIENNYCH + "TRANSKRYPCJA_PROG_UDZIALU_MOWY": "transkrypcja_prog_udzialu_mowy",
     PREFIKS_ZMIENNYCH + "JAKOSC_GRAFIK": "jakosc_grafik",
     PREFIKS_ZMIENNYCH + "MAKSYMALNY_WYMIAR_GRAFIKI_PX": "maksymalny_wymiar_grafiki_px",
     PREFIKS_ZMIENNYCH + "MAKSYMALNY_ROZMIAR_PDF_MB": "maksymalny_rozmiar_pdf_mb",
@@ -269,6 +314,14 @@ class Konfiguracja:
     ocr_liczba_procesow: int = DOMYSLNA_OCR_LICZBA_PROCESOW
     sciezka_tesseract: str = DOMYSLNA_SCIEZKA_TESSERACT
     sciezka_tessdata: str = DOMYSLNA_SCIEZKA_TESSDATA
+    transkrypcja_wlaczona: bool = DOMYSLNA_TRANSKRYPCJA_WLACZONA
+    transkrypcja_model: str = DOMYSLNY_TRANSKRYPCJA_MODEL
+    transkrypcja_jezyk: str = DOMYSLNY_TRANSKRYPCJA_JEZYK
+    transkrypcja_urzadzenie: str = DOMYSLNE_TRANSKRYPCJA_URZADZENIE
+    transkrypcja_typ_obliczen: str = DOMYSLNY_TRANSKRYPCJA_TYP_OBLICZEN
+    transkrypcja_liczba_watkow: int = DOMYSLNA_TRANSKRYPCJA_LICZBA_WATKOW
+    transkrypcja_prog_vad: float = DOMYSLNY_TRANSKRYPCJA_PROG_VAD
+    transkrypcja_prog_udzialu_mowy: float = DOMYSLNY_TRANSKRYPCJA_PROG_UDZIALU_MOWY
     jakosc_grafik: int = DOMYSLNA_JAKOSC_GRAFIK
     maksymalny_wymiar_grafiki_px: int = DOMYSLNY_MAKSYMALNY_WYMIAR_GRAFIKI_PX
     maksymalny_rozmiar_pdf_mb: int = DOMYSLNY_MAKSYMALNY_ROZMIAR_PDF_MB
@@ -419,6 +472,26 @@ def wczytaj_konfiguracje(
         ),
         sciezka_tessdata=_jako_sciezka_katalogu(
             scalone, "sciezka_tessdata", domyslna.sciezka_tessdata
+        ),
+        transkrypcja_wlaczona=_jako_prawda_falsz(
+            scalone, "transkrypcja_wlaczona", domyslna.transkrypcja_wlaczona
+        ),
+        transkrypcja_model=_jako_napis(scalone, "transkrypcja_model", domyslna.transkrypcja_model),
+        transkrypcja_jezyk=_jako_napis(scalone, "transkrypcja_jezyk", domyslna.transkrypcja_jezyk),
+        transkrypcja_urzadzenie=_jako_urzadzenie_transkrypcji(
+            scalone, "transkrypcja_urzadzenie", domyslna.transkrypcja_urzadzenie
+        ),
+        transkrypcja_typ_obliczen=_jako_napis(
+            scalone, "transkrypcja_typ_obliczen", domyslna.transkrypcja_typ_obliczen
+        ),
+        transkrypcja_liczba_watkow=_jako_liczba_nieujemna(
+            scalone, "transkrypcja_liczba_watkow", domyslna.transkrypcja_liczba_watkow
+        ),
+        transkrypcja_prog_vad=_jako_ulamek(
+            scalone, "transkrypcja_prog_vad", domyslna.transkrypcja_prog_vad
+        ),
+        transkrypcja_prog_udzialu_mowy=_jako_ulamek_wlacznie(
+            scalone, "transkrypcja_prog_udzialu_mowy", domyslna.transkrypcja_prog_udzialu_mowy
         ),
         jakosc_grafik=_jako_liczba_w_zakresie(
             scalone, "jakosc_grafik", domyslna.jakosc_grafik, dolny=1, gorny=100
@@ -601,6 +674,48 @@ def _jako_ulamek(scalone: Mapping[str, object], pole: str, domyslna: float) -> f
             f"a jest {liczba}."
         )
     return liczba
+
+
+def _jako_ulamek_wlacznie(scalone: Mapping[str, object], pole: str, domyslna: float) -> float:
+    """Zwraca wartość pola jako liczbę z domkniętego przedziału od zera do jednego.
+
+    W odróżnieniu od ``_jako_ulamek`` dopuszcza zero. Zero jest tu sensowne: próg
+    udziału mowy równy zeru oznacza „nigdy nie odrzucaj nagrania jako niemownego”,
+    czyli globalny odpowiednik wymuszenia transkrypcji z wiersza poleceń.
+    """
+    if pole not in scalone:
+        return domyslna
+    surowa = scalone[pole]
+    if isinstance(surowa, bool) or not isinstance(surowa, (int, float, str)):
+        raise BladTrwaly(f"Ustawienie „{pole}” musi być liczbą.")
+    try:
+        liczba = float(str(surowa).strip().replace(",", "."))
+    except ValueError as blad:
+        raise BladTrwaly(f"Ustawienie „{pole}” musi być liczbą, a jest „{surowa}”.") from blad
+    if not 0 <= liczba <= 1:
+        raise BladTrwaly(
+            f"Ustawienie „{pole}” musi mieścić się w przedziale od zera do jednego, "
+            f"a jest {liczba}."
+        )
+    return liczba
+
+
+def _jako_urzadzenie_transkrypcji(scalone: Mapping[str, object], pole: str, domyslna: str) -> str:
+    """Zwraca ustawienie urządzenia transkrypcji, przyjmując wyłącznie procesor.
+
+    Decyzja trzecia etapu dziewiątego: klucz wyboru urządzenia musi istnieć, bo
+    wymaga go sekcja jedenasta a CLAUDE.md, ale ustawienie karty graficznej
+    kończy się jawnym błędem konfiguracji, a nie cichym przełączeniem z powrotem
+    na procesor. Cicha podmiana jest gorsza niż jawna odmowa.
+    """
+    if pole not in scalone:
+        return domyslna
+    napis = str(scalone[pole]).strip().lower()
+    if not napis:
+        return domyslna
+    if napis not in URZADZENIA_PROCESORA:
+        raise BladTrwaly(KOMUNIKAT_URZADZENIE_NIEOBSLUGIWANE.format(wartosc=napis))
+    return "procesor"
 
 
 def _jako_liczba_w_zakresie(

@@ -25,13 +25,16 @@ class FazaPotoku(StrEnum):
     osobna od fazy pobierania stron, bo filmy pobierają się po kolei, a strony
     równolegle. Faza OCR jest zgłaszana wewnątrz ekstrakcji, dla skanu PDF strona
     po stronie, żeby użytkownik nie został przy niemym oknie przez kilkanaście
-    minut rozpoznawania grubego skanu.
+    minut rozpoznawania grubego skanu. Faza transkrypcji jest zgłaszana wewnątrz
+    ekstrakcji nagrania mowy, a jej licznik liczy minuty przetworzonego nagrania,
+    bo transkrypcja godzinnego nagrania trwa około godziny.
     """
 
     POBIERANIE_STRON = "pobieranie_stron"
     POBIERANIE_NAPISOW = "pobieranie_napisow"
     EKSTRAKCJA = "ekstrakcja"
     OCR = "ocr"
+    TRANSKRYPCJA = "transkrypcja"
     DEDUPLIKACJA = "deduplikacja"
     PAKOWANIE = "pakowanie"
     ZAKONCZENIE = "zakonczenie"

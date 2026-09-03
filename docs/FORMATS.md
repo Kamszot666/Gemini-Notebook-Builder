@@ -491,6 +491,14 @@ sekcji „Materiały do sprawdzenia”, zamiast zniknąć po cichu. Struktura do
 obrazu jest zawsze na poziomie niskim, więc dla obrazu nigdy nie powstaje wersja
 Markdown.
 
+Obraz zapisu nutowego, czyli nuty albo tabulatura jako grafika, przechodzi na
+razie tym samym zwykłym OCR tekstowym co każdy inny obraz. Na zapisie nutowym
+daje on wynik bez sensu, więc taki obraz dostaje ocenę OCR „podejrzana” i trafia
+do sekcji „Materiały do sprawdzenia” w raporcie końcowym. Tak ma być do etapu
+dziesiątego, w którym rozpoznawaniem notacji z obrazu zajmie się narzędzie
+Audiveris, produkujące MusicXML. Aplikacja celowo nie próbuje sama wykryć, że
+obraz jest nutami: fałszywa etykieta „to są nuty” byłaby gorsza niż jej brak.
+
 Animowany plik GIF jest przetwarzany z pierwszej klatki, z ostrzeżeniem o tym.
 Formaty HEIC i HEIF wymagają biblioteki opcjonalnej pillow-heif; jej brak
 kończy się błędem `FormatNieobslugiwany` ze wskazówką instalacji, a nie
@@ -625,11 +633,20 @@ Markdown by tu nie obowiązywała. Decyzja jest zapisana w manifeście.
 
 ### Tematyczne pliki PDF z obrazami
 
-Źródła będące obrazami są pakowane osobno. Grupa obrazów — nadana opcją
-`--grupa`, a w jej braku domyślna grupa „Obrazy” — daje jeden tematyczny plik
-PDF. W pliku każdy obraz ma osobną stronę: nagłówek metadanych, osadzony obraz
-oraz opis merytoryczny wraz z tekstem OCR. Do pliku PDF osadzana jest czcionka
-DejaVuSans, więc polskie znaki są czytelne niezależnie od czcionek systemu.
+Źródła będące obrazami są pakowane osobno. Grupa obrazów daje jeden tematyczny
+plik PDF. W pliku każdy obraz ma osobną stronę: nagłówek metadanych, osadzony
+obraz oraz opis merytoryczny wraz z tekstem OCR. Do pliku PDF osadzana jest
+czcionka DejaVuSans, więc polskie znaki są czytelne niezależnie od czcionek
+systemu.
+
+Grupę obrazów wyznacza opcja `--grupa`. Obrazy podane w jednym wywołaniu bez tej
+opcji dostają wspólną grupę nadaną automatycznie, o nazwie „Obrazy 1”, „Obrazy 2”
+i tak dalej, z numerem rosnącym w obrębie projektu. Kolejne wywołanie w tym
+samym projekcie dostaje więc kolejny numer i własny plik PDF, a nie dokłada
+obrazów do pliku poprzedniej partii — zestaw obrazów z jednego wywołania jest
+słabym, ale prawdziwym sygnałem tematycznym, natomiast łączenie obrazów z różnych
+wywołań byłoby łączeniem przypadkowym. Przy wznowieniu przerwanego uruchomienia
+obrazy tej samej partii zachowują swój numer.
 
 Obraz przed osadzeniem jest sprowadzany do RGB, ograniczany w wymiarze do
 `maksymalny_wymiar_grafiki_px` i zapisywany jako JPEG o jakości `jakosc_grafik`,

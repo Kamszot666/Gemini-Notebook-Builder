@@ -204,7 +204,12 @@ tekstu, z ostrzeżeniem.
    300. Wyższa wartość poprawia rozpoznanie i wydłuża pracę.
 5. `ocr_liczba_procesow`, zmienna `GNB_OCR_LICZBA_PROCESOW`. Liczba równoległych
    procesów Tesseracta przy OCR wielu stron skanu. Domyślnie 0, czyli wartość
-   dobrana z liczby rdzeni, nie więcej niż cztery.
+   dobrana z liczby rdzeni pomniejszonej o jeden, nie więcej niż cztery i nie
+   mniej niż jeden. Jeden rdzeń zostaje wolny z powodu dostępnościowego, nie
+   wydajnościowego: przy pełnym obciążeniu wszystkich rdzeni synteza mowy
+   czytnika ekranu się zacina, a użytkownik właśnie wtedy słucha komunikatów
+   o postępie OCR. Wpisanie wartości większej od zera podnosi liczbę procesów
+   ręcznie i znosi ten margines.
 6. `sciezka_tesseract`, zmienna `GNB_SCIEZKA_TESSERACT`. Pełna ścieżka pliku
    wykonywalnego Tesseracta. Domyślnie pusta, co oznacza odnalezienie go w
    zmiennej PATH oraz w znanych miejscach instalacji na Windows.

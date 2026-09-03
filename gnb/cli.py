@@ -23,11 +23,13 @@ import argparse
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
 from gnb.core.konfiguracja import Konfiguracja, wczytaj_konfiguracje
+from gnb.core.postep import FazaPotoku, WywolanieZwrotnePostepu, ZdarzeniePostepu
 from gnb.core.wyjatki import BladGnb
 from gnb.ingestion.lista_url import (
     PodsumowanieListyUrl,
@@ -46,6 +48,33 @@ from gnb.potok import przetworz_projekt
 
 KOD_BRAK_ZRODEL = 2
 KOD_BLAD = 1
+
+# Najkrótszy odstęp między wierszami postępu OCR w wierszu poleceń. Dławienie
+# istnieje z tego samego powodu co w interfejsie WWW: potok zgłasza postęp po
+# każdej stronie skanu, a wypisanie każdej z nich zalałoby wyjście.
+_ODSTEP_POSTEPU_CLI_SEKUNDY = 3.0
+
+
+def _postep_wiersza_polecen() -> WywolanieZwrotnePostepu:
+    """Buduje dławione wypisywanie postępu OCR dla wiersza poleceń.
+
+    Wypisywane są wyłącznie zdarzenia fazy OCR, bo to jedyny etap, który potrafi
+    trwać kilkanaście minut bez żadnego znaku życia. Wiersze są zwykłym tekstem,
+    bez pasków postępu i bez znaków sterujących przerysowujących wiersz, zgodnie
+    z sekcją piątą CLAUDE.md.
+    """
+    stan = {"czas": 0.0}
+
+    def zglos(zdarzenie: ZdarzeniePostepu) -> None:
+        if zdarzenie.faza is not FazaPotoku.OCR:
+            return
+        teraz = time.monotonic()
+        ostatni = zdarzenie.wykonano == zdarzenie.wszystkich
+        if ostatni or teraz - stan["czas"] >= _ODSTEP_POSTEPU_CLI_SEKUNDY:
+            print(zdarzenie.opis)
+            stan["czas"] = teraz
+
+    return zglos
 
 
 @dataclass(frozen=True, slots=True)
@@ -333,6 +362,7 @@ def uruchom_przetwarzanie(
             konfiguracja,
             nazwa_projektu=nazwa_projektu,
             wlasny_katalog_projektu=Path(katalog_projektu) if katalog_projektu else None,
+            postep=_postep_wiersza_polecen(),
         )
     except BladGnb as blad:
         print(f"Przetwarzanie przerwane błędem: {blad.komunikat}")

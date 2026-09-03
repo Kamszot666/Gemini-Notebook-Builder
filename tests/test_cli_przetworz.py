@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from gnb.cli import main
+from gnb.cli import _postep_wiersza_polecen, main
+from gnb.core.postep import FazaPotoku, ZdarzeniePostepu
 
 KATALOG_DANYCH = Path(__file__).resolve().parent / "dane"
 
@@ -153,6 +154,30 @@ def test_polecenie_pamiec_czysci_zawartosc(
 
     assert main(["pamiec", "--wyczysc"]) == 0
     assert "Usunięto wpisów: 0." in capsys.readouterr().out
+
+
+def test_postep_wiersza_polecen_wypisuje_tylko_faze_ocr_i_dlawi(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Wiersze postępu OCR są dławione, a zdarzenia innych faz są pomijane.
+
+    Test czerwieni się, gdyby postęp zaczął wypisywać każdą stronę skanu albo
+    zdarzenia faz, które i tak są szybkie.
+    """
+    zegar = {"teraz": 100.0}
+    monkeypatch.setattr("gnb.cli.time.monotonic", lambda: zegar["teraz"])
+    zglos = _postep_wiersza_polecen()
+
+    zglos(ZdarzeniePostepu(faza=FazaPotoku.EKSTRAKCJA, wykonano=1, wszystkich=3, opis="ekstrakcja"))
+    zglos(ZdarzeniePostepu(faza=FazaPotoku.OCR, wykonano=1, wszystkich=10, opis="skan strona 1"))
+    zglos(ZdarzeniePostepu(faza=FazaPotoku.OCR, wykonano=2, wszystkich=10, opis="skan strona 2"))
+    zegar["teraz"] += 5.0
+    zglos(ZdarzeniePostepu(faza=FazaPotoku.OCR, wykonano=6, wszystkich=10, opis="skan strona 6"))
+    zglos(ZdarzeniePostepu(faza=FazaPotoku.OCR, wykonano=10, wszystkich=10, opis="skan strona 10"))
+
+    wiersze = [w for w in capsys.readouterr().out.splitlines() if w]
+    assert "ekstrakcja" not in wiersze
+    assert wiersze == ["skan strona 1", "skan strona 6", "skan strona 10"]
 
 
 def test_przetworz_z_grupa_laczy_zrodla_w_jeden_plik(

@@ -31,6 +31,23 @@ def test_dwa_zdarzenia_w_tej_samej_sekundzie_daja_jeden_komunikat() -> None:
     assert dlawik.komunikat() == "Przetworzono 1 z 10 źródeł"
 
 
+def test_zdarzenie_fazy_ocr_dociera_do_regionu_postepu() -> None:
+    """Postęp OCR skanu jest zwykłym zdarzeniem: jego opis trafia do regionu status.
+
+    Test czerwieni się, gdyby faza OCR zaczęła być traktowana szczególnie i jej
+    komunikat gdzieś przepadał — użytkownik nie może zostać przy niemym oknie
+    przez kilkanaście minut rozpoznawania skanu.
+    """
+    zegar = _ZegarKrokowy()
+    dlawik = DlawikPostepu(minimalny_odstep_sekund=4.0, zegar=zegar)
+
+    dlawik.przyjmij(
+        _zdarzenie("Rozpoznawanie tekstu ze skanu „skan.pdf”, strona 3 z 40", FazaPotoku.OCR)
+    )
+
+    assert dlawik.komunikat() == "Rozpoznawanie tekstu ze skanu „skan.pdf”, strona 3 z 40"
+
+
 def test_po_uplynieciu_odstepu_pokazywany_jest_najnowszy_opis() -> None:
     zegar = _ZegarKrokowy()
     dlawik = DlawikPostepu(minimalny_odstep_sekund=4.0, zegar=zegar)

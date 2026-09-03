@@ -59,6 +59,13 @@ def test_diagnostyka_wymienia_wszystkie_sprawdzane_narzedzia() -> None:
         assert nazwa in wynik.stdout
 
 
+def test_raport_diagnostyki_wymienia_dane_jezykowe_ocr() -> None:
+    """Raport ma osobny wiersz o zainstalowanych danych językowych Tesseracta."""
+    raport = cli.zbuduj_raport_diagnostyki()
+
+    assert "Dane językowe OCR:" in raport
+
+
 def test_diagnostyka_z_opcja_plik_zapisuje_raport_w_utf8(tmp_path: Path) -> None:
     """Opcja --plik zapisuje raport wprost do pliku UTF-8 ze znacznikiem kolejności bajtów.
 

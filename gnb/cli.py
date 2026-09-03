@@ -186,6 +186,36 @@ def _sprawdz_narzedzie(narzedzie: Narzedzie) -> str:
     )
 
 
+def _wiersz_jezykow_ocr() -> str:
+    """Buduje wiersz raportu o zainstalowanych danych językowych Tesseracta.
+
+    Instalator Tesseracta domyślnie dokłada tylko angielski. Bez pliku
+    ``pol.traineddata`` OCR polskiego tekstu daje wynik systematycznie błędny,
+    więc brak polskiego jest tu wypisany wprost jako ostrzeżenie.
+    """
+    from gnb.core.konfiguracja import wczytaj_konfiguracje
+    from gnb.core.wyjatki import BladGnb
+    from gnb.images.tesseract import czy_dostepny, dostepne_jezyki
+
+    try:
+        sciezka = wczytaj_konfiguracje().sciezka_tesseract
+    except BladGnb:
+        sciezka = ""
+    if not czy_dostepny(sciezka):
+        return "Dane językowe OCR: nie sprawdzono, bo nie znaleziono Tesseracta."
+
+    jezyki = dostepne_jezyki(sciezka)
+    if not jezyki:
+        return "Dane językowe OCR: Tesseract nie zwrócił listy języków."
+    wykaz = ", ".join(jezyki)
+    if "pol" not in jezyki:
+        return (
+            f"Dane językowe OCR: {wykaz}. UWAGA: brak języka „pol”. OCR polskiego "
+            "tekstu będzie systematycznie błędny — dograj plik pol.traineddata."
+        )
+    return f"Dane językowe OCR: {wykaz}. Polski („pol”) jest zainstalowany."
+
+
 def zbuduj_raport_diagnostyki() -> str:
     """Buduje pełną treść raportu diagnostyki jako jeden tekst z końcami wierszy LF."""
 
@@ -194,6 +224,7 @@ def zbuduj_raport_diagnostyki() -> str:
         "",
     ]
     wiersze.extend(_sprawdz_narzedzie(narzedzie) for narzedzie in NARZEDZIA)
+    wiersze.append(_wiersz_jezykow_ocr())
     wiersze.append("")
     wiersze.append(
         "Koniec raportu. Brak narzędzia opcjonalnego nie zatrzymuje działania aplikacji."

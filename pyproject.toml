@@ -49,6 +49,10 @@ gnb = "gnb.cli:main"
 [tool.setuptools.packages.find]
 include = ["gnb*"]
 
+[tool.setuptools.package-data]
+# Czcionka TrueType osadzana w generowanych plikach PDF wraz z jej licencją.
+"gnb.images" = ["czcionki/*.ttf", "czcionki/*.txt"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

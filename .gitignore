@@ -31,6 +31,7 @@ Gemini Notebook Builder/
 INSTRUKCJA_SYSTEMOWA_PROJEKTU.md
 STAN_PROJEKTU.md
 PRZEKAZANIE.md
+Claude outputs/
 
 # Lokalna konfiguracja i sekrety. Repozytorium jest publiczne, więc te pliki
 # nie mogą się w nim znaleźć w żadnej postaci.
@@ -52,8 +53,11 @@ log_szczegolowy.txt
 log_wazne.txt
 
 # Raport diagnostyki zapisany do katalogu repozytorium podczas sprawdzania
-# środowiska. Jest to wynik lokalnego uruchomienia, a nie część kodu.
+# środowiska. Jest to wynik lokalnego uruchomienia, a nie część kodu. Druga
+# nazwa pochodzi z prompta startowego etapu dziesiątego, który każe zapisać
+# świeży raport obok poprzedniego.
 /diagnostyka.txt
+/diagnostyka_nowy.txt
 
 # Pliki systemowe Windows i macOS.
 Thumbs.db

@@ -45,11 +45,23 @@ obrazy-heic = [
 audio = [
     "faster-whisper>=1.2.1",
 ]
+# Odczyt materiałów nutowych w formatach natywnych. Biblioteka mido czyta pliki
+# MIDI (licencja MIT, czysty Python), a PyGuitarPro pliki Guitar Pro w wersjach
+# gp3, gp4 i gp5. MusicXML jest czytany biblioteką standardową, więc nie ma tu
+# swojej zależności. Brak tej grupy wyłącza wyłącznie odczyt MIDI i Guitar Pro,
+# a nie całą aplikację. PyGuitarPro jest na licencji LGPL w wersji trzeciej,
+# dlatego jest zależnością opcjonalną, a nie podstawową, patrz docs/INSTALL.md.
+nuty = [
+    "mido>=1.3",
+    "PyGuitarPro>=0.11",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.6",
     "lxml-stubs>=0.5",
     "faster-whisper>=1.2.1",
+    "mido>=1.3",
+    "PyGuitarPro>=0.11",
     # Przypięte na mypy 1.13.0: nowsze wersje wymagają pakietu librt z natywnym
     # DLL, które zasady kontroli aplikacji Windows blokują na komputerze
     # deweloperskim. Odpiąć, gdy problem zniknie albo znajdzie się inne obejście.
@@ -78,10 +90,11 @@ python_version = "3.12"
 packages = ["gnb"]
 strict = true
 
-# Biblioteki yt-dlp, ebooklib, pypdfium2, reportlab oraz pillow-heif nie
-# dostarczają informacji o typach ani znacznika py.typed. Nasz kod opakowuje je
-# wąskim adapterem z własnymi typami, więc brak ich typów nie rozlewa się na
-# resztę pakietu.
+# Biblioteki yt-dlp, ebooklib, pypdfium2, reportlab, pillow-heif, faster-whisper,
+# mido oraz guitarpro nie dostarczają informacji o typach ani znacznika py.typed.
+# Brak znacznika w mido i guitarpro sprawdzono przez odczyt katalogu pakietu, nie
+# zgadnięto. Nasz kod opakowuje te biblioteki wąskim adapterem z własnymi typami,
+# więc brak ich typów nie rozlewa się na resztę pakietu.
 [[tool.mypy.overrides]]
 module = [
     "yt_dlp.*",
@@ -90,6 +103,8 @@ module = [
     "reportlab.*",
     "pillow_heif.*",
     "faster_whisper.*",
+    "mido.*",
+    "guitarpro.*",
 ]
 ignore_missing_imports = true
 

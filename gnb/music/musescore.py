@@ -24,12 +24,16 @@ NAZWY_PLIKU_WYKONYWALNEGO = ("mscore", "MuseScore4.exe", "MuseScore3.exe")
 
 # Znane miejsca instalacji MuseScore na Windows. Instalator nie dopisuje programu
 # do zmiennej PATH, więc `shutil.which` sam go nie znajdzie, mimo że narzędzie
-# jest zainstalowane.
+# jest zainstalowane. Podkatalog zapisujemy z ukośnikiem zwykłym, a nie
+# wstecznym: `pathlib.Path` rozumie ukośnik zwykły jako separator na każdym
+# systemie, a ukośnik wsteczny tylko na Windows — na Linuksie cały napis stałby
+# się jedną nazwą i katalog `bin` nie zostałby odwiedzony. Ta sama konwencja co
+# w `gnb/images/tesseract.py`.
 _ZNANE_PODKATALOGI_WINDOWS = (
-    ("PROGRAMFILES", r"MuseScore 4\bin\MuseScore4.exe"),
-    ("PROGRAMFILES(X86)", r"MuseScore 4\bin\MuseScore4.exe"),
-    ("PROGRAMFILES", r"MuseScore 3\bin\MuseScore3.exe"),
-    ("PROGRAMFILES(X86)", r"MuseScore 3\bin\MuseScore3.exe"),
+    ("PROGRAMFILES", "MuseScore 4/bin/MuseScore4.exe"),
+    ("PROGRAMFILES(X86)", "MuseScore 4/bin/MuseScore4.exe"),
+    ("PROGRAMFILES", "MuseScore 3/bin/MuseScore3.exe"),
+    ("PROGRAMFILES(X86)", "MuseScore 3/bin/MuseScore3.exe"),
 )
 _DOMYSLNE_SCIEZKI_WINDOWS = (
     Path(r"C:\Program Files\MuseScore 4\bin\MuseScore4.exe"),

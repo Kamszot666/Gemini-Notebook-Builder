@@ -130,6 +130,34 @@ def wymaga_ffmpeg() -> None:
         pytest.skip("FFmpeg nie jest zainstalowany w tym środowisku.")
 
 
+@pytest.fixture
+def wymaga_mido() -> None:
+    """Pomija test, gdy biblioteki mido do odczytu MIDI nie da się zaimportować.
+
+    Grupa zależności „dev” instaluje mido, więc w środowisku deweloperskim ten
+    strażnik nigdy nie zadziała. Służy instalacji bez grupy „dev”, na przykład
+    z samą grupą podstawową. Ścieżkę braku biblioteki chroni osobny test
+    w tests/music/test_midi.py, który podstawia import zgłaszający błąd.
+    """
+    from gnb.music.midi import czy_dostepna_biblioteka
+
+    if not czy_dostepna_biblioteka():
+        pytest.skip("Biblioteka mido nie jest zainstalowana (pip install gnb[nuty]).")
+
+
+@pytest.fixture
+def wymaga_pyguitarpro() -> None:
+    """Pomija test, gdy biblioteki PyGuitarPro nie da się zaimportować.
+
+    Uwaga jak przy `wymaga_mido`: grupa „dev” ją instaluje, więc ścieżkę braku
+    biblioteki chroni osobny test w tests/music/test_guitarpro.py.
+    """
+    from gnb.music.guitarpro import czy_dostepna_biblioteka
+
+    if not czy_dostepna_biblioteka():
+        pytest.skip("Biblioteka PyGuitarPro nie jest zainstalowana (pip install gnb[nuty]).")
+
+
 def _obraz_z_tekstem(
     wiersze: list[str],
     *,

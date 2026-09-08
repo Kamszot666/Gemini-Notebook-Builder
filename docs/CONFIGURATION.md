@@ -1,4 +1,4 @@
-# Konfiguracja — stan po etapie dziewiątym
+# Konfiguracja — stan po etapie dziesiątym, część A
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
 obsługuje po etapie dziewiątym. Pełna lista pól z sekcji jedenastej a pliku
@@ -217,6 +217,20 @@ tekstu, z ostrzeżeniem.
    Tesseracta. Domyślnie pusty, co oznacza katalog wskazany przez samo narzędzie.
    Wskazanie nieistniejącego katalogu jest błędem konfiguracji.
 
+## Pola materiałów nutowych
+
+Odczyt formatów natywnych, czyli MIDI, MusicXML, MXL i Guitar Pro, nie ma
+żadnych pól konfiguracji — działa po zainstalowaniu grupy zależności `nuty`.
+
+1. `sciezka_musescore`, zmienna `GNB_SCIEZKA_MUSESCORE`. Pełna ścieżka pliku
+   wykonywalnego MuseScore. Domyślnie pusta, co oznacza odnalezienie go
+   w zmiennej PATH oraz w znanych miejscach instalacji na Windows. MuseScore
+   jest wyłącznie wykrywany przez polecenie `diagnostyka` i nie jest przez
+   aplikację uruchamiany, więc wskazanie tej ścieżki wpływa tylko na treść
+   raportu diagnostyki. Wskazanie nieistniejącego pliku jest błędem
+   konfiguracji. Powód, dla którego MuseScore nie jest uruchamiany, opisuje
+   sekcja 18d pliku `CLAUDE.md`.
+
 ## Pola transkrypcji nagrań mowy
 
 Transkrypcję wykonuje biblioteka faster-whisper na modelu Whisper. Rozkodowanie
@@ -386,6 +400,8 @@ ocr_rozdzielczosc_pdf_dpi = 300
 ocr_liczba_procesow = 0
 sciezka_tesseract = ""
 sciezka_tessdata = ""
+
+sciezka_musescore = ""
 
 transkrypcja_wlaczona = true
 transkrypcja_model = "medium"

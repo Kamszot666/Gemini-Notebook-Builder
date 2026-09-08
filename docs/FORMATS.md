@@ -1,8 +1,9 @@
-# Obsługiwane formaty — stan po etapie dziewiątym
+# Obsługiwane formaty — stan po etapie dziesiątym, część A
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
-Kolejne formaty, czyli ODT, PPTX oraz materiały nutowe, dojdą w etapach
-opisanych w sekcji osiemnastej pliku `CLAUDE.md`.
+Kolejne formaty, czyli ODT i PPTX oraz rozpoznawanie zapisu nutowego z obrazu
+i pliku PDF przez program Audiveris, dojdą w etapach opisanych w sekcji
+osiemnastej pliku `CLAUDE.md`.
 
 ## Wejście
 
@@ -19,8 +20,16 @@ Obsługiwane są następujące rodzaje wejścia:
 5. Nagranie audio: MP3, WAV, M4A, FLAC, OGG, OPUS albo AAC. Obsługiwane są
    wyłącznie nagrania mowy — obsługę opisuje sekcja „Nagrania audio
    i transkrypcja mowy”.
-6. Adres strony internetowej, podany pojedynczo albo listą.
-7. Adres filmu z serwisu YouTube, dla którego pobierane są napisy.
+6. Materiał nutowy w formacie natywnym: MIDI (`mid`, `midi`), MusicXML
+   (`musicxml`), skompresowany kontener MusicXML (`mxl`) albo Guitar Pro
+   w wersjach `gp3`, `gp4` i `gp5`. Obsługę opisuje sekcja „Materiały nutowe”.
+7. Adres strony internetowej, podany pojedynczo albo listą.
+8. Adres filmu z serwisu YouTube, dla którego pobierane są napisy.
+
+Opcja `--nuty` polecenia `przetworz` kieruje pliki PDF i obrazy danego wywołania
+do ścieżki materiałów nutowych. Do czasu wdrożenia programu Audiveris w drugiej
+części etapu dziesiątego takie pliki kończą się kontrolowanym pominięciem
+z czytelnym komunikatem.
 
 Plik w innym formacie kończy się kontrolowanym błędem `FormatNieobslugiwany`.
 Nie zatrzymuje to przetwarzania pozostałych źródeł.
@@ -494,13 +503,16 @@ sekcji „Materiały do sprawdzenia”, zamiast zniknąć po cichu. Struktura do
 obrazu jest zawsze na poziomie niskim, więc dla obrazu nigdy nie powstaje wersja
 Markdown.
 
-Obraz zapisu nutowego, czyli nuty albo tabulatura jako grafika, przechodzi na
-razie tym samym zwykłym OCR tekstowym co każdy inny obraz. Na zapisie nutowym
-daje on wynik bez sensu, więc taki obraz dostaje ocenę OCR „podejrzana” i trafia
-do sekcji „Materiały do sprawdzenia” w raporcie końcowym. Tak ma być do etapu
-dziesiątego, w którym rozpoznawaniem notacji z obrazu zajmie się narzędzie
-Audiveris, produkujące MusicXML. Aplikacja celowo nie próbuje sama wykryć, że
-obraz jest nutami: fałszywa etykieta „to są nuty” byłaby gorsza niż jej brak.
+Obraz zapisu nutowego, czyli nuty albo tabulatura jako grafika, bez opcji
+`--nuty` przechodzi tym samym zwykłym OCR tekstowym co każdy inny obraz. Na
+zapisie nutowym daje on wynik bez sensu, więc taki obraz dostaje ocenę OCR
+„podejrzana” i trafia do sekcji „Materiały do sprawdzenia”. Z opcją `--nuty`
+plik PDF albo obraz jest kierowany do ścieżki materiałów nutowych, gdzie
+w części A etapu dziesiątego kończy się kontrolowanym pominięciem z komunikatem
+o programie Audiveris. Samo rozpoznawanie notacji z obrazu, przez Audiveris
+produkujące MusicXML, dochodzi w drugiej części etapu dziesiątego. Aplikacja
+celowo nie próbuje sama wykryć, że obraz jest nutami: fałszywa etykieta „to są
+nuty” byłaby gorsza niż jej brak.
 
 Animowany plik GIF jest przetwarzany z pierwszej klatki, z ostrzeżeniem o tym.
 Formaty HEIC i HEIF wymagają biblioteki opcjonalnej pillow-heif; jej brak
@@ -580,6 +592,43 @@ w formacie nieskompresowanym może ten limit przekroczyć — wtedy dostaje stat
 
 Transkrypcja działa wyłącznie na procesorze. Ustawienie karty graficznej kończy
 się jawnym błędem konfiguracji; powód opisuje `docs/CONFIGURATION.md`.
+
+## Materiały nutowe
+
+Materiały muzyczne zapisane jako notacja są w zakresie projektu; nagrania
+muzyczne w postaci dźwiękowej nie. W części A etapu dziesiątego aplikacja czyta
+trzy formaty natywne: MIDI biblioteką `mido`, MusicXML (również skompresowany
+kontener MXL) biblioteką standardową, Guitar Pro w wersjach gp3, gp4 i gp5
+biblioteką `PyGuitarPro`. Nowsze formaty Guitar Pro, czyli `gp` i `gpx`, kończą
+się błędem `FormatNieobslugiwany` z komunikatem wskazującym obsługiwane wersje;
+aplikacja nie próbuje zgadywać ich zawartości.
+
+Z każdego materiału powstaje opis tekstowy, czytelny liniowo, bez znaczników
+Markdown, który jako plik TXT trafia do notatnika. Opis zawiera, o ile da się to
+odczytać: tytuł, tonację, metrum, tempo, liczbę taktów, instrumenty i strukturę
+części. Pola nieznane są pomijane, a nie zapisywane wartością zastępczą. Struktura
+takiego opisu jest zawsze na poziomie niskim, więc dla materiału nutowego nigdy
+nie powstaje wersja Markdown.
+
+Liczba taktów z MusicXML i Guitar Pro jest dokładna, bo pochodzi wprost ze
+znaczników taktów. Liczba taktów z MIDI jest zawsze przybliżona i tak oznaczona
+w opisie i w manifeście, bo format MIDI nie zapisuje podziału na takty —
+wyliczamy ją z długości nagrania w czasie. Gdy plik zmienia metrum, tempo albo
+tonację, opis podaje wartość początkową i niesie ostrzeżenie, które trafia do
+manifestu oraz do sekcji „Materiały do sprawdzenia” raportu.
+
+Oryginał materiału jest zachowywany w podkatalogu materiałów źródłowych projektu.
+Dla MusicXML, Guitar Pro i skanu jest to oryginał wizualny; dla MIDI, który
+postaci wizualnej nie ma, zachowywany jest sam plik źródłowy.
+
+Aplikacja nie konwertuje materiałów nutowych do PDF i nie renderuje podglądu
+partytury. Program MuseScore jest wykrywany przez diagnostykę środowiska, ale
+nie jest uruchamiany. Powód i warunki rewizji tej decyzji opisuje sekcja 18d
+pliku `CLAUDE.md`.
+
+Materiały nutowe nie podlegają grupowaniu tematycznemu: każdy dostaje osobny
+plik wynikowy TXT, także wtedy, gdy podano opcję `--grupa`. Zignorowanie tej
+opcji dla plików nutowych jest odnotowywane jednym zdaniem w raporcie końcowym.
 
 ## Czym różni się wersja TXT od wersji MD
 

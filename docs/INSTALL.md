@@ -1,4 +1,4 @@
-# Instalacja — stan po etapie dziewiątym
+# Instalacja — stan po etapie dziesiątym, część A
 
 Ten dokument opisuje przygotowanie środowiska do pracy z aplikacją: Pythona,
 środowiska wirtualnego, zależności oraz narzędzi zewnętrznych. Narzędzia
@@ -86,6 +86,23 @@ pip install -e ".[audio]"
 
 Bez tej biblioteki wszystkie pozostałe formaty działają normalnie, a nagranie
 audio dostaje status błędu z czytelnym komunikatem.
+
+Odczyt materiałów nutowych w formatach natywnych, czyli MIDI i Guitar Pro,
+wymaga bibliotek `mido` i `PyGuitarPro`, zebranych w grupie opcjonalnej `nuty`.
+Grupa `dev` już je zawiera. Do samego uruchamiania aplikacji doinstaluj je tak:
+
+```powershell
+pip install -e ".[nuty]"
+```
+
+Biblioteka `mido` jest na licencji MIT, ale `PyGuitarPro` jest na licencji LGPL
+w wersji trzeciej, podczas gdy sam projekt jest na Apache 2.0. Dlatego odczyt
+Guitar Pro jest zależnością opcjonalną, a nie podstawową: domyślna instalacja
+`gnb` zostaje wyłącznie na licencjach permisywnych, a użytkownik dobiera grupę
+`nuty` świadomie. Plik `tests/dane/LICENCJA_PyGuitarPro.txt` dotyczy pochodzenia
+plików testowych, a nie samej biblioteki. Bez grupy `nuty` pliki MIDI i Guitar
+Pro dostają status błędu z czytelnym komunikatem, a MusicXML działa zawsze, bo
+jest czytany biblioteką standardową.
 
 ## 5. Sprawdzenie środowiska
 
@@ -178,11 +195,23 @@ się jawnym błędem konfiguracji — powód opisuje `CONFIGURATION.md`.
 
 ### Etap dziesiąty: MuseScore, Java, Audiveris — materiały nutowe
 
-MuseScore konwertuje pliki MIDI i MusicXML, Java uruchamia Audiveris, które
-rozpoznaje zapis nutowy z obrazów. Na Windows plik wykonywalny MuseScore nie
-nazywa się `mscore`, tylko `MuseScore4.exe`, i leży w podkatalogu `bin`
-katalogu instalacyjnego — polecenie `diagnostyka` sprawdza obie konwencje nazw.
-Etap dziesiąty nie jest jeszcze zrealizowany.
+Część A etapu dziesiątego jest zrealizowana: odczyt MIDI, MusicXML, MXL
+i Guitar Pro gp3, gp4 i gp5 działa i wymaga wyłącznie bibliotek z grupy `nuty`,
+opisanej w sekcji czwartej. Żadne z narzędzi zewnętrznych nie jest do tego
+potrzebne.
+
+MuseScore jest wykrywany przez polecenie `diagnostyka`, ale aplikacja go nie
+uruchamia — nie renderuje podglądu partytury. Na Windows plik wykonywalny nie
+nazywa się `mscore`, tylko `MuseScore4.exe` albo `MuseScore3.exe`, i leży
+w podkatalogu `bin` katalogu instalacyjnego; diagnostyka sprawdza obie
+konwencje nazw oraz znane katalogi instalacyjne. Ścieżkę można wskazać kluczem
+konfiguracji `sciezka_musescore`. Powód, dla którego MuseScore nie jest
+uruchamiany, opisuje sekcja 18d pliku `CLAUDE.md`.
+
+Java i Audiveris będą potrzebne dopiero w części B etapu dziesiątego, do
+rozpoznawania zapisu nutowego z obrazu i pliku PDF. Ta część nie jest jeszcze
+zrealizowana; do tego czasu pliki PDF i obrazy oznaczone opcją `--nuty` są
+pomijane z czytelnym komunikatem.
 
 ### LibreOffice — pliki ODT
 

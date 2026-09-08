@@ -30,6 +30,8 @@ ozdobników, a polecenia do wpisania są w osobnych blokach.
 18. Nagranie muzyczne trafiło do transkrypcji albo mowa została odrzucona jako
     materiał niemowny.
 19. W logu szczegółowym jest wpis o wstawieniu atrapy modułu „av”.
+20. Plik MIDI albo Guitar Pro dostał status błędu: brak biblioteki z grupy `nuty`.
+21. Raport diagnostyki pokazuje „MuseScore: BRAK”, choć MuseScore jest zainstalowany.
 
 ## 1. Windows blokuje plik wykonywalny narzędzia deweloperskiego
 
@@ -428,3 +430,43 @@ w ogóle potrzebny.
 Co zrobić. Nic. To jest informacja, a nie błąd — transkrypcja działa normalnie.
 Wpis istnieje po to, żeby dało się prześledzić, dlaczego na tym komputerze
 biblioteka jest ładowana inną drogą niż na maszynie bez tej blokady.
+
+## 20. Plik MIDI albo Guitar Pro dostał status błędu: brak biblioteki z grupy `nuty`
+
+Objaw. Plik `mid`, `midi`, `gp3`, `gp4` albo `gp5` dostał status „blad”
+z komunikatem, że nie znaleziono biblioteki `mido` albo `PyGuitarPro`.
+
+Przyczyna. Odczyt formatów natywnych MIDI i Guitar Pro wymaga bibliotek z grupy
+zależności opcjonalnej `nuty`. Domyślna instalacja `gnb` ich nie zawiera, bo
+`PyGuitarPro` jest na licencji LGPL w wersji trzeciej, a projekt trzyma domyślną
+instalację na licencjach permisywnych. MusicXML tej biblioteki nie potrzebuje,
+bo jest czytany biblioteką standardową.
+
+Co zrobić. Doinstaluj grupę:
+
+```powershell
+pip install -e ".[nuty]"
+```
+
+Grupa `dev` już te biblioteki zawiera, więc w środowisku deweloperskim ten
+problem nie występuje.
+
+## 21. Raport diagnostyki pokazuje „MuseScore: BRAK”, choć MuseScore jest zainstalowany
+
+Objaw. Polecenie `python -m gnb.cli diagnostyka` w wierszu o MuseScore pokazuje
+„BRAK”, mimo że program MuseScore 4 jest zainstalowany.
+
+Przyczyna. Instalator MuseScore nie dopisuje programu do zmiennej PATH.
+Diagnostyka przeszukuje PATH oraz znane katalogi instalacyjne na Windows, ale
+niestandardowa lokalizacja instalacji może pozostać nieodnaleziona.
+
+Co zrobić. Wskaż ścieżkę pliku wykonywalnego wprost, zmienną środowiskową albo
+kluczem `sciezka_musescore` w pliku konfiguracji:
+
+```powershell
+$env:GNB_SCIEZKA_MUSESCORE = "C:/Program Files/MuseScore 4/bin/MuseScore4.exe"
+```
+
+To wpływa wyłącznie na treść raportu diagnostyki. Aplikacja nie uruchamia
+MuseScore i nie renderuje podglądu partytury — opis tekstowy materiałów nutowych
+powstaje bez tego programu. Powód opisuje sekcja 18d pliku `CLAUDE.md`.

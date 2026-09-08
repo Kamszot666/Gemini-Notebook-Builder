@@ -53,7 +53,7 @@ Sprawdz-Narzedzie -Nazwa "Tesseract" -Polecenie "tesseract" -Argument "--version
 Sprawdz-Narzedzie -Nazwa "LibreOffice" -Polecenie "soffice" -Argument "--version" -DoCzegoSluzy "konwersja plikow ODT oraz czesc obslugi PPTX"
 Sprawdz-Narzedzie -Nazwa "Audiveris" -Polecenie "audiveris" -Argument "-version" -DoCzegoSluzy "rozpoznawanie zapisu nutowego z obrazow i PDF"
 Sprawdz-Narzedzie -Nazwa "Java" -Polecenie "java" -Argument "-version" -DoCzegoSluzy "uruchamianie Audiveris, czyli rozpoznawanie nut ze skanow i zdjec"
-Sprawdz-Narzedzie -Nazwa "MuseScore 4" -Polecenie "MuseScore4.exe" -Argument "--version" -DoCzegoSluzy "konwersja plikow MIDI i MusicXML na PDF oraz odczyt tonacji i metrum"
+Sprawdz-Narzedzie -Nazwa "MuseScore 4" -Polecenie "MuseScore4.exe" -Argument "--version" -DoCzegoSluzy "wykrywany na potrzeby przyszlego renderowania podgladu partytury; aplikacja go nie uruchamia"
 Sprawdz-Narzedzie -Nazwa "MuseScore 3" -Polecenie "MuseScore3.exe" -Argument "--version" -DoCzegoSluzy "starsza wersja MuseScore, alternatywa dla wersji czwartej"
 
 Write-Output ""

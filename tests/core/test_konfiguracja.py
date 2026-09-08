@@ -169,6 +169,7 @@ def test_ustawienia_ocr_maja_wartosci_domyslne(tmp_path: Path) -> None:
     assert konfiguracja.ocr_liczba_procesow == 0
     assert konfiguracja.sciezka_tesseract == ""
     assert konfiguracja.sciezka_tessdata == ""
+    assert konfiguracja.sciezka_musescore == ""
     assert konfiguracja.jakosc_grafik == 85
     assert konfiguracja.maksymalny_wymiar_grafiki_px == 2600
     assert konfiguracja.maksymalny_rozmiar_pdf_mb == 190
@@ -206,6 +207,28 @@ def test_sciezka_tessdata_musi_wskazywac_istniejacy_katalog(tmp_path: Path) -> N
         tmp_path / "nie_ma.toml", srodowisko={"GNB_SCIEZKA_TESSDATA": str(istniejacy)}
     )
     assert konfiguracja.sciezka_tessdata == str(istniejacy)
+
+
+def test_sciezka_musescore_z_pliku_i_zmiennej_srodowiskowej(tmp_path: Path) -> None:
+    plik_exe = tmp_path / "MuseScore4.exe"
+    plik_exe.write_bytes(b"")
+
+    plik_toml = tmp_path / "konfiguracja.toml"
+    plik_toml.write_text(f'sciezka_musescore = "{plik_exe.as_posix()}"\n', encoding="utf-8")
+    assert wczytaj_konfiguracje(plik_toml, {}).sciezka_musescore == plik_exe.as_posix()
+
+    z_srodowiska = wczytaj_konfiguracje(
+        tmp_path / "nie_ma.toml", srodowisko={"GNB_SCIEZKA_MUSESCORE": str(plik_exe)}
+    )
+    assert z_srodowiska.sciezka_musescore == str(plik_exe)
+
+
+def test_sciezka_musescore_do_nieistniejacego_pliku_konczy_sie_bledem(tmp_path: Path) -> None:
+    with pytest.raises(BladTrwaly, match="plik, którego nie ma"):
+        wczytaj_konfiguracje(
+            tmp_path / "nie_ma.toml",
+            srodowisko={"GNB_SCIEZKA_MUSESCORE": str(tmp_path / "brak.exe")},
+        )
 
 
 def test_domyslne_ustawienia_transkrypcji(tmp_path: Path) -> None:

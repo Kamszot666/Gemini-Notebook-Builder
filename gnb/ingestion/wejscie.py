@@ -5,7 +5,9 @@ lokalny, adres strony internetowej oraz adres filmu z serwisu YouTube. Plik
 lokalny dostaje jeden z typów źródła w zależności od formatu: TXT i MD
 są plikami tekstowymi; HTML, CSV, SRT, VTT, PDF, DOCX i EPUB dokumentami;
 JPG, PNG, WebP, TIFF, BMP, GIF oraz HEIC i HEIF obrazami; MP3, WAV, M4A, FLAC,
-OGG, OPUS i AAC nagraniami audio. Rozróżnienie decyduje później o wyborze
+OGG, OPUS i AAC nagraniami audio; MIDI, MusicXML, MXL oraz Guitar Pro gp3, gp4
+i gp5 materiałami nutowymi. Plik PDF albo obraz oznaczony opcją `--nuty` również
+dostaje typ materiału nutowego. Rozróżnienie decyduje później o wyborze
 ekstraktora oraz o tym, czy plik jest oceniany pod względem jakości ekstrakcji,
 zgodnie z `gnb.potok`.
 
@@ -68,6 +70,14 @@ FORMATY_PLIKOW_OBRAZOW = frozenset(
 # rozpoznawane i pomijane, nigdy transkrybowane.
 FORMATY_PLIKOW_AUDIO = frozenset({"mp3", "wav", "m4a", "flac", "ogg", "opus", "aac"})
 
+# Formaty materiałów nutowych czytanych natywnie w etapie dziesiątym, część A:
+# MIDI, MusicXML wraz ze skompresowanym kontenerem MXL oraz Guitar Pro
+# w wersjach gp3, gp4 i gp5. Plik o tym rozszerzeniu zawsze dostaje typ źródła
+# PLIK_NUTY. Nowsze formaty Guitar Pro, czyli gp i gpx, są odrzucane z osobnym
+# czytelnym komunikatem, bo biblioteka odczytu ich nie obsługuje.
+FORMATY_PLIKOW_NUTY = frozenset({"mid", "midi", "musicxml", "mxl", "gp3", "gp4", "gp5"})
+FORMATY_NUTY_GUITAR_PRO_NIEOBSLUGIWANE = frozenset({"gp", "gpx"})
+
 # Formaty binarne wśród plików. Nie da się ich rozkodować jako tekst, bo to
 # kontenery ze swoją wewnętrzną strukturą albo dane obrazu lub dźwięku, a próba
 # dekodowania przez wykrywanie kodowania znakowego dałaby bezużyteczny wynik.
@@ -75,7 +85,10 @@ FORMATY_PLIKOW_AUDIO = frozenset({"mp3", "wav", "m4a", "flac", "ogg", "opus", "a
 # audio. Rozmiar pliku binarnego jest ograniczony bezpiecznym limitem megabajtów,
 # bo taki plik trzeba wczytać do pamięci w całości.
 FORMATY_PLIKOW_BINARNYCH = (
-    frozenset({"pdf", "docx", "epub"}) | FORMATY_PLIKOW_OBRAZOW | FORMATY_PLIKOW_AUDIO
+    frozenset({"pdf", "docx", "epub"})
+    | FORMATY_PLIKOW_OBRAZOW
+    | FORMATY_PLIKOW_AUDIO
+    | FORMATY_PLIKOW_NUTY
 )
 
 FORMATY_PLIKOW = (
@@ -83,6 +96,7 @@ FORMATY_PLIKOW = (
     | FORMATY_PLIKOW_DOKUMENTOW
     | FORMATY_PLIKOW_OBRAZOW
     | FORMATY_PLIKOW_AUDIO
+    | FORMATY_PLIKOW_NUTY
 )
 FORMATY_TEKSTU_WKLEJONEGO = frozenset({"txt", "md"})
 FORMAT_STRONY_WWW = "html"
@@ -112,6 +126,11 @@ class PozycjaWejsciowa:
     z tą samą nazwą grupy są w etapie szóstym łączone w jeden plik wynikowy, żeby
     oszczędzać sloty notatnika. Wartość pusta oznacza, że źródło ma trafić do
     osobnego pliku.
+
+    Pole `wymus_nuty` odpowiada opcji `--nuty` wiersza poleceń. Ustawione na
+    prawdę sprawia, że plik PDF albo obraz jest traktowany jako materiał nutowy,
+    czyli dostaje typ źródła PLIK_NUTY. Formaty jednoznacznie nutowe dostają ten
+    typ niezależnie od tej flagi.
     """
 
     wejscie: WejscieSurowe
@@ -119,6 +138,7 @@ class PozycjaWejsciowa:
     adres_kanoniczny: str | None = None
     wskazane_jawnie: bool = True
     grupa: str | None = None
+    wymus_nuty: bool = False
 
 
 def przyjmij_tekst(
@@ -221,11 +241,17 @@ def identyfikator_adresu(typ_zrodla: TypZrodla, adres_kanoniczny_zrodla: str) ->
 
 
 def przyjmij_plik(
-    sciezka: Path, moment_dodania: datetime, *, grupa: str | None = None
+    sciezka: Path,
+    moment_dodania: datetime,
+    *,
+    grupa: str | None = None,
+    nuty: bool = False,
 ) -> PozycjaWejsciowa:
     """Tworzy pozycję wejściową ze ścieżki pliku lokalnego.
 
-    Argument `grupa` przypisuje źródło do grupy tematycznej pakowania.
+    Argument `grupa` przypisuje źródło do grupy tematycznej pakowania. Argument
+    `nuty` odpowiada opcji `--nuty`: przy wartości prawda plik PDF albo obraz
+    jest traktowany jako materiał nutowy.
     """
     format_zrodla = sciezka.suffix.lstrip(".").lower()
     wejscie = WejscieSurowe(
@@ -235,7 +261,10 @@ def przyjmij_plik(
         moment_dodania=moment_dodania,
     )
     return PozycjaWejsciowa(
-        wejscie=wejscie, format_zrodla=format_zrodla, grupa=_grupa_znormalizowana(grupa)
+        wejscie=wejscie,
+        format_zrodla=format_zrodla,
+        grupa=_grupa_znormalizowana(grupa),
+        wymus_nuty=nuty,
     )
 
 
@@ -303,16 +332,23 @@ def _zrodlo_z_pliku(
         raise BladTrwaly(f"Plik nie istnieje: {sciezka}.")
     if not sciezka.is_file():
         raise BladTrwaly(f"Ścieżka nie wskazuje zwykłego pliku: {sciezka}.")
+    if pozycja.format_zrodla in FORMATY_NUTY_GUITAR_PRO_NIEOBSLUGIWANE:
+        raise FormatNieobslugiwany(
+            f"Format Guitar Pro „{pozycja.format_zrodla}” (wersja szósta albo siódma programu) "
+            "nie jest obsługiwany. Biblioteka odczytu obsługuje wyłącznie wersje gp3, gp4 i gp5. "
+            "Zapisz materiał w starszej wersji formatu albo wyeksportuj go do MusicXML."
+        )
     if pozycja.format_zrodla not in FORMATY_PLIKOW:
         raise FormatNieobslugiwany(
             f"Nieobsługiwany format pliku: „{pozycja.format_zrodla or 'brak rozszerzenia'}”. "
             "Obsługiwane są: txt, md, html, htm, xhtml, csv, srt, vtt, pdf, docx, epub, "
             "jpg, jpeg, png, webp, tif, tiff, bmp, gif, heic, heif, "
-            "mp3, wav, m4a, flac, ogg, opus, aac."
+            "mp3, wav, m4a, flac, ogg, opus, aac, "
+            "mid, midi, musicxml, mxl, gp3, gp4, gp5."
         )
     _sprawdz_rozmiar_pliku(sciezka, pozycja.format_zrodla, konfiguracja)
     suma = suma_kontrolna_pliku(sciezka)
-    typ = typ_zrodla_dla_pliku(pozycja.format_zrodla)
+    typ = typ_zrodla_dla_pliku(pozycja.format_zrodla, wymus_nuty=pozycja.wymus_nuty)
     return Zrodlo(
         identyfikator_zrodla=identyfikator_zrodla(typ, suma),
         typ_zrodla=typ,
@@ -350,8 +386,18 @@ def _sprawdz_rozmiar_pliku(sciezka: Path, format_zrodla: str, konfiguracja: Konf
         )
 
 
-def typ_zrodla_dla_pliku(format_zrodla: str) -> TypZrodla:
-    """Zwraca typ źródła odpowiadający formatowi pliku lokalnego."""
+def typ_zrodla_dla_pliku(format_zrodla: str, *, wymus_nuty: bool = False) -> TypZrodla:
+    """Zwraca typ źródła odpowiadający formatowi pliku lokalnego.
+
+    Formaty jednoznacznie nutowe zawsze dostają typ PLIK_NUTY. Flaga
+    `wymus_nuty`, odpowiadająca opcji `--nuty`, dodatkowo kieruje do PLIK_NUTY
+    pliki PDF oraz obrazy — i tylko te, bo tylko dla nich rozpoznawanie zapisu
+    nutowego ma sens. Pliku tekstowego flaga nie dotyczy.
+    """
+    if format_zrodla in FORMATY_PLIKOW_NUTY:
+        return TypZrodla.PLIK_NUTY
+    if wymus_nuty and (format_zrodla == "pdf" or format_zrodla in FORMATY_PLIKOW_OBRAZOW):
+        return TypZrodla.PLIK_NUTY
     if format_zrodla in FORMATY_PLIKOW_TEKSTOWYCH:
         return TypZrodla.PLIK_TEKSTOWY
     if format_zrodla in FORMATY_PLIKOW_OBRAZOW:

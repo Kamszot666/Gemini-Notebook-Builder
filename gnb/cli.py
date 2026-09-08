@@ -4,9 +4,11 @@ Udostępnia trzy polecenia. Polecenie ``diagnostyka`` sprawdza dostępność
 narzędzi zewnętrznych wymienionych w sekcji piątej CLAUDE.md. Polecenie
 ``przetworz`` uruchamia potok przetwarzania dla tekstu wklejonego, plików
 lokalnych w formacie TXT, MD, HTML, CSV, SRT, VTT, PDF, DOCX, EPUB, obrazów,
-nagrań mowy, adresów stron internetowych oraz adresów filmów z serwisu YouTube,
-dla których pobierane są napisy. Polecenie ``pamiec`` pokazuje stan wspólnej
-pamięci podręcznej pobranych stron i pozwala ją wyczyścić.
+nagrań mowy, materiałów nutowych MIDI, MusicXML, MXL i Guitar Pro gp3, gp4
+i gp5, adresów stron internetowych oraz adresów filmów z serwisu YouTube,
+dla których pobierane są napisy. Opcja ``--nuty`` kieruje pliki PDF i obrazy
+danego wywołania do ścieżki materiałów nutowych. Polecenie ``pamiec`` pokazuje
+stan wspólnej pamięci podręcznej pobranych stron i pozwala ją wyczyścić.
 
 Przed pobraniem czegokolwiek polecenie ``przetworz`` wypisuje podsumowanie listy
 adresów: ile jest poprawnych, ile duplikatów i ile wpisów odrzucono wraz
@@ -24,6 +26,7 @@ import shutil
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -91,6 +94,11 @@ class Narzedzie:
     bo na przykład MuseScore na Windows nie nazywa się `mscore`, tylko
     `MuseScore4.exe` albo `MuseScore3.exe`, zgodnie z pułapką opisaną
     w sekcji piętnastej CLAUDE.md.
+
+    Pole `wyszukiwarka` jest opcjonalne. Gdy jest podane, diagnostyka woła je
+    przed przeszukaniem zmiennej PATH: zwrócona ścieżka jest traktowana jako
+    znaleziony program. Służy narzędziom, których instalator nie dopisuje do
+    PATH, a które mają własną funkcję szukającą po znanych katalogach.
     """
 
     nazwa: str
@@ -98,6 +106,7 @@ class Narzedzie:
     argument_wersji: str
     do_czego_sluzy: str
     co_przestanie_dzialac: str
+    wyszukiwarka: Callable[[], Path | None] | None = None
 
 
 NARZEDZIA: tuple[Narzedzie, ...] = (
@@ -129,8 +138,15 @@ NARZEDZIA: tuple[Narzedzie, ...] = (
         nazwa="MuseScore",
         polecenia=("mscore", "MuseScore4.exe", "MuseScore3.exe"),
         argument_wersji="--version",
-        do_czego_sluzy="konwersja plików MIDI i MusicXML na PDF oraz odczyt tonacji i metrum",
-        co_przestanie_dzialac="konwersja materiałów nutowych przez wiersz poleceń",
+        do_czego_sluzy=(
+            "jest wykrywany na potrzeby przyszłego renderowania podglądu partytury; "
+            "w tej wersji aplikacji nie jest uruchamiany, a tonację, metrum i tempo "
+            "materiałów nutowych czytają własne parsery"
+        ),
+        co_przestanie_dzialac=(
+            "nic w tej wersji — opis tekstowy materiałów nutowych powstaje bez MuseScore"
+        ),
+        wyszukiwarka=lambda: _wyszukaj_musescore(),
     ),
     Narzedzie(
         nazwa="Java",
@@ -180,6 +196,16 @@ def _znajdz_wersje(sciezka_programu: str, argument: str) -> str | None:
 def _sprawdz_narzedzie(narzedzie: Narzedzie) -> str:
     """Buduje jeden czytelny wiersz raportu diagnostyki dla podanego narzędzia."""
 
+    if narzedzie.wyszukiwarka is not None:
+        znaleziona_sciezka = narzedzie.wyszukiwarka()
+        if znaleziona_sciezka is not None:
+            wersja = _znajdz_wersje(str(znaleziona_sciezka), narzedzie.argument_wersji)
+            opis_wersji = wersja if wersja is not None else "nieznana"
+            return (
+                f"{narzedzie.nazwa}: JEST ({znaleziona_sciezka.name}). "
+                f"Wersja: {opis_wersji}. Ścieżka: {znaleziona_sciezka}."
+            )
+
     for polecenie in narzedzie.polecenia:
         sciezka = shutil.which(polecenie)
         if sciezka is not None:
@@ -193,6 +219,26 @@ def _sprawdz_narzedzie(narzedzie: Narzedzie) -> str:
         f"{narzedzie.nazwa}: BRAK. Służy do: {narzedzie.do_czego_sluzy}. "
         f"Bez niego przestanie działać: {narzedzie.co_przestanie_dzialac}."
     )
+
+
+def _wyszukaj_musescore() -> Path | None:
+    """Odnajduje MuseScore z uwzględnieniem ścieżki wskazanej w konfiguracji.
+
+    MuseScore nie jest uruchamiany przez aplikację — ta funkcja służy wyłącznie
+    diagnostyce, żeby raport nie pokazywał „BRAK”, gdy program jest zainstalowany
+    poza zmienną PATH. Błąd wczytania konfiguracji nie może wywrócić diagnostyki,
+    więc jest łapany.
+    """
+    from gnb.music.musescore import znajdz_musescore
+
+    try:
+        sciezka_wskazana = wczytaj_konfiguracje().sciezka_musescore
+    except BladGnb:
+        sciezka_wskazana = ""
+    try:
+        return znajdz_musescore(sciezka_wskazana)
+    except BladGnb:
+        return None
 
 
 def _wiersz_jezykow_ocr() -> str:
@@ -335,6 +381,7 @@ def uruchom_przetwarzanie(
     tylko_sprawdz_liste: bool = False,
     grupa: str | None = None,
     wymus_transkrypcje: bool = False,
+    nuty: bool = False,
 ) -> int:
     """Buduje pozycje wejściowe, uruchamia potok i wypisuje raport dla użytkownika.
 
@@ -351,6 +398,10 @@ def uruchom_przetwarzanie(
     Argument `wymus_transkrypcje` przełamuje odrzucenie nagrania rozpoznanego
     jako niemowne: audio jest wtedy przepisywane nawet przy niskim udziale mowy.
     Służy do nadpisania tej decyzji dla konkretnego nagrania mowy z głośnym tłem.
+
+    Argument `nuty` sprawia, że pliki PDF i obrazy tego wywołania są traktowane
+    jako materiał nutowy. Do czasu wdrożenia Audiverisa w drugiej części etapu
+    dziesiątego takie pliki są pomijane z czytelnym komunikatem.
 
     Przy opcji `tylko_sprawdz_liste` polecenie kończy się po wypisaniu
     podsumowania listy adresów, z kodem zero także wtedy, gdy część wpisów jest
@@ -379,7 +430,7 @@ def uruchom_przetwarzanie(
 
     pozycje: list[PozycjaWejsciowa] = []
     for sciezka in pliki:
-        pozycje.append(przyjmij_plik(Path(sciezka), moment, grupa=grupa))
+        pozycje.append(przyjmij_plik(Path(sciezka), moment, grupa=grupa, nuty=nuty))
     for tresc in teksty_plaskie:
         pozycje.append(przyjmij_tekst(tresc, moment, format_tekstu="txt", grupa=grupa))
     for tresc in teksty_markdown:
@@ -584,6 +635,17 @@ def main(argumenty: list[str] | None = None) -> int:
         ),
     )
     parser_przetworz.add_argument(
+        "--nuty",
+        action="store_true",
+        dest="nuty",
+        help=(
+            "Potraktuj pliki PDF i obrazy tego wywołania jako materiał nutowy. Rozpoznawanie "
+            "zapisu nutowego z obrazu wymaga programu Audiveris i dojdzie w drugiej części "
+            "etapu dziesiątego; do tego czasu takie pliki są pomijane z czytelnym komunikatem. "
+            "Pliki MIDI, MusicXML i Guitar Pro są traktowane jako materiał nutowy bez tej opcji."
+        ),
+    )
+    parser_przetworz.add_argument(
         "--katalog",
         metavar="SCIEZKA",
         default=None,
@@ -610,6 +672,7 @@ def main(argumenty: list[str] | None = None) -> int:
             bool(ustalone.sprawdz_liste),
             ustalone.grupa,
             bool(ustalone.wymus_transkrypcje),
+            bool(ustalone.nuty),
         )
 
     parser.error(f"Nieznane polecenie: {ustalone.polecenie}")

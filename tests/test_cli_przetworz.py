@@ -208,3 +208,19 @@ def test_przetworz_z_grupa_laczy_zrodla_w_jeden_plik(
     assert "Pierwsza notatka o rozliczeniu rocznym." in tresc
     assert "Druga notatka o zaliczkach kwartalnych." in tresc
     assert tresc.count("Identyfikator źródła: ") == 2
+
+
+def test_przetworz_z_flaga_nuty_pomija_pdf_z_komunikatem_o_audiverisie(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GNB_KATALOG_WYNIKOW", str(tmp_path))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    skan = tmp_path / "skan.pdf"
+    skan.write_bytes(b"%PDF-1.4\n%%EOF\n")
+
+    kod = main(["przetworz", "--projekt", "Skan nut CLI", "--nuty", "--plik", str(skan)])
+
+    assert kod == 0
+    capsys.readouterr()
+    raport = (tmp_path / "Skan nut CLI" / "raport.txt").read_text(encoding="utf-8")
+    assert "Audiveris" in raport

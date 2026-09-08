@@ -24,6 +24,15 @@ def test_sciezka_wskazana_do_nieistniejacego_pliku_zglasza_brak_narzedzia(
         musescore.znajdz_musescore(str(tmp_path / "nie_ma.exe"))
 
 
+def test_znane_podkatalogi_uzywaja_separatora_zrozumialego_na_kazdym_systemie() -> None:
+    # Ukośnik wsteczny jest separatorem tylko na Windows. Na Linuksie „a\\b” to
+    # jedna nazwa pliku, więc katalog docelowy nigdy nie zostaje odwiedzony,
+    # a wykrywanie milczy. Sekcja 6 punkt 2 CLAUDE.md zakazuje ukośników
+    # wpisanych na sztywno; poprawny zapis to ukośnik zwykły.
+    for _zmienna, podkatalog in musescore._ZNANE_PODKATALOGI_WINDOWS:
+        assert "\\" not in podkatalog
+
+
 def test_znajduje_musescore_w_znanym_podkatalogu_gdy_nie_ma_w_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -34,7 +43,11 @@ def test_znajduje_musescore_w_znanym_podkatalogu_gdy_nie_ma_w_path(
     plik.parent.mkdir(parents=True)
     plik.write_bytes(b"")
 
-    assert musescore.znajdz_musescore("") == plik
+    znaleziona = musescore.znajdz_musescore("")
+    # Porównanie po `resolve` i sprawdzenie nazwy katalogu nadrzędnego wprost:
+    # przy błędnym separatorze funkcja zwróciłaby ścieżkę bez segmentu „bin”.
+    assert znaleziona == plik
+    assert znaleziona.parent.name == "bin"
 
 
 def test_brak_wszedzie_zglasza_brak_narzedzia(monkeypatch: pytest.MonkeyPatch) -> None:

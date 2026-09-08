@@ -16,7 +16,6 @@ import io
 import zipfile
 from xml.etree import ElementTree as ET
 
-from gnb.core.stale import PoziomPewnosciStruktury
 from gnb.core.wyjatki import BladTrwaly
 from gnb.music.model import OpisPartytury
 from gnb.music.tonacje import nazwa_tonacji_z_kwint
@@ -85,12 +84,6 @@ def przeczytaj_musicxml(bajty: bytes) -> OpisPartytury:
 
     ostrzezenia_zmian = _ostrzezenia_zmian(zakres_taktow, tonacja, metrum)
 
-    poziom_pewnosci = (
-        PoziomPewnosciStruktury.WYSOKI
-        if tonacja is not None and metrum is not None and instrumenty
-        else PoziomPewnosciStruktury.SREDNI
-    )
-
     return OpisPartytury(
         format_zrodlowy=format_zrodlowy,
         metoda_odczytu=METODA_ODCZYTU,
@@ -102,7 +95,6 @@ def przeczytaj_musicxml(bajty: bytes) -> OpisPartytury:
         liczba_taktow_przyblizona=False,
         instrumenty=instrumenty,
         struktura_czesci=struktura_czesci,
-        poziom_pewnosci=poziom_pewnosci,
         ostrzezenia_zmian=ostrzezenia_zmian,
         uwagi_odczytu=uwagi_odczytu,
     )

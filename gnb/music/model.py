@@ -46,10 +46,14 @@ _ADNOTACJA_PRZYBLIZENIA = "wartość przybliżona, wyliczona z długości nagran
 class OpisPartytury:
     """Zestaw informacji o materiale nutowym odczytany z pliku źródłowego.
 
-    Pole `poziom_pewnosci` mówi o wierności odczytu muzycznego i trafia do
-    manifestu zgodnie z sekcją siedemnastą CLAUDE.md. Jest niezależne od
-    poziomu pewności struktury dokumentu, który dla opisu nutowego jest zawsze
-    niski.
+    Świadomie nie ma tu pola „poziom pewności odczytu”. Dla formatu natywnego
+    odczyt jest albo dokładny, albo go nie ma: pojedyncze fakty niosą własną
+    uczciwość — liczba taktów z MIDI jest oznaczona jako przybliżona, zmiany
+    metrum czy tempa dają ostrzeżenie, przyjęcie trybu durowego jest odnotowane,
+    a wiersza brakującego pola po prostu nie ma. Jedna zbiorcza ocena pewności
+    dublowałaby to nierzetelnie. Pole poziomu pewności rozpoznania jest
+    zarezerwowane dla wartości zwracanej przez program Audiveris w części B
+    etapu dziesiątego, gdzie jest to prawdziwa wielkość statystyczna.
 
     Pole `ostrzezenia_zmian` niesie sytuacje, w których plik zmienia metrum,
     tempo albo tonację, a opis podaje wartość początkową. Trafiają one do pola
@@ -70,7 +74,6 @@ class OpisPartytury:
     liczba_taktow_przyblizona: bool = False
     instrumenty: list[str] = field(default_factory=list)
     struktura_czesci: list[str] = field(default_factory=list)
-    poziom_pewnosci: PoziomPewnosciStruktury = PoziomPewnosciStruktury.NISKI
     ostrzezenia_zmian: list[str] = field(default_factory=list)
     uwagi_odczytu: list[str] = field(default_factory=list)
 
@@ -129,8 +132,6 @@ def opis_jako_tekst(opis: OpisPartytury) -> str:
         wiersze.extend(f"  - {uwaga}" for uwaga in opis.uwagi_odczytu)
 
     wiersze.append("")
-    wiersze.append(f"Poziom pewności odczytu: {opis.poziom_pewnosci.value}")
-    wiersze.append("")
     wiersze.append(_KONCOWY_AKAPIT)
     return "\n".join(wiersze)
 
@@ -139,14 +140,15 @@ def opis_jako_metadane(opis: OpisPartytury) -> dict[str, str]:
     """Buduje słownik metadanych źródła z opisu materiału nutowego.
 
     Klucz pojawia się tylko wtedy, gdy odpowiadające pole jest znane. Wszystkie
-    wartości są napisami, bo `StanZrodla.metadane` to `dict[str, str]`. Liczba
-    taktów wyliczona z czasu trwania MIDI jest zapisana jako napis z adnotacją
-    o przybliżeniu, nigdy jako sama liczba.
+    wartości są napisami, bo `StanZrodla.metadane` to `dict[str, str]`.
+    Zgodnie z sekcją czternastą CLAUDE.md manifest jest źródłem prawdy, a proza
+    należy do widoku i do opisu, więc liczba taktów trafia tu jako sama liczba,
+    a informacja o przybliżeniu jako osobny klucz `nuty_liczba_taktow_przyblizona`
+    o wartości „tak” albo „nie”. Zdanie wyjaśniające jest wyłącznie w tekście opisu.
     """
     metadane: dict[str, str] = {
         "nuty_format": opis.format_zrodlowy,
         "nuty_metoda_odczytu": opis.metoda_odczytu,
-        "nuty_poziom_pewnosci": opis.poziom_pewnosci.value,
     }
     if opis.tytul:
         metadane["nuty_tytul"] = opis.tytul
@@ -156,9 +158,11 @@ def opis_jako_metadane(opis: OpisPartytury) -> dict[str, str]:
         metadane["nuty_metrum"] = opis.metrum
     if opis.tempo_bpm is not None:
         metadane["nuty_tempo_bpm"] = str(opis.tempo_bpm)
-    opis_taktow = _opis_liczby_taktow(opis)
-    if opis_taktow is not None:
-        metadane["nuty_liczba_taktow"] = opis_taktow
+    if opis.liczba_taktow is not None:
+        metadane["nuty_liczba_taktow"] = str(opis.liczba_taktow)
+        metadane["nuty_liczba_taktow_przyblizona"] = (
+            "tak" if opis.liczba_taktow_przyblizona else "nie"
+        )
     if opis.instrumenty:
         metadane["nuty_instrumenty"] = ", ".join(opis.instrumenty)
     if opis.struktura_czesci:

@@ -608,14 +608,19 @@ Markdown, który jako plik TXT trafia do notatnika. Opis zawiera, o ile da się 
 odczytać: tytuł, tonację, metrum, tempo, liczbę taktów, instrumenty i strukturę
 części. Pola nieznane są pomijane, a nie zapisywane wartością zastępczą. Struktura
 takiego opisu jest zawsze na poziomie niskim, więc dla materiału nutowego nigdy
-nie powstaje wersja Markdown.
+nie powstaje wersja Markdown. Dla formatu natywnego nie zapisujemy zbiorczej
+oceny pewności odczytu — pojedyncze fakty niosą własną uczciwość. Pole poziomu
+pewności rozpoznania jest zarezerwowane dla wartości zwracanej przez program
+Audiveris w części B.
 
 Liczba taktów z MusicXML i Guitar Pro jest dokładna, bo pochodzi wprost ze
-znaczników taktów. Liczba taktów z MIDI jest zawsze przybliżona i tak oznaczona
-w opisie i w manifeście, bo format MIDI nie zapisuje podziału na takty —
-wyliczamy ją z długości nagrania w czasie. Gdy plik zmienia metrum, tempo albo
-tonację, opis podaje wartość początkową i niesie ostrzeżenie, które trafia do
-manifestu oraz do sekcji „Materiały do sprawdzenia” raportu.
+znaczników taktów. Liczba taktów z MIDI jest zawsze przybliżona, bo format MIDI
+nie zapisuje podziału na takty — wyliczamy ją z długości nagrania w czasie.
+W tekście opisu przybliżenie jest opisane zdaniem, a w pliku `manifest.json`
+liczba taktów jest samą liczbą, z osobnym kluczem `nuty_liczba_taktow_przyblizona`
+o wartości „tak” albo „nie”, żeby pole dało się użyć maszynowo. Gdy plik zmienia
+metrum, tempo albo tonację, opis podaje wartość początkową i niesie ostrzeżenie,
+które trafia do manifestu oraz do sekcji „Materiały do sprawdzenia” raportu.
 
 Oryginał materiału jest zachowywany w podkatalogu materiałów źródłowych projektu.
 Dla MusicXML, Guitar Pro i skanu jest to oryginał wizualny; dla MIDI, który

@@ -23,7 +23,6 @@ def _opis_pelny() -> OpisPartytury:
         liczba_taktow_przyblizona=False,
         instrumenty=["fortepian"],
         struktura_czesci=["Partia 1: Fortepian"],
-        poziom_pewnosci=PoziomPewnosciStruktury.WYSOKI,
     )
 
 
@@ -37,6 +36,14 @@ def test_opis_jako_tekst_zawiera_wszystkie_znane_pola_i_koncowy_akapit() -> None
     assert "Instrumenty: fortepian" in tekst
     assert "Struktura części:" in tekst
     assert "nie jest podglądem partytury" in tekst.lower()
+
+
+def test_opis_jako_tekst_nie_zawiera_wiersza_o_poziomie_pewnosci() -> None:
+    # Poziom pewności dla formatów natywnych został usunięty: pojedyncze fakty
+    # niosą własną uczciwość, a zbiorcza ocena tylko by to dublowała nierzetelnie.
+    tekst = opis_jako_tekst(_opis_pelny())
+    assert "Poziom pewności" not in tekst
+    assert "sredni" not in tekst
 
 
 def test_opis_jako_tekst_pomija_wiersze_pol_nieznanych() -> None:
@@ -68,10 +75,14 @@ def test_opis_jako_metadane_pomija_klucze_pol_nieznanych() -> None:
     assert "nuty_tonacja" not in metadane
     assert "nuty_tempo_bpm" not in metadane
     assert "nuty_liczba_taktow" not in metadane
+    assert "nuty_liczba_taktow_przyblizona" not in metadane
+    assert "nuty_poziom_pewnosci" not in metadane
 
 
-def test_opis_jako_metadane_zapisuje_przyblizona_liczbe_taktow_jako_napis() -> None:
-    metadane = opis_jako_metadane(
+def test_opis_jako_metadane_rozdziela_liczbe_taktow_od_informacji_o_przyblizeniu() -> None:
+    # Manifest jest źródłem prawdy: liczba taktów to sama liczba, a przybliżenie
+    # osobny klucz „tak” albo „nie”. Proza wyjaśniająca zostaje w tekście opisu.
+    przyblizona = opis_jako_metadane(
         OpisPartytury(
             format_zrodlowy="midi",
             metoda_odczytu="mido",
@@ -79,8 +90,12 @@ def test_opis_jako_metadane_zapisuje_przyblizona_liczbe_taktow_jako_napis() -> N
             liczba_taktow_przyblizona=True,
         )
     )
-    assert metadane["nuty_liczba_taktow"].startswith("8 (")
-    assert "przybliżona" in metadane["nuty_liczba_taktow"]
+    assert przyblizona["nuty_liczba_taktow"] == "8"
+    assert przyblizona["nuty_liczba_taktow_przyblizona"] == "tak"
+
+    dokladna = opis_jako_metadane(_opis_pelny())
+    assert dokladna["nuty_liczba_taktow"] == "8"
+    assert dokladna["nuty_liczba_taktow_przyblizona"] == "nie"
 
 
 def test_opis_jako_metadane_wszystkie_wartosci_sa_napisami() -> None:

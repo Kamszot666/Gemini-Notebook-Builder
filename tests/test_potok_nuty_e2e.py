@@ -63,7 +63,9 @@ def test_plik_midi_daje_jeden_txt_z_opisem_partytury(wymaga_mido: None, tmp_path
     assert zrodlo["typ"] == "plik_nuty"
     assert zrodlo["status"] == "spakowane"
     assert zrodlo["metadane"]["nuty_format"] == "midi"
-    assert "przybliżona" in zrodlo["metadane"]["nuty_liczba_taktow"]
+    assert zrodlo["metadane"]["nuty_liczba_taktow"] == "2"
+    assert zrodlo["metadane"]["nuty_liczba_taktow_przyblizona"] == "tak"
+    assert "nuty_poziom_pewnosci" not in zrodlo["metadane"]
 
     oryginaly = list((wynik.katalog_projektu / "materialy_zrodlowe").glob("*.mid"))
     assert len(oryginaly) == 1

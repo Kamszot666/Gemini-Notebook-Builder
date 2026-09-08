@@ -16,7 +16,6 @@ from __future__ import annotations
 import io
 import math
 
-from gnb.core.stale import PoziomPewnosciStruktury
 from gnb.core.wyjatki import BladTrwaly
 from gnb.music.instrumenty_gm import nazwa_instrumentu
 from gnb.music.model import OpisPartytury
@@ -137,12 +136,6 @@ def przeczytaj_midi(bajty: bytes) -> OpisPartytury:
         f"Ścieżka {numer}: {nazwa}" for numer, nazwa in enumerate(nazwy_sciezek_z_nutami, start=1)
     ]
 
-    poziom_pewnosci = (
-        PoziomPewnosciStruktury.SREDNI
-        if metrum is not None and tempo_bpm is not None
-        else PoziomPewnosciStruktury.NISKI
-    )
-
     return OpisPartytury(
         format_zrodlowy=FORMAT_ZRODLOWY,
         metoda_odczytu=METODA_ODCZYTU,
@@ -154,7 +147,6 @@ def przeczytaj_midi(bajty: bytes) -> OpisPartytury:
         liczba_taktow_przyblizona=True,
         instrumenty=instrumenty,
         struktura_czesci=struktura_czesci,
-        poziom_pewnosci=poziom_pewnosci,
         ostrzezenia_zmian=ostrzezenia_zmian,
     )
 

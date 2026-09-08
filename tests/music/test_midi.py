@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from gnb.core.stale import PoziomPewnosciStruktury
 from gnb.core.wyjatki import BladTrwaly
 from gnb.music.midi import czy_dostepna_biblioteka, przeczytaj_midi
 
@@ -136,8 +135,10 @@ def test_czy_dostepna_biblioteka_wykrywa_brak_importu(monkeypatch: pytest.Monkey
     assert czy_dostepna_biblioteka() is False
 
 
-def test_niski_poziom_pewnosci_bez_metrum_i_tempa() -> None:
+def test_plik_bez_metrum_i_tempa_pomija_odpowiednie_wiersze() -> None:
     import mido
+
+    from gnb.music.model import opis_jako_tekst
 
     plik = mido.MidiFile(ticks_per_beat=480)
     sciezka = mido.MidiTrack()
@@ -148,4 +149,8 @@ def test_niski_poziom_pewnosci_bez_metrum_i_tempa() -> None:
     plik.save(file=bufor)
 
     opis = przeczytaj_midi(bufor.getvalue())
-    assert opis.poziom_pewnosci is PoziomPewnosciStruktury.NISKI
+    assert opis.metrum is None
+    assert opis.tempo_bpm is None
+    tekst = opis_jako_tekst(opis)
+    assert "Metrum" not in tekst
+    assert "Tempo" not in tekst

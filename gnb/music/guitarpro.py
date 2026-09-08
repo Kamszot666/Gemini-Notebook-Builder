@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import io
 
-from gnb.core.stale import PoziomPewnosciStruktury
 from gnb.core.wyjatki import BladTrwaly, BrakNarzedzia
 from gnb.music.instrumenty_gm import nazwa_instrumentu
 from gnb.music.model import OpisPartytury
@@ -97,7 +96,6 @@ def przeczytaj_guitarpro(bajty: bytes) -> OpisPartytury:
         liczba_taktow_przyblizona=False,
         instrumenty=instrumenty,
         struktura_czesci=struktura_czesci,
-        poziom_pewnosci=PoziomPewnosciStruktury.WYSOKI,
         ostrzezenia_zmian=ostrzezenia_zmian,
         uwagi_odczytu=uwagi_odczytu,
     )

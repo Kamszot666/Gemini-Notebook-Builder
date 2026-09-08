@@ -85,6 +85,11 @@ class PodsumowanieProjektu:
     czas_pracy_sekundy: float
     zrodla_nieprzetworzone: tuple[ZrodloNieprzetworzone, ...] = ()
     materialy_do_sprawdzenia: tuple[MaterialDoSprawdzenia, ...] = ()
+    # Liczba materiałów nutowych, które trafiły do własnego pliku wynikowego
+    # mimo podanej przez użytkownika opcji --grupa. Materiały nutowe nie
+    # podlegają grupowaniu tematycznemu; zero oznacza, że nie było takiego
+    # przypadku i wiersz o tym w raporcie nie powstaje.
+    liczba_nut_poza_grupami: int = 0
 
 
 def zbuduj_raport(nazwa_projektu: str, podsumowanie: PodsumowanieProjektu) -> str:
@@ -119,6 +124,12 @@ def zbuduj_raport(nazwa_projektu: str, podsumowanie: PodsumowanieProjektu) -> st
         f"Łączna liczba słów w plikach wynikowych: {podsumowanie.laczna_liczba_slow}",
         f"Czas pracy: {_opis_czasu(podsumowanie.czas_pracy_sekundy)}",
     ]
+    if podsumowanie.liczba_nut_poza_grupami > 0:
+        wiersze.append(
+            f"Materiały nutowe ({podsumowanie.liczba_nut_poza_grupami}) nie podlegają "
+            "grupowaniu tematycznemu — mimo podanej opcji --grupa każdy z nich dostał "
+            "osobny plik wynikowy."
+        )
     wiersze.extend(_wiersze_zrodel_nieprzetworzonych(podsumowanie.zrodla_nieprzetworzone))
     wiersze.extend(_wiersze_materialow_do_sprawdzenia(podsumowanie.materialy_do_sprawdzenia))
     return "\n".join(wiersze) + "\n"

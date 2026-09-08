@@ -364,10 +364,15 @@ def _teraz_utc() -> datetime:
 
 
 def _czy_pozycja_jest_obrazem(pozycja: PozycjaWejsciowa) -> bool:
-    """Zwraca prawdę, gdy wejście jest plikiem obrazu."""
+    """Zwraca prawdę, gdy wejście jest plikiem obrazu.
+
+    Obraz oznaczony opcją `--nuty` jest materiałem nutowym, nie obrazem, więc
+    nie trafia do domyślnej grupy obrazów.
+    """
     return (
         pozycja.wejscie.typ_wejscia is TypWejscia.PLIK
-        and typ_zrodla_dla_pliku(pozycja.format_zrodla) is TypZrodla.PLIK_OBRAZ
+        and typ_zrodla_dla_pliku(pozycja.format_zrodla, wymus_nuty=pozycja.wymus_nuty)
+        is TypZrodla.PLIK_OBRAZ
     )
 
 
@@ -876,6 +881,10 @@ class _Wykonanie:
 
         if zrodlo.typ_zrodla is TypZrodla.PLIK_AUDIO:
             postep_ekstrakcji = self._postep_transkrypcji(zrodlo.pochodzenie)
+        elif zrodlo.typ_zrodla is TypZrodla.PLIK_NUTY:
+            # Odczyt materiału nutowego z formatu natywnego trwa milisekundy,
+            # więc nie ma osobnej fazy postępu.
+            postep_ekstrakcji = None
         else:
             postep_ekstrakcji = self._postep_ocr(zrodlo.pochodzenie)
 
@@ -1116,6 +1125,11 @@ class _Wykonanie:
         jawnej grupy trafia do domyślnej grupy obrazów, więc także on daje plik
         PDF, a nie plik TXT. Grupa mieszana, w której są i obrazy, i źródła
         tekstowe, daje dwa pliki: PDF dla obrazów i plik tekstowy dla reszty.
+
+        Materiały nutowe nie podlegają grupowaniu tematycznemu: każdy dostaje
+        osobny plik wynikowy TXT, także wtedy, gdy użytkownik podał opcję
+        `--grupa`. Zignorowanie tej opcji dla plików nutowych jest odnotowywane
+        w raporcie końcowym, żeby nie było cichym pominięciem.
         """
         limity = LimityPakowania.z_konfiguracji(
             self._konfiguracja.bezpieczny_limit_slow, self._konfiguracja.bezpieczny_limit_mb
@@ -1126,7 +1140,12 @@ class _Wykonanie:
             if stan.status == StatusZrodla.ZNORMALIZOWANE.value
         ]
         obrazy = [stan for stan in do_pakowania if stan.typ == TypZrodla.PLIK_OBRAZ.value]
-        pozostale = [stan for stan in do_pakowania if stan.typ != TypZrodla.PLIK_OBRAZ.value]
+        nuty = [stan for stan in do_pakowania if stan.typ == TypZrodla.PLIK_NUTY.value]
+        pozostale = [
+            stan
+            for stan in do_pakowania
+            if stan.typ not in (TypZrodla.PLIK_OBRAZ.value, TypZrodla.PLIK_NUTY.value)
+        ]
 
         grupy: dict[str, list[StanZrodla]] = {}
         for stan in pozostale:
@@ -1136,6 +1155,9 @@ class _Wykonanie:
                 self._spakuj_zrodlo_samodzielne(stan, limity)
         for nazwa_grupy, stany in grupy.items():
             self._spakuj_grupe(nazwa_grupy, stany, limity)
+
+        for stan in nuty:
+            self._spakuj_zrodlo_samodzielne(stan, limity)
 
         grupy_obrazow: dict[str, list[StanZrodla]] = {}
         for stan in obrazy:
@@ -2268,6 +2290,7 @@ def _zapamietaj_wejscia(checkpoint: Checkpoint, pozycje: Sequence[PozycjaWejscio
                 format_zrodla=pozycja.format_zrodla,
                 moment_dodania=pozycja.wejscie.moment_dodania.isoformat(),
                 grupa=pozycja.grupa,
+                wymus_nuty=pozycja.wymus_nuty,
             )
         )
 
@@ -2295,7 +2318,14 @@ def odtworz_wejscia(checkpoint: Checkpoint, konfiguracja: Konfiguracja) -> list[
                 )
             )
         elif wejscie.typ_wejscia == TypWejscia.PLIK.value:
-            pozycje.append(przyjmij_plik(Path(wejscie.wartosc), moment, grupa=wejscie.grupa))
+            pozycje.append(
+                przyjmij_plik(
+                    Path(wejscie.wartosc),
+                    moment,
+                    grupa=wejscie.grupa,
+                    nuty=wejscie.wymus_nuty,
+                )
+            )
         elif wejscie.typ_wejscia == TypWejscia.TEKST.value:
             pozycje.append(
                 przyjmij_tekst(
@@ -2430,6 +2460,14 @@ def _zbuduj_podsumowanie(
     )
     najwiekszy = max(wyniki, key=lambda wynik: wynik.rozmiar_bajtow, default=None)
 
+    nut_poza_grupami = sum(
+        1
+        for stan in checkpoint.zrodla.values()
+        if stan.typ == TypZrodla.PLIK_NUTY.value
+        and stan.status == StatusZrodla.SPAKOWANE.value
+        and stan.grupa_pakowania
+    )
+
     return PodsumowanieProjektu(
         liczba_wejsc=len(checkpoint.zrodla),
         liczba_zrodel_poprawnych=poprawne,
@@ -2447,6 +2485,7 @@ def _zbuduj_podsumowanie(
         czas_pracy_sekundy=czas_pracy_sekundy,
         zrodla_nieprzetworzone=_zrodla_nieprzetworzone(checkpoint),
         materialy_do_sprawdzenia=_materialy_do_sprawdzenia(checkpoint),
+        liczba_nut_poza_grupami=nut_poza_grupami,
     )
 
 

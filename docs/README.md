@@ -7,7 +7,7 @@ o dokumentację skierowaną do osoby korzystającej z gotowej aplikacji.
 
 ## Stan dokumentacji
 
-Po etapie dziewiątym, obok tego pliku, istnieje sześć dokumentów:
+Po części A etapu dziesiątego, obok tego pliku, istnieje sześć dokumentów:
 
 1. `INSTALL.md` — przygotowanie Pythona i środowiska wirtualnego, instalacja
    zależności oraz instalacja narzędzi zewnętrznych z podziałem na etapy, w
@@ -25,10 +25,10 @@ Po etapie dziewiątym, obok tego pliku, istnieje sześć dokumentów:
    i grafiki, wspólnej pamięci podręcznej oraz interfejsu WWW.
 4. `FORMATS.md` — obsługiwane wejścia, w tym adresy stron internetowych i filmów
    z serwisu YouTube, formaty dokumentowe, obrazy, OCR skanowanego PDF, nagrania
-   mowy i ich transkrypcja, kodowanie tekstu, obsługa błędów sieciowych, ocena
-   jakości ekstrakcji, ostrzeżenia ekstraktorów, reguła wyboru między plikiem TXT
-   a plikiem MD oraz pakowanie i podział plików wynikowych, w tym tematyczne
-   pliki PDF grup obrazów.
+   mowy i ich transkrypcja, materiały nutowe MIDI, MusicXML, MXL i Guitar Pro,
+   kodowanie tekstu, obsługa błędów sieciowych, ocena jakości ekstrakcji,
+   ostrzeżenia ekstraktorów, reguła wyboru między plikiem TXT a plikiem MD oraz
+   pakowanie i podział plików wynikowych, w tym tematyczne pliki PDF grup obrazów.
 5. `ACCESSIBILITY.md` — obsługa dostępnego interfejsu WWW z klawiatury i z NVDA,
    zachowanie regionów o roli „status”, dławienie komunikatów postępu, pola
    instrukcji systemowej i promptu wyszukiwania, wznowienie projektu.

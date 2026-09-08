@@ -135,19 +135,30 @@ def domyslny_rejestr_binarny(
     prog_udzialu_mowy: float = 0.5,
     wymus_transkrypcje: bool = False,
 ) -> RejestrEkstraktorowBinarnych:
-    """Buduje rejestr ekstraktorów formatów binarnych: PDF, DOCX, EPUB, obrazów i audio.
+    """Buduje rejestr ekstraktorów formatów binarnych.
+
+    Obejmuje PDF, DOCX, EPUB, obrazy, audio oraz materiały nutowe: MIDI,
+    MusicXML wraz z kontenerem MXL, Guitar Pro gp3/gp4/gp5 i zapis nutowy
+    w obrazie lub PDF. Cztery adaptery nutowe bramkują się na typie źródła
+    `PLIK_NUTY`, którego żaden z pozostałych ekstraktorów nie obsługuje, więc
+    ich miejsce na końcu krotki nie wpływa na dobór dla innych formatów.
 
     Ekstraktor obrazów oraz ekstraktor PDF potrzebują ustawień OCR i informacji,
     czy OCR jest w ogóle włączony. Ekstraktor audio potrzebuje ustawień
     transkrypcji, informacji, czy transkrypcja jest włączona, progu udziału mowy
-    oraz flagi wymuszenia transkrypcji dla materiału niemownego. Wszystkie te
-    wartości pochodzą z konfiguracji projektu i z opcji wiersza poleceń. Gdy nie
-    podano ustawień, OCR i transkrypcja są wyłączone.
+    oraz flagi wymuszenia transkrypcji dla materiału niemownego. Adaptery nutowe
+    nie potrzebują żadnych ustawień. Wszystkie te wartości pochodzą z konfiguracji
+    projektu i z opcji wiersza poleceń. Gdy nie podano ustawień, OCR i transkrypcja
+    są wyłączone.
     """
     from gnb.audio.transkrypcja import UstawieniaTranskrypcji
     from gnb.extractors.plik_audio import EkstraktorAudio
     from gnb.extractors.plik_docx import EkstraktorDocx
     from gnb.extractors.plik_epub import EkstraktorEpub
+    from gnb.extractors.plik_guitarpro import EkstraktorGuitarPro
+    from gnb.extractors.plik_midi import EkstraktorMidi
+    from gnb.extractors.plik_musicxml import EkstraktorMusicXml
+    from gnb.extractors.plik_nuty_skanowane import EkstraktorNutSkanowanych
     from gnb.extractors.plik_obraz import EkstraktorObrazu
     from gnb.extractors.plik_pdf import EkstraktorPdf
     from gnb.images.tesseract import UstawieniaOcr
@@ -170,6 +181,10 @@ def domyslny_rejestr_binarny(
                 prog_udzialu_mowy=prog_udzialu_mowy,
                 wymus_transkrypcje=wymus_transkrypcje,
             ),
+            EkstraktorMidi(),
+            EkstraktorMusicXml(),
+            EkstraktorGuitarPro(),
+            EkstraktorNutSkanowanych(),
         )
     )
 

@@ -1,8 +1,8 @@
-# Architektura — stan po etapie dziewiątym
+# Architektura — stan po etapie dziesiątym, część A
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
-zakończeniu etapu dziewiątego. Pełny docelowy podział na pakiety opisuje sekcja
-szósta `CLAUDE.md`.
+zakończeniu części A etapu dziesiątego. Pełny docelowy podział na pakiety
+opisuje sekcja szósta `CLAUDE.md`.
 
 ## Potok przetwarzania
 
@@ -149,8 +149,9 @@ pliku wynikowego.
 
 - `gnb/extractors/bazowy.py` — protokół `Ekstraktor` z rejestrem
   `RejestrEkstraktorow` dla formatów tekstowych oraz protokół `EkstraktorBinarny`
-  z rejestrem `RejestrEkstraktorowBinarnych` dla PDF, DOCX, EPUB, obrazów
-  i nagrań audio, pracujący wprost na bajtach pliku. Metoda `wyekstrahuj`
+  z rejestrem `RejestrEkstraktorowBinarnych` dla PDF, DOCX, EPUB, obrazów,
+  nagrań audio oraz materiałów nutowych MIDI, MusicXML i Guitar Pro, pracujący
+  wprost na bajtach pliku. Metoda `wyekstrahuj`
   protokołu binarnego przyjmuje opcjonalne wywołanie zwrotne postępu, którym
   ekstraktor PDF zgłasza OCR skanu strona po stronie, a ekstraktor audio
   transkrypcję segment po segmencie. Nowy format to nowa implementacja
@@ -421,10 +422,41 @@ potoku ani checkpointu — jest zbiorem narzędzi wołanych przez ekstraktor aud
   i wysoki udział segmentów niskiej pewności dają ocenę „podejrzana”, a źródło
   trafia do sekcji „Materiały do sprawdzenia”.
 
+## Pakiet gnb.music
+
+Odczyt materiałów nutowych w formatach natywnych i wykrywanie MuseScore. Pakiet
+nie zna potoku ani checkpointu — jest zbiorem narzędzi wołanych przez adaptery
+ekstrakcji.
+
+- `gnb/music/model.py` — kontrakt `OpisPartytury`, wspólny wynik trzech
+  parserów, oraz funkcje `opis_jako_tekst`, `opis_jako_metadane`
+  i `zbuduj_dokument_wyekstrahowany`. Ta ostatnia twardo ustawia niski poziom
+  pewności struktury, żeby dla opisu nutowego nie powstała wersja Markdown.
+- `gnb/music/instrumenty_gm.py` — 128 barw General MIDI indeksowanych od zera
+  oraz mapa perkusji kanału dziesiątego, po polsku.
+- `gnb/music/tonacje.py` — odwzorowanie oznaczeń tonacji z MIDI, MusicXML
+  i Guitar Pro na polskie nazwy.
+- `gnb/music/midi.py` — odczyt MIDI biblioteką `mido`. Liczba taktów jest zawsze
+  przybliżona, bo format nie zapisuje podziału na takty.
+- `gnb/music/musicxml.py` — odczyt MusicXML i kontenera MXL biblioteką
+  standardową `xml.etree.ElementTree`. Liczba taktów dokładna.
+- `gnb/music/guitarpro.py` — odczyt Guitar Pro gp3, gp4 i gp5 biblioteką
+  `PyGuitarPro`. Brak biblioteki kończy się `BrakNarzedzia`.
+- `gnb/music/musescore.py` — odnajdywanie pliku wykonywalnego MuseScore wzorem
+  `gnb/images/tesseract.py`. MuseScore nie jest uruchamiany; moduł służy tylko
+  diagnostyce.
+
+Cztery adaptery w `gnb/extractors/` — `plik_midi.py`, `plik_musicxml.py`,
+`plik_guitarpro.py`, `plik_nuty_skanowane.py` — bramkują się na typie źródła
+`PLIK_NUTY` i swoim zbiorze formatów. Dyspozytorem jest `RejestrEkstraktorowBinarnych`.
+Adapter zapisu skanowanego w części A etapu dziesiątego zawsze zgłasza
+`PominietoZrodlo` z komunikatem o Audiverisie; w części B staje się adapterem
+Audiverisa.
+
 ## Pozostałe pakiety
 
-Pakiety `gnb.documents`, `gnb.music`, `gnb.hotkeys` istnieją jako puste,
-importowalne pakiety z docstringiem. Logika powstanie w kolejnych etapach.
+Pakiety `gnb.documents` i `gnb.hotkeys` istnieją jako puste, importowalne pakiety
+z docstringiem. Logika powstanie w kolejnych etapach.
 
 ## Testy
 

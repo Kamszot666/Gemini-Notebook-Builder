@@ -445,6 +445,52 @@ def test_lista_wejsc_przezywa_zapis_i_odczyt(tmp_path: Path) -> None:
     assert odczytany == checkpoint
 
 
+def test_wpis_wejscia_bez_pola_wymus_nuty_wczytuje_sie_z_falszem(tmp_path: Path) -> None:
+    """Pole `wymus_nuty` jest addytywne: wpis zapisany starszą wersją go nie ma.
+
+    Tekst wpisu jest zbudowany ręcznie, bez klucza „wymus_nuty”. Odczyt musi dać
+    wartość fałsz z domyślnej, a nie błąd braku pola. Gdyby odczyt sięgał po
+    klucz zamiast po `.get` z wartością domyślną, ten test kończyłby się błędem.
+    """
+    sciezka = tmp_path / "checkpoint.json"
+    dane = json.loads(_CHECKPOINT_W_WERSJI_CZWARTEJ_BEZ_PAKOWANIA)
+    dane["wejscia"] = [
+        {
+            "typ_wejscia": "plik",
+            "wartosc": "C:/materialy/skan.pdf",
+            "format_zrodla": "pdf",
+            "moment_dodania": "2026-09-08T10:00:00+00:00",
+            "grupa": None,
+        }
+    ]
+    sciezka.write_text(json.dumps(dane, ensure_ascii=False), encoding="utf-8")
+
+    odczytany = wczytaj(sciezka)
+
+    assert odczytany is not None
+    assert odczytany.wejscia[0].wymus_nuty is False
+
+
+def test_flaga_wymus_nuty_przezywa_zapis_i_odczyt(tmp_path: Path) -> None:
+    checkpoint = _przykladowy_checkpoint()
+    checkpoint.wejscia = [
+        WejscieZapis(
+            typ_wejscia="plik",
+            wartosc="C:/materialy/skan.pdf",
+            format_zrodla="pdf",
+            moment_dodania="2026-09-08T10:00:00+00:00",
+            wymus_nuty=True,
+        )
+    ]
+
+    sciezka = tmp_path / "checkpoint.json"
+    zapisz(sciezka, checkpoint)
+    odczytany = wczytaj(sciezka)
+
+    assert odczytany is not None
+    assert odczytany.wejscia[0].wymus_nuty is True
+
+
 def test_uszkodzony_wpis_wejscia_jest_pomijany_a_nie_wywraca_odczytu(tmp_path: Path) -> None:
     """Jeden wpis wejścia bez rodzaju nie może uniemożliwić wczytania checkpointu."""
     sciezka = tmp_path / "checkpoint.json"

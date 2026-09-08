@@ -181,6 +181,10 @@ class WejscieZapis:
     format_zrodla: str
     moment_dodania: str
     grupa: str | None = None
+    # Odpowiada opcji --nuty: przy wznowieniu z interfejsu WWW plik PDF albo
+    # obraz ma być ponownie potraktowany jako materiał nutowy. Pole addytywne
+    # z bezpieczną wartością domyślną, więc nie podnosi numeru schematu.
+    wymus_nuty: bool = False
 
 
 @dataclass
@@ -409,6 +413,7 @@ def _wejscie_do_slownika(wejscie: WejscieZapis) -> dict[str, Any]:
         "format_zrodla": wejscie.format_zrodla,
         "moment_dodania": wejscie.moment_dodania,
         "grupa": wejscie.grupa,
+        "wymus_nuty": wejscie.wymus_nuty,
     }
 
 
@@ -534,6 +539,7 @@ def _wejscia_ze_slownika(dane: Any) -> list[WejscieZapis]:
                 format_zrodla=str(element.get("format_zrodla", "")),
                 moment_dodania=str(element.get("moment_dodania", "")),
                 grupa=_opcjonalny_tekst(element.get("grupa")),
+                wymus_nuty=bool(element.get("wymus_nuty", False)),
             )
         )
     return wynik

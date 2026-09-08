@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 from gnb import cli
+from gnb.cli import NARZEDZIA, Narzedzie, _sprawdz_narzedzie
 
 
 def _uruchom_diagnostyke(*dodatkowe: str) -> subprocess.CompletedProcess[str]:
@@ -127,3 +128,58 @@ def test_wymus_kodowanie_utf8_toleruje_nieudane_przelaczenie(
     monkeypatch.setattr(sys, "stderr", _FalszywyStrumien(rzuca=True))
 
     cli._wymus_kodowanie_utf8()
+
+
+def _wpis_musescore() -> Narzedzie:
+    return next(narzedzie for narzedzie in NARZEDZIA if narzedzie.nazwa == "MuseScore")
+
+
+def test_wpis_musescore_nie_obiecuje_konwersji_ani_utraty_funkcji() -> None:
+    """Po wariancie bez renderowania wpis nie może mówić o konwersji ani o utracie funkcji."""
+    wpis = _wpis_musescore()
+    assert "konwersj" not in wpis.do_czego_sluzy.lower()
+    assert "nie jest uruchamiany" in wpis.do_czego_sluzy
+    assert "nic w tej wersji" in wpis.co_przestanie_dzialac
+
+
+def test_wyszukiwarka_musescore_jest_sprawdzana_przed_zmienna_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Gdy narzędzie ma wyszukiwarkę, jej wynik ma pierwszeństwo przed shutil.which."""
+    plik_wyszukiwarki = tmp_path / "MuseScore4.exe"
+    plik_wyszukiwarki.write_bytes(b"")
+
+    monkeypatch.setattr(cli.shutil, "which", lambda _nazwa: str(tmp_path / "z_path.exe"))
+    monkeypatch.setattr(cli, "_znajdz_wersje", lambda *_argumenty: "MuseScore 4.4")
+
+    wpis = Narzedzie(
+        nazwa="MuseScore",
+        polecenia=("mscore",),
+        argument_wersji="--version",
+        do_czego_sluzy="opis",
+        co_przestanie_dzialac="nic",
+        wyszukiwarka=lambda: plik_wyszukiwarki,
+    )
+    wiersz = _sprawdz_narzedzie(wpis)
+
+    assert "MuseScore: JEST" in wiersz
+    assert str(plik_wyszukiwarki) in wiersz
+    assert "z_path.exe" not in wiersz
+
+
+def test_wyszukiwarka_zwracajaca_nic_daje_wiersz_brak_z_uczciwymi_zdaniami(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cli.shutil, "which", lambda _nazwa: None)
+    wpis = Narzedzie(
+        nazwa="MuseScore",
+        polecenia=("mscore",),
+        argument_wersji="--version",
+        do_czego_sluzy="jest wykrywany, ale nie jest uruchamiany",
+        co_przestanie_dzialac="nic w tej wersji",
+        wyszukiwarka=lambda: None,
+    )
+    wiersz = _sprawdz_narzedzie(wpis)
+
+    assert wiersz.startswith("MuseScore: BRAK")
+    assert "przestanie działać konwersja" not in wiersz

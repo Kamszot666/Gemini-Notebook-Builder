@@ -217,8 +217,8 @@ do zmiennej PATH, albo wskaż ścieżkę pliku wykonywalnego kluczem konfiguracj
 — więc wpis „Java” w raporcie diagnostyki dotyczy głównie innych sposobów
 instalacji Audiverisa, na przykład uruchamiania pliku `audiveris.jar` wprost
 poleceniem `java -jar`. Bez Audiverisa pliki PDF i obrazy oznaczone opcją
-`--nuty` są pomijane z czytelnym komunikatem, a reszta aplikacji działa dalej
-bez zmian.
+`--nuty` dostają status źródła „blad” z czytelnym komunikatem, a reszta
+aplikacji działa dalej bez zmian.
 
 ### LibreOffice — pliki ODT
 

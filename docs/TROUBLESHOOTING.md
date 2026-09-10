@@ -474,8 +474,8 @@ powstaje bez tego programu. Powód opisuje sekcja 18d pliku `CLAUDE.md`.
 
 ## 22. Plik nutowy z obrazu albo PDF nie został rozpoznany: brak Audiverisa
 
-Objaw. Plik PDF albo obraz podany z opcją `--nuty` kończy się kontrolowanym
-pominięciem, a nie opisem partytury; raport diagnostyki w wierszu o Audiverisie
+Objaw. Plik PDF albo obraz podany z opcją `--nuty` dostaje status źródła
+„blad” zamiast opisu partytury; raport diagnostyki w wierszu o Audiverisie
 pokazuje „BRAK”.
 
 Przyczyna. W przeciwieństwie do MuseScore, Audiveris jest w tej wersji aplikacji

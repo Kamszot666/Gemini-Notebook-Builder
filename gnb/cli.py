@@ -173,7 +173,8 @@ NARZEDZIA: tuple[Narzedzie, ...] = (
         do_czego_sluzy="rozpoznawanie zapisu nutowego z obrazu i z pliku PDF, opcja --nuty",
         co_przestanie_dzialac=(
             "rozpoznawanie notacji muzycznej z obrazów i plików PDF; materiały takie "
-            "zostaną pominięte z czytelnym komunikatem"
+            "dostaną status źródła „blad” z czytelnym komunikatem, nie zatrzymując "
+            "przetwarzania pozostałych źródeł"
         ),
         wyszukiwarka=lambda: _wyszukaj_audiveris(),
     ),

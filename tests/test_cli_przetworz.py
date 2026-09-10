@@ -223,11 +223,12 @@ def test_przetworz_z_flaga_nuty_kieruje_pdf_do_sciezki_audiverisa(
     środowiskiem programistycznym, w którym jest, ustawienie samej złej ścieżki
     w konfiguracji zostałoby odrzucone już przy jej wczytywaniu, zanim
     przetwarzanie w ogóle by ruszyło. Brak opcjonalnego narzędzia zewnętrznego,
-    tak jak brak FFmpega czy Tesseracta, kończy się statusem źródła „pominiete”,
-    nie „blad” — ogólny dysponent w `gnb/potok.py` traktuje `BrakNarzedzia` jako
-    świadome pominięcie, obok `PominietoZrodlo` i `PrzekroczonoLimit`. Prawdziwe
-    rozpoznanie sprawdzają testy z markerem `wolne`
-    w tests/extractors/test_ekstraktory_nut.py.
+    tak jak brak FFmpega dla nagrania mowy, kończy się statusem źródła
+    „pominiete”, nie „blad” — ogólny dysponent w `gnb/potok.py` traktuje
+    `BrakNarzedzia` jako świadome pominięcie, obok `PominietoZrodlo`
+    i `PrzekroczonoLimit`. Brak Tesseracta przy OCR nie trafia tą drogą:
+    ekstraktor łapie go sam i zamienia na ostrzeżenie. Prawdziwe rozpoznanie
+    sprawdzają testy z markerem `wolne` w tests/extractors/test_ekstraktory_nut.py.
     """
     monkeypatch.setenv("GNB_KATALOG_WYNIKOW", str(tmp_path))
     monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))

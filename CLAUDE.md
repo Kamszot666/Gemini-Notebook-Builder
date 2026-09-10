@@ -426,7 +426,7 @@ Realizuj etapami. Nie zaczynaj kolejnego, zanim poprzedni nie ma testów i nie d
 9. Etap siódmy: dostępny interfejs WWW z postępem, wznowieniem, polem instrukcji systemowej i polem promptu wyszukiwania.
 10. Etap ósmy: obrazy, OCR, PDF skanowany, tematyczne PDF z opisami.
 11. Etap dziewiąty: audio, wykrywanie mowy, transkrypcja nagrań mowy, odrzucanie materiału muzycznego.
-12. Etap dziesiąty: materiały nutowe, czyli MIDI, MusicXML, Guitar Pro oraz nuty w PDF i obrazach wraz z opisem tekstowym. Etap dzieli się na dwa pull requesty: część A obejmuje formaty natywne, czyli MIDI, MusicXML wraz z kontenerem MXL i Guitar Pro gp3, gp4 i gp5, oraz wykrywanie MuseScore; część B dodaje rozpoznawanie zapisu nutowego z obrazu i PDF przez Audiveris.
+12. Etap dziesiąty: materiały nutowe, czyli MIDI, MusicXML, Guitar Pro oraz nuty w PDF i obrazach wraz z opisem tekstowym. Etap dzieli się na dwa pull requesty: część A obejmuje formaty natywne, czyli MIDI, MusicXML wraz z kontenerem MXL i Guitar Pro gp3, gp4 i gp5, oraz wykrywanie MuseScore; część B dodaje rozpoznawanie zapisu nutowego z obrazu i PDF przez Audiveris. Ukończony, scalony pull requestami 25 (część A, wraz z poprawkami 26 i 27) i 28 (część B).
 13. Etap jedenasty: globalny skrót Control plus Shift plus F12 jako moduł opcjonalny.
 14. Etap dwunasty: pełny test end-to-end, uzupełnienie dokumentacji, raport końcowy.
 

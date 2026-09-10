@@ -124,6 +124,12 @@ DOMYSLNA_SCIEZKA_TESSDATA = ""
 # 18d CLAUDE.md.
 DOMYSLNA_SCIEZKA_MUSESCORE = ""
 
+# Ścieżka pliku wykonywalnego Audiverisa. Wartość pusta oznacza automatyczne
+# odnalezienie w zmiennej PATH i w znanych miejscach instalacji. Audiveris
+# rozpoznaje zapis nutowy z obrazu i z pliku PDF w drugiej części etapu
+# dziesiątego, patrz gnb/music/audiveris.py.
+DOMYSLNA_SCIEZKA_AUDIVERIS = ""
+
 # Ustawienia transkrypcji nagrań mowy, czyli etapu dziewiątego. Biblioteką jest
 # faster-whisper na silniku CTranslate2. Transkrypcja działa wyłącznie na
 # procesorze: aktualna macierz zgodności ROCm dla Windows nie wymienia grafiki
@@ -238,6 +244,7 @@ _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
     PREFIKS_ZMIENNYCH + "SCIEZKA_TESSERACT": "sciezka_tesseract",
     PREFIKS_ZMIENNYCH + "SCIEZKA_TESSDATA": "sciezka_tessdata",
     PREFIKS_ZMIENNYCH + "SCIEZKA_MUSESCORE": "sciezka_musescore",
+    PREFIKS_ZMIENNYCH + "SCIEZKA_AUDIVERIS": "sciezka_audiveris",
     PREFIKS_ZMIENNYCH + "TRANSKRYPCJA_WLACZONA": "transkrypcja_wlaczona",
     PREFIKS_ZMIENNYCH + "TRANSKRYPCJA_MODEL": "transkrypcja_model",
     PREFIKS_ZMIENNYCH + "TRANSKRYPCJA_JEZYK": "transkrypcja_jezyk",
@@ -324,6 +331,7 @@ class Konfiguracja:
     sciezka_tesseract: str = DOMYSLNA_SCIEZKA_TESSERACT
     sciezka_tessdata: str = DOMYSLNA_SCIEZKA_TESSDATA
     sciezka_musescore: str = DOMYSLNA_SCIEZKA_MUSESCORE
+    sciezka_audiveris: str = DOMYSLNA_SCIEZKA_AUDIVERIS
     transkrypcja_wlaczona: bool = DOMYSLNA_TRANSKRYPCJA_WLACZONA
     transkrypcja_model: str = DOMYSLNY_TRANSKRYPCJA_MODEL
     transkrypcja_jezyk: str = DOMYSLNY_TRANSKRYPCJA_JEZYK
@@ -485,6 +493,9 @@ def wczytaj_konfiguracje(
         ),
         sciezka_musescore=_jako_sciezka_pliku(
             scalone, "sciezka_musescore", domyslna.sciezka_musescore
+        ),
+        sciezka_audiveris=_jako_sciezka_pliku(
+            scalone, "sciezka_audiveris", domyslna.sciezka_audiveris
         ),
         transkrypcja_wlaczona=_jako_prawda_falsz(
             scalone, "transkrypcja_wlaczona", domyslna.transkrypcja_wlaczona

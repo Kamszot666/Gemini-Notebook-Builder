@@ -7,7 +7,8 @@ lokalnych w formacie TXT, MD, HTML, CSV, SRT, VTT, PDF, DOCX, EPUB, obrazów,
 nagrań mowy, materiałów nutowych MIDI, MusicXML, MXL i Guitar Pro gp3, gp4
 i gp5, adresów stron internetowych oraz adresów filmów z serwisu YouTube,
 dla których pobierane są napisy. Opcja ``--nuty`` kieruje pliki PDF i obrazy
-danego wywołania do ścieżki materiałów nutowych. Polecenie ``pamiec`` pokazuje
+danego wywołania do ścieżki materiałów nutowych, gdzie zapis nutowy jest
+rozpoznawany optycznie programem Audiveris. Polecenie ``pamiec`` pokazuje
 stan wspólnej pamięci podręcznej pobranych stron i pozwala ją wyczyścić.
 
 Przed pobraniem czegokolwiek polecenie ``przetworz`` wypisuje podsumowanie listy
@@ -152,8 +153,29 @@ NARZEDZIA: tuple[Narzedzie, ...] = (
         nazwa="Java",
         polecenia=("java",),
         argument_wersji="-version",
-        do_czego_sluzy="uruchamianie Audiveris, czyli rozpoznawania nut ze skanów i zdjęć",
-        co_przestanie_dzialac="rozpoznawanie notacji muzycznej z obrazów i plików PDF",
+        do_czego_sluzy=(
+            "bywa potrzebna do uruchomienia Audiverisa; instalator Audiverisa dla "
+            "Windows niesie własne, samodzielne środowisko Java i systemowej Javy "
+            "w ogóle nie używa — sprawdzone uruchomieniem — więc ten wiersz dotyczy "
+            "głównie innych sposobów instalacji, na przykład uruchamiania pliku "
+            "audiveris.jar wprost poleceniem „java -jar”"
+        ),
+        co_przestanie_dzialac=(
+            "nic w tej instalacji Audiverisa dla Windows; przy innym sposobie "
+            "instalacji, niekorzystającym z własnego środowiska Java — "
+            "rozpoznawanie notacji muzycznej z obrazów i plików PDF"
+        ),
+    ),
+    Narzedzie(
+        nazwa="Audiveris",
+        polecenia=("audiveris", "Audiveris.exe"),
+        argument_wersji="-version",
+        do_czego_sluzy="rozpoznawanie zapisu nutowego z obrazu i z pliku PDF, opcja --nuty",
+        co_przestanie_dzialac=(
+            "rozpoznawanie notacji muzycznej z obrazów i plików PDF; materiały takie "
+            "zostaną pominięte z czytelnym komunikatem"
+        ),
+        wyszukiwarka=lambda: _wyszukaj_audiveris(),
     ),
 )
 
@@ -174,6 +196,12 @@ def _znajdz_wersje(sciezka_programu: str, argument: str) -> str | None:
     Niektóre narzędzia, na przykład Java, wypisują wersję na standardowe
     wyjście błędu zamiast na standardowe wyjście, dlatego sprawdzane jest
     jedno i drugie.
+
+    Zwracany jest pierwszy wiersz zawierający choć jedną cyfrę, a nie zawsze
+    dosłownie pierwszy wiersz wyjścia: dla FFmpega, Tesseracta, LibreOffice,
+    Javy i MuseScore to i tak ten sam wiersz, bo numer wersji jest w nim od
+    razu, ale Audiveris na pierwszym wierszu wypisuje samą nazwę programu bez
+    numeru wersji — sprawdzone uruchomieniem — a numer dopiero w kolejnym.
     """
 
     try:
@@ -187,10 +215,13 @@ def _znajdz_wersje(sciezka_programu: str, argument: str) -> str | None:
     except (OSError, subprocess.TimeoutExpired):
         return None
 
-    tekst = (wynik.stdout or wynik.stderr).strip()
-    if not tekst:
+    wiersze = [wiersz for wiersz in (wynik.stdout or wynik.stderr).splitlines() if wiersz.strip()]
+    if not wiersze:
         return None
-    return tekst.splitlines()[0]
+    wiersz_z_cyfra = next(
+        (wiersz.strip() for wiersz in wiersze if any(znak.isdigit() for znak in wiersz)), None
+    )
+    return wiersz_z_cyfra if wiersz_z_cyfra is not None else wiersze[0]
 
 
 def _sprawdz_narzedzie(narzedzie: Narzedzie) -> str:
@@ -237,6 +268,27 @@ def _wyszukaj_musescore() -> Path | None:
         sciezka_wskazana = ""
     try:
         return znajdz_musescore(sciezka_wskazana)
+    except BladGnb:
+        return None
+
+
+def _wyszukaj_audiveris() -> Path | None:
+    """Odnajduje Audiverisa z uwzględnieniem ścieżki wskazanej w konfiguracji.
+
+    W przeciwieństwie do MuseScore, Audiveris jest w tej wersji aplikacji
+    naprawdę uruchamiany, przez `gnb.extractors.plik_nuty_skanowane`. Ta funkcja
+    służy jednak wyłącznie diagnostyce, żeby raport nie pokazywał „BRAK”, gdy
+    program jest zainstalowany poza zmienną PATH. Błąd wczytania konfiguracji
+    nie może wywrócić diagnostyki, więc jest łapany.
+    """
+    from gnb.music.audiveris import znajdz_audiveris
+
+    try:
+        sciezka_wskazana = wczytaj_konfiguracje().sciezka_audiveris
+    except BladGnb:
+        sciezka_wskazana = ""
+    try:
+        return znajdz_audiveris(sciezka_wskazana)
     except BladGnb:
         return None
 

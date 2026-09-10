@@ -134,6 +134,7 @@ def domyslny_rejestr_binarny(
     transkrypcja_wlaczona: bool = False,
     prog_udzialu_mowy: float = 0.5,
     wymus_transkrypcje: bool = False,
+    sciezka_audiveris: str = "",
 ) -> RejestrEkstraktorowBinarnych:
     """Buduje rejestr ekstraktorów formatów binarnych.
 
@@ -146,10 +147,12 @@ def domyslny_rejestr_binarny(
     Ekstraktor obrazów oraz ekstraktor PDF potrzebują ustawień OCR i informacji,
     czy OCR jest w ogóle włączony. Ekstraktor audio potrzebuje ustawień
     transkrypcji, informacji, czy transkrypcja jest włączona, progu udziału mowy
-    oraz flagi wymuszenia transkrypcji dla materiału niemownego. Adaptery nutowe
-    nie potrzebują żadnych ustawień. Wszystkie te wartości pochodzą z konfiguracji
-    projektu i z opcji wiersza poleceń. Gdy nie podano ustawień, OCR i transkrypcja
-    są wyłączone.
+    oraz flagi wymuszenia transkrypcji dla materiału niemownego. Adapter zapisu
+    nutowego z obrazu i PDF potrzebuje ścieżki do programu Audiveris wskazanej
+    w konfiguracji; pusta wartość oznacza szukanie w PATH i w znanych miejscach
+    instalacji. Pozostałe trzy adaptery nutowe nie potrzebują żadnych ustawień.
+    Wszystkie te wartości pochodzą z konfiguracji projektu i z opcji wiersza
+    poleceń. Gdy nie podano ustawień, OCR i transkrypcja są wyłączone.
     """
     from gnb.audio.transkrypcja import UstawieniaTranskrypcji
     from gnb.extractors.plik_audio import EkstraktorAudio
@@ -184,7 +187,7 @@ def domyslny_rejestr_binarny(
             EkstraktorMidi(),
             EkstraktorMusicXml(),
             EkstraktorGuitarPro(),
-            EkstraktorNutSkanowanych(),
+            EkstraktorNutSkanowanych(sciezka_audiveris),
         )
     )
 

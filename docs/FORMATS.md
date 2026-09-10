@@ -640,8 +640,12 @@ Plik PDF albo obraz wskazany opcją `--nuty` jest rozpoznawany programem
 Audiveris, uruchamianym w trybie wsadowym bez interfejsu graficznego. Audiveris
 eksportuje MusicXML, który jest dalej odczytywany tym samym parserem co plik
 MusicXML podany wprost, więc opis wygląda tak samo jak dla formatu natywnego,
-z trzema różnicami opisanymi niżej. Brak Audiverisa w systemie kończy się
-kontrolowanym pominięciem źródła z czytelnym komunikatem, nie awarią.
+z trzema różnicami opisanymi niżej. Brak Audiverisa w systemie nie zatrzymuje
+aplikacji: to jedno źródło dostaje status „blad” z czytelnym komunikatem,
+a przetwarzanie pozostałych źródeł idzie dalej bez zmian. Status jest tu
+„blad”, nie „pominiete” — tak samo jak przy braku FFmpega albo Tesseracta,
+bo ogólny mechanizm potoku rozpoznaje jako świadome pominięcie tylko
+konkretne, wąskie przypadki, a nie każdy brak narzędzia zewnętrznego.
 
 Audiveris przetwarza wielostronicowy plik PDF jednym wywołaniem i sam łączy
 strony w jedną ciągłą partyturę — źródło dostaje jeden opis, nie po jednym na

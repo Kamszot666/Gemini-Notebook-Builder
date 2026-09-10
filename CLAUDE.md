@@ -549,7 +549,7 @@ Sekcje w tej dokładnie kolejności, ponieważ przy obcięciu kontekstu ma przet
 
 Treść kodu czytaj bezpośrednio z repozytorium, nigdy nie odtwarzaj z pamięci rozmowy. Plik niedokończony oznacz jako częściowy i napisz, czego brakuje. Jeżeli decyzja zmieniała się wielokrotnie, pokaż całą sekwencję zmian.
 
-Po wygenerowaniu pliku dopisz zdanie: „Pobierz ten plik i podmień nim poprzedni STAN_PROJEKTU.md w Wiedzy projektu.”
+Po wygenerowaniu pliku dopisz zdanie: „Pobierz ten plik i podmień nim poprzedni STAN_PROJEKTU.md w Wiedzy projektu.” Zdanie to dotyczy wyłącznie Claude Code, który dostępu do Wiedzy projektu nie ma. Jeżeli sesja taki dostęp ma — na przykład rozmowa prowadzona w projekcie Claude albo sesja Cowork podpięta do projektu — zapisz checkpoint wprost do Wiedzy projektu, podmieniając w niej poprzedni plik, i napisz użytkownikowi, że to zrobione, zamiast odsyłać go do ręcznej podmiany.
 
 ## 21. Najważniejsza zasada
 

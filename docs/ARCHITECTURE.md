@@ -101,6 +101,12 @@ ustawia ją opcja `--wymus-transkrypcje`.
 - `gnb/core/model.py` — siedem kontraktów danych z sekcji siódmej `CLAUDE.md`.
 - `gnb/core/stale.py` — wyliczenia używane przez model danych.
 - `gnb/core/wyjatki.py` — taksonomia wyjątków z sekcji siódmej `CLAUDE.md`.
+  Dysponent w `gnb/potok.py` zamienia `PominietoZrodlo`, `PrzekroczonoLimit`
+  oraz `BrakNarzedzia` na status źródła `pominiete`, a pozostałe wyjątki
+  `BladGnb` na status `blad`. Brak opcjonalnego narzędzia albo biblioteki
+  (FFmpeg, Audiveris, `mido`, `PyGuitarPro`) jest więc pominięciem, nie błędem;
+  brak Tesseracta przy OCR obrazu lub skanu PDF jest natomiast obsługiwany
+  wewnątrz ekstraktora jako ostrzeżenie, bez przerywania przetwarzania.
 - `gnb/core/konfiguracja.py` — wczytywanie konfiguracji z wartości domyślnych,
   pliku TOML i zmiennych środowiskowych z prefiksem `GNB_`. Zakres pól opisuje
   `docs/CONFIGURATION.md`.

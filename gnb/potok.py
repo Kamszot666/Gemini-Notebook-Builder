@@ -60,7 +60,13 @@ from gnb.core.nazwy import (
 )
 from gnb.core.postep import FazaPotoku, WywolanieZwrotnePostepu, ZdarzeniePostepu
 from gnb.core.stale import StatusZrodla, TypWejscia, TypZrodla, WynikDeduplikacji
-from gnb.core.wyjatki import BladGnb, BladTrwaly, PominietoZrodlo, PrzekroczonoLimit
+from gnb.core.wyjatki import (
+    BladGnb,
+    BladTrwaly,
+    BrakNarzedzia,
+    PominietoZrodlo,
+    PrzekroczonoLimit,
+)
 from gnb.core.youtube import rozpoznaj
 from gnb.deduplication import UstawieniaDeduplikacji, ZrodloDoDeduplikacji, deduplikuj
 from gnb.deduplication.orkiestrator import WynikDeduplikacjiZbioru
@@ -689,6 +695,21 @@ class _Wykonanie:
             # zakresem, na przykład nagranie muzyczne w module obsługującym
             # wyłącznie mowę. To nie jest błąd — dostaje status pominięcia
             # z komunikatem ekstraktora, tak jak przekroczenie limitu.
+            self._pomin(zrodlo, pozycja, blad.komunikat)
+        except BrakNarzedzia as blad:
+            # Brakuje opcjonalnego narzędzia zewnętrznego albo opcjonalnej
+            # biblioteki wymaganej dla tej ścieżki przetwarzania: FFmpega albo
+            # biblioteki transkrypcji dla nagrania mowy, Audiverisa dla zapisu
+            # nutowego ze skanu, bibliotek z grupy „nuty” dla formatów MIDI
+            # i Guitar Pro. Sekcja piąta punkt siódmy `CLAUDE.md` traktuje taki
+            # brak jako wyłączenie konkretnej ścieżki, a nie awarię, więc źródło
+            # dostaje status „pominiete” z komunikatem mówiącym, czego zabrakło,
+            # tak samo jak przy świadomym pominięciu przez ekstraktor. Brak
+            # Tesseracta przy OCR obrazu albo skanu PDF tu nie trafia: ekstraktor
+            # łapie go sam i zamienia na ostrzeżenie, nie przerywając pracy.
+            # Wskazanie w konfiguracji ścieżki do nieistniejącego pliku narzędzia
+            # to osobny przypadek: kończy się błędem trwałym już przy wczytywaniu
+            # konfiguracji, zanim potok ruszy.
             self._pomin(zrodlo, pozycja, blad.komunikat)
         except PrzekroczonoLimit as blad:
             # Limit słów źródła jest teraz obsługiwany podziałem w fazie pakowania,

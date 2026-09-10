@@ -549,8 +549,9 @@ nagranie muzyczne jest rozpoznawane i pomijane, nigdy transkrybowane.
    przez podproces, dokładnie tak jak Tesseract przy OCR. Ścieżka audio używa
    wyłącznie FFmpega, nie dekodera wbudowanego w bibliotekę transkrypcji, więc
    FFmpeg jest dla nagrań wymagany na każdym systemie. Jego brak nie wywraca
-   aplikacji — nagranie dostaje wtedy status błędu z czytelnym komunikatem,
-   a pozostałe źródła są przetwarzane normalnie.
+   aplikacji — nagranie dostaje wtedy status „pominiete” z czytelnym
+   komunikatem, tak jak przy braku Tesseracta czy Audiverisa, a pozostałe
+   źródła są przetwarzane normalnie.
 2. Pomiar udziału mowy. Filtr wykrywania aktywności mowy Silero, wbudowany
    w bibliotekę transkrypcji, podaje, jaka część długości nagrania to mowa.
 3. Decyzja o odrzuceniu. Nagranie o udziale mowy poniżej progu
@@ -641,11 +642,12 @@ Audiveris, uruchamianym w trybie wsadowym bez interfejsu graficznego. Audiveris
 eksportuje MusicXML, który jest dalej odczytywany tym samym parserem co plik
 MusicXML podany wprost, więc opis wygląda tak samo jak dla formatu natywnego,
 z trzema różnicami opisanymi niżej. Brak Audiverisa w systemie nie zatrzymuje
-aplikacji: to jedno źródło dostaje status „blad” z czytelnym komunikatem,
+aplikacji: to jedno źródło dostaje status „pominiete” z czytelnym komunikatem,
 a przetwarzanie pozostałych źródeł idzie dalej bez zmian. Status jest tu
-„blad”, nie „pominiete” — tak samo jak przy braku FFmpega albo Tesseracta,
-bo ogólny mechanizm potoku rozpoznaje jako świadome pominięcie tylko
-konkretne, wąskie przypadki, a nie każdy brak narzędzia zewnętrznego.
+„pominiete”, nie „blad” — tak samo jak przy braku FFmpega albo Tesseracta,
+bo brak opcjonalnego narzędzia zewnętrznego wyłącza konkretną ścieżkę
+przetwarzania, a nie jest awarią. Powód pominięcia trafia do manifestu i do
+raportu końcowego.
 
 Audiveris przetwarza wielostronicowy plik PDF jednym wywołaniem i sam łączy
 strony w jedną ciągłą partyturę — źródło dostaje jeden opis, nie po jednym na

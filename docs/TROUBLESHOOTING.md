@@ -25,14 +25,14 @@ ozdobników, a polecenia do wpisania są w osobnych blokach.
 13. Skan PDF albo obraz nie został rozpoznany: brak Tesseracta.
 14. OCR rozpoznał polski tekst z błędami: brak danych językowych `pol`.
 15. Tematyczny plik PDF grupy obrazów jest za duży.
-16. Nagranie mowy nie zostało przepisane: brak FFmpega.
+16. Nagranie mowy nie zostało przepisane: brak FFmpega. Źródło ma status „pominiete”.
 17. Pierwsza transkrypcja długo stoi bez znaku życia: pobiera się model.
 18. Nagranie muzyczne trafiło do transkrypcji albo mowa została odrzucona jako
     materiał niemowny.
 19. W logu szczegółowym jest wpis o wstawieniu atrapy modułu „av”.
-20. Plik MIDI albo Guitar Pro dostał status błędu: brak biblioteki z grupy `nuty`.
+20. Plik MIDI albo Guitar Pro dostał status „pominiete”: brak biblioteki z grupy `nuty`.
 21. Raport diagnostyki pokazuje „MuseScore: BRAK”, choć MuseScore jest zainstalowany.
-22. Plik nutowy z obrazu albo PDF nie został rozpoznany: brak Audiverisa.
+22. Plik nutowy z obrazu albo PDF nie został rozpoznany: brak Audiverisa. Źródło ma status „pominiete”.
 
 ## 1. Windows blokuje plik wykonywalny narzędzia deweloperskiego
 
@@ -366,8 +366,9 @@ projektu.
 
 ## 16. Nagranie mowy nie zostało przepisane, bo brakuje FFmpega
 
-Objaw. Nagranie audio w raporcie końcowym ma status błędu z komunikatem, że nie
-znaleziono programu FFmpeg. Pozostałe źródła zostały przetworzone normalnie.
+Objaw. Nagranie audio w raporcie końcowym ma status „pominiete” z komunikatem,
+że nie znaleziono programu FFmpeg. Liczy się jako pominięcie, nie jako błąd.
+Pozostałe źródła zostały przetworzone normalnie.
 
 Przyczyna. Ścieżka audio rozkodowuje każde nagranie programem FFmpeg, wołanym
 przez podproces, zanim trafi ono do transkrypcji. Aplikacja celowo nie korzysta
@@ -377,7 +378,7 @@ wymagany. Aplikacja nie znalazła go w zmiennej PATH.
 Co zrobić. Zainstaluj FFmpeg zgodnie z dokumentem `INSTALL.md` i dopisz go do
 zmiennej PATH. Sprawdź wynik poleceniem `python -m gnb.cli diagnostyka`: wiersz
 „FFmpeg” musi pokazywać wersję i ścieżkę. Potem przetwórz nagranie pod nową
-nazwą projektu, bo źródło z błędem ma już status końcowy.
+nazwą projektu, bo źródło pominięte ma już status końcowy i nie jest ponawiane.
 
 ## 17. Pierwsza transkrypcja długo stoi bez znaku życia
 
@@ -432,10 +433,12 @@ Co zrobić. Nic. To jest informacja, a nie błąd — transkrypcja działa norma
 Wpis istnieje po to, żeby dało się prześledzić, dlaczego na tym komputerze
 biblioteka jest ładowana inną drogą niż na maszynie bez tej blokady.
 
-## 20. Plik MIDI albo Guitar Pro dostał status błędu: brak biblioteki z grupy `nuty`
+## 20. Plik MIDI albo Guitar Pro dostał status „pominiete”: brak biblioteki z grupy `nuty`
 
-Objaw. Plik `mid`, `midi`, `gp3`, `gp4` albo `gp5` dostał status „blad”
-z komunikatem, że nie znaleziono biblioteki `mido` albo `PyGuitarPro`.
+Objaw. Plik `mid`, `midi`, `gp3`, `gp4` albo `gp5` dostał status „pominiete”
+z komunikatem, że nie znaleziono biblioteki `mido` albo `PyGuitarPro`. Liczy się
+jako pominięcie, nie jako błąd, bo brak opcjonalnej biblioteki wyłącza tę ścieżkę
+przetwarzania, a nie jest awarią.
 
 Przyczyna. Odczyt formatów natywnych MIDI i Guitar Pro wymaga bibliotek z grupy
 zależności opcjonalnej `nuty`. Domyślna instalacja `gnb` ich nie zawiera, bo
@@ -475,8 +478,9 @@ powstaje bez tego programu. Powód opisuje sekcja 18d pliku `CLAUDE.md`.
 ## 22. Plik nutowy z obrazu albo PDF nie został rozpoznany: brak Audiverisa
 
 Objaw. Plik PDF albo obraz podany z opcją `--nuty` dostaje status źródła
-„blad” zamiast opisu partytury; raport diagnostyki w wierszu o Audiverisie
-pokazuje „BRAK”.
+„pominiete” zamiast opisu partytury; raport diagnostyki w wierszu o Audiverisie
+pokazuje „BRAK”. Liczy się jako pominięcie, nie jako błąd, tak samo jak brak
+FFmpega czy biblioteki z grupy `nuty`.
 
 Przyczyna. W przeciwieństwie do MuseScore, Audiveris jest w tej wersji aplikacji
 naprawdę uruchamiany — jego brak wprost blokuje rozpoznawanie notacji z obrazu

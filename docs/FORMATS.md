@@ -1,8 +1,7 @@
-# Obsługiwane formaty — stan po etapie dziesiątym, część A
+# Obsługiwane formaty — stan po etapie dziesiątym, część B
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
-Kolejne formaty, czyli ODT i PPTX oraz rozpoznawanie zapisu nutowego z obrazu
-i pliku PDF przez program Audiveris, dojdą w etapach opisanych w sekcji
+Kolejne formaty, czyli ODT i PPTX, dojdą w etapach opisanych w sekcji
 osiemnastej pliku `CLAUDE.md`.
 
 ## Wejście
@@ -23,13 +22,16 @@ Obsługiwane są następujące rodzaje wejścia:
 6. Materiał nutowy w formacie natywnym: MIDI (`mid`, `midi`), MusicXML
    (`musicxml`), skompresowany kontener MusicXML (`mxl`) albo Guitar Pro
    w wersjach `gp3`, `gp4` i `gp5`. Obsługę opisuje sekcja „Materiały nutowe”.
-7. Adres strony internetowej, podany pojedynczo albo listą.
-8. Adres filmu z serwisu YouTube, dla którego pobierane są napisy.
+7. Zapis nutowy jako obraz albo plik PDF, wskazany opcją `--nuty`, rozpoznawany
+   optycznie programem Audiveris. Obsługę opisuje ta sama sekcja „Materiały
+   nutowe”.
+8. Adres strony internetowej, podany pojedynczo albo listą.
+9. Adres filmu z serwisu YouTube, dla którego pobierane są napisy.
 
 Opcja `--nuty` polecenia `przetworz` kieruje pliki PDF i obrazy danego wywołania
-do ścieżki materiałów nutowych. Do czasu wdrożenia programu Audiveris w drugiej
-części etapu dziesiątego takie pliki kończą się kontrolowanym pominięciem
-z czytelnym komunikatem.
+do ścieżki materiałów nutowych, gdzie zapis nutowy jest rozpoznawany optycznie
+programem Audiveris. Bez tej opcji te same pliki idą ścieżką zwykłego obrazu
+albo zwykłego PDF.
 
 Plik w innym formacie kończy się kontrolowanym błędem `FormatNieobslugiwany`.
 Nie zatrzymuje to przetwarzania pozostałych źródeł.
@@ -507,10 +509,9 @@ Obraz zapisu nutowego, czyli nuty albo tabulatura jako grafika, bez opcji
 `--nuty` przechodzi tym samym zwykłym OCR tekstowym co każdy inny obraz. Na
 zapisie nutowym daje on wynik bez sensu, więc taki obraz dostaje ocenę OCR
 „podejrzana” i trafia do sekcji „Materiały do sprawdzenia”. Z opcją `--nuty`
-plik PDF albo obraz jest kierowany do ścieżki materiałów nutowych, gdzie
-w części A etapu dziesiątego kończy się kontrolowanym pominięciem z komunikatem
-o programie Audiveris. Samo rozpoznawanie notacji z obrazu, przez Audiveris
-produkujące MusicXML, dochodzi w drugiej części etapu dziesiątego. Aplikacja
+plik PDF albo obraz jest kierowany do ścieżki materiałów nutowych, gdzie zapis
+nutowy jest rozpoznawany optycznie programem Audiveris — patrz sekcja
+„Materiały nutowe”, podsekcja „Rozpoznawanie optyczne z obrazu i PDF”. Aplikacja
 celowo nie próbuje sama wykryć, że obraz jest nutami: fałszywa etykieta „to są
 nuty” byłaby gorsza niż jej brak.
 
@@ -609,9 +610,7 @@ odczytać: tytuł, tonację, metrum, tempo, liczbę taktów, instrumenty i struk
 części. Pola nieznane są pomijane, a nie zapisywane wartością zastępczą. Struktura
 takiego opisu jest zawsze na poziomie niskim, więc dla materiału nutowego nigdy
 nie powstaje wersja Markdown. Dla formatu natywnego nie zapisujemy zbiorczej
-oceny pewności odczytu — pojedyncze fakty niosą własną uczciwość. Pole poziomu
-pewności rozpoznania jest zarezerwowane dla wartości zwracanej przez program
-Audiveris w części B.
+oceny pewności odczytu — pojedyncze fakty niosą własną uczciwość.
 
 Liczba taktów z MusicXML i Guitar Pro jest dokładna, bo pochodzi wprost ze
 znaczników taktów. Liczba taktów z MIDI jest zawsze przybliżona, bo format MIDI
@@ -634,6 +633,52 @@ pliku `CLAUDE.md`.
 Materiały nutowe nie podlegają grupowaniu tematycznemu: każdy dostaje osobny
 plik wynikowy TXT, także wtedy, gdy podano opcję `--grupa`. Zignorowanie tej
 opcji dla plików nutowych jest odnotowywane jednym zdaniem w raporcie końcowym.
+
+### Rozpoznawanie optyczne z obrazu i PDF
+
+Plik PDF albo obraz wskazany opcją `--nuty` jest rozpoznawany programem
+Audiveris, uruchamianym w trybie wsadowym bez interfejsu graficznego. Audiveris
+eksportuje MusicXML, który jest dalej odczytywany tym samym parserem co plik
+MusicXML podany wprost, więc opis wygląda tak samo jak dla formatu natywnego,
+z trzema różnicami opisanymi niżej. Brak Audiverisa w systemie kończy się
+kontrolowanym pominięciem źródła z czytelnym komunikatem, nie awarią.
+
+Audiveris przetwarza wielostronicowy plik PDF jednym wywołaniem i sam łączy
+strony w jedną ciągłą partyturę — źródło dostaje jeden opis, nie po jednym na
+stronę, a liczba taktów jest już sumą ze wszystkich stron. Limit czasu jest
+liczony na stronę, nie na cały plik (trzydzieści minut na stronę, stała w
+kodzie), więc wielostronicowy skan nie zostaje przerwany w połowie legalnej
+pracy. Postęp jest ogłaszany strona po stronie, tym samym mechanizmem co OCR
+skanu PDF.
+
+Audiveris nie zwraca żadnej publicznej wartości pewności rozpoznania — ani przez
+wiersz poleceń, ani w wyeksportowanym MusicXML. Zamiast zbiorczej oceny, opis
+materiału rozpoznanego optycznie dostaje trzy rzeczy, których formaty natywne
+nie mają:
+
+1. Jawne oznaczenie pochodzenia w wierszu „Format źródłowy”, na przykład „PDF ze
+   skanem nut (rozpoznanie optyczne, Audiveris)”, oraz w metadanych manifestu
+   pod tym samym kluczem `nuty_format`, który dla formatów natywnych niesie
+   samą nazwę formatu.
+2. Policzalne sygnały kontrolne wyprowadzone z wyniku: brak rozpoznanej
+   tonacji, brak metrum, brak jakiegokolwiek taktu oraz takt bez żadnej
+   rozpoznanej treści (nuty, pauzy ani wypełnienia). Każdy taki sygnał trafia
+   do ostrzeżeń, a stąd do manifestu i do raportu.
+3. Stałe ostrzeżenie obecne zawsze, niezależnie od powyższych sygnałów, które
+   kieruje źródło bezwarunkowo do sekcji raportu „Materiały do sprawdzenia” —
+   rozpoznanie optyczne notacji jest z natury mniej pewne niż odczyt formatu
+   natywnego, więc każdy taki wynik zasługuje na sprawdzenie, nawet bez
+   żadnego wykrytego sygnału problemu.
+
+MusicXML wyeksportowany przez Audiverisa jest zachowywany w katalogu wyników
+pośrednich projektu jako materiał audytowy — pozwala sprawdzić, co dokładnie
+program rozpoznał, bez ponownego, wielominutowego uruchamiania go. Własny plik
+projektu Audiverisa (`.omr`) nie jest nigdzie w aplikacji odczytywany i znika
+razem z całym katalogiem roboczym po zakończeniu rozpoznawania.
+
+Pole ścieżki `sciezka_audiveris` w konfiguracji działa tak samo jak
+`sciezka_musescore` i `sciezka_tesseract`: pusta wartość oznacza szukanie
+w zmiennej PATH i w znanych miejscach instalacji na Windows.
 
 ## Czym różni się wersja TXT od wersji MD
 

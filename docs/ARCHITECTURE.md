@@ -445,13 +445,23 @@ ekstrakcji.
 - `gnb/music/musescore.py` — odnajdywanie pliku wykonywalnego MuseScore wzorem
   `gnb/images/tesseract.py`. MuseScore nie jest uruchamiany; moduł służy tylko
   diagnostyce.
+- `gnb/music/audiveris.py` — odnajdywanie pliku wykonywalnego Audiverisa, tym
+  samym wzorem. W przeciwieństwie do MuseScore Audiveris jest naprawdę
+  uruchamiany, przez adapter opisany niżej.
 
 Cztery adaptery w `gnb/extractors/` — `plik_midi.py`, `plik_musicxml.py`,
 `plik_guitarpro.py`, `plik_nuty_skanowane.py` — bramkują się na typie źródła
 `PLIK_NUTY` i swoim zbiorze formatów. Dyspozytorem jest `RejestrEkstraktorowBinarnych`.
-Adapter zapisu skanowanego w części A etapu dziesiątego zawsze zgłasza
-`PominietoZrodlo` z komunikatem o Audiverisie; w części B staje się adapterem
-Audiverisa.
+Adapter zapisu skanowanego, `plik_nuty_skanowane.py`, uruchamia Audiverisa
+w trybie wsadowym w katalogu tymczasowym, a wyeksportowany przez niego MusicXML
+przepuszcza przez ten sam parser co plik MusicXML podany wprost — granica
+między częścią A a częścią B etapu dziesiątego wypadła dokładnie na tym pliku,
+zgodnie z planem. Limit czasu jest liczony na stronę, nie na cały plik, bo
+Audiveris przetwarza wielostronicowy PDF jednym wywołaniem i sam łączy strony
+w jedną ciągłą partyturę. Postęp strona po stronie jest wykrywany odczytem
+rosnącego pliku dziennika Audiverisa w trakcie jego pracy, nie przez parsowanie
+strumienia na żywo. Szczegóły, w tym trzy różnice opisu wobec formatów
+natywnych, opisuje `docs/FORMATS.md`, sekcja „Materiały nutowe”.
 
 ## Pozostałe pakiety
 

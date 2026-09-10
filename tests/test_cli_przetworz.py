@@ -222,11 +222,11 @@ def test_przetworz_z_flaga_nuty_kieruje_pdf_do_sciezki_audiverisa(
     testy Audiveris jest zainstalowany — bez tego mieszania się z prawdziwym
     środowiskiem programistycznym, w którym jest, ustawienie samej złej ścieżki
     w konfiguracji zostałoby odrzucone już przy jej wczytywaniu, zanim
-    przetwarzanie w ogóle by ruszyło. Brak zewnętrznego narzędzia, tak jak brak
-    FFmpega czy Tesseracta, kończy się statusem źródła „blad”, nie „pominiete” —
-    ogólny dysponent w `gnb/potok.py` rozpoznaje tylko `PominietoZrodlo`
-    i `PrzekroczonoLimit` jako pominięcie, a `BrakNarzedzia` jest zwykłym
-    `BladGnb`. Prawdziwe rozpoznanie sprawdzają testy z markerem `wolne`
+    przetwarzanie w ogóle by ruszyło. Brak opcjonalnego narzędzia zewnętrznego,
+    tak jak brak FFmpega czy Tesseracta, kończy się statusem źródła „pominiete”,
+    nie „blad” — ogólny dysponent w `gnb/potok.py` traktuje `BrakNarzedzia` jako
+    świadome pominięcie, obok `PominietoZrodlo` i `PrzekroczonoLimit`. Prawdziwe
+    rozpoznanie sprawdzają testy z markerem `wolne`
     w tests/extractors/test_ekstraktory_nut.py.
     """
     monkeypatch.setenv("GNB_KATALOG_WYNIKOW", str(tmp_path))
@@ -244,4 +244,5 @@ def test_przetworz_z_flaga_nuty_kieruje_pdf_do_sciezki_audiverisa(
     capsys.readouterr()
     raport = (tmp_path / "Skan nut CLI" / "raport.txt").read_text(encoding="utf-8")
     assert "Audiveris" in raport
-    assert "Liczba źródeł z błędem: 1" in raport
+    assert "Liczba źródeł pominiętych: 1" in raport
+    assert "Liczba źródeł z błędem: 0" in raport

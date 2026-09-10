@@ -31,7 +31,20 @@ class FormatNieobslugiwany(BladGnb):
 
 
 class BrakNarzedzia(BladGnb):
-    """Brakuje zewnętrznego programu wymaganego do przetworzenia źródła, na przykład FFmpeg."""
+    """Brakuje zewnętrznego programu albo opcjonalnej biblioteki dla danej ścieżki.
+
+    Dotyczy braku narzędzia takiego jak FFmpeg, Tesseract czy Audiveris, a także
+    braku opcjonalnej biblioteki, na przykład pakietu z grupy „nuty” albo samej
+    biblioteki transkrypcji. Zgodnie z sekcją piątą punkt siódmy `CLAUDE.md` taki
+    brak wyłącza konkretną ścieżkę przetwarzania i nie jest awarią, więc gdy
+    wyjątek dojdzie do dysponenta potoku, źródło dostaje status „pominiete”, tak
+    samo jak przy `PominietoZrodlo`, a komunikat trafia do manifestu i raportu
+    końcowego. Część ekstraktorów łapie ten wyjątek wcześniej i zamienia go na
+    ostrzeżenie — tak robi ekstraktor obrazu i skanu PDF przy braku Tesseracta,
+    żeby opis obrazu powstał mimo braku OCR. Wskazanie w konfiguracji ścieżki do
+    nieistniejącego pliku narzędzia jest osobnym przypadkiem: kończy się błędem
+    trwałym już przy wczytywaniu konfiguracji.
+    """
 
 
 class PrzekroczonoLimit(BladGnb):

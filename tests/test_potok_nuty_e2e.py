@@ -99,18 +99,23 @@ def test_dwa_materialy_nutowe_w_grupie_daja_osobne_pliki_i_zdanie_w_raporcie(
     assert "Materiały nutowe (2) nie podlegają grupowaniu" in raport
 
 
-def test_skan_nut_z_flaga_nuty_dostaje_blad_gdy_brak_audiverisa(
+def test_skan_nut_z_flaga_nuty_dostaje_pominiecie_gdy_brak_audiverisa(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Sprawdza samo routowanie `--nuty` przez cały potok, bez prawdziwego Audiverisa.
 
     Wykrywanie Audiverisa jest wymuszone na „nie znaleziono”, więc test jest
     szybki i deterministyczny niezależnie od tego, czy na maszynie uruchamiającej
-    testy Audiveris jest zainstalowany. Brak zewnętrznego narzędzia, tak jak brak
-    FFmpega czy Tesseracta, kończy się statusem źródła „blad”, nie „pominiete” —
-    ogólny dysponent w `gnb/potok.py` rozpoznaje tylko `PominietoZrodlo`
-    i `PrzekroczonoLimit` jako pominięcie, a `BrakNarzedzia` jest zwykłym
-    `BladGnb`. Prawdziwe rozpoznanie sprawdza test poniżej, z markerem `wolne`.
+    testy Audiveris jest zainstalowany. Brak opcjonalnego narzędzia zewnętrznego,
+    tak jak brak FFmpega czy Tesseracta, kończy się statusem źródła „pominiete”,
+    nie „blad” — ogólny dysponent w `gnb/potok.py` traktuje `BrakNarzedzia` jako
+    świadome pominięcie, obok `PominietoZrodlo` i `PrzekroczonoLimit`, bo brak
+    narzędzia opcjonalnego wyłącza konkretną ścieżkę, a nie jest awarią.
+    Prawdziwe rozpoznanie sprawdza test poniżej, z markerem `wolne`.
+
+    Test czerwieni się na dwa sposoby: gdy `BrakNarzedzia` znów zaczyna dawać
+    status „blad” oraz gdy `--nuty` przestaje kierować obraz do ścieżki
+    Audiverisa (wtedy w raporcie nie ma słowa „Audiveris”).
     """
     monkeypatch.setattr(shutil, "which", lambda _nazwa: None)
     monkeypatch.delenv("PROGRAMFILES", raising=False)
@@ -124,10 +129,10 @@ def test_skan_nut_z_flaga_nuty_dostaje_blad_gdy_brak_audiverisa(
         zegar=_zegar_krokowy(),
     )
 
-    assert wynik.liczba_pominietych == 0
-    assert wynik.liczba_bledow == 1
+    assert wynik.liczba_bledow == 0
+    assert wynik.liczba_pominietych == 1
     manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
-    assert manifest["zrodla"][0]["status"] == "blad"
+    assert manifest["zrodla"][0]["status"] == "pominiete"
     raport = wynik.sciezka_raportu.read_text(encoding="utf-8")
     assert "Audiveris" in raport
 

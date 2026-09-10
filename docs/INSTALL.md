@@ -85,7 +85,7 @@ pip install -e ".[audio]"
 ```
 
 Bez tej biblioteki wszystkie pozostałe formaty działają normalnie, a nagranie
-audio dostaje status błędu z czytelnym komunikatem.
+audio dostaje status „pominiete” z czytelnym komunikatem.
 
 Odczyt materiałów nutowych w formatach natywnych, czyli MIDI i Guitar Pro,
 wymaga bibliotek `mido` i `PyGuitarPro`, zebranych w grupie opcjonalnej `nuty`.
@@ -101,8 +101,8 @@ Guitar Pro jest zależnością opcjonalną, a nie podstawową: domyślna instala
 `gnb` zostaje wyłącznie na licencjach permisywnych, a użytkownik dobiera grupę
 `nuty` świadomie. Plik `tests/dane/LICENCJA_PyGuitarPro.txt` dotyczy pochodzenia
 plików testowych, a nie samej biblioteki. Bez grupy `nuty` pliki MIDI i Guitar
-Pro dostają status błędu z czytelnym komunikatem, a MusicXML działa zawsze, bo
-jest czytany biblioteką standardową.
+Pro dostają status „pominiete” z czytelnym komunikatem, a MusicXML działa
+zawsze, bo jest czytany biblioteką standardową.
 
 ## 5. Sprawdzenie środowiska
 
@@ -166,8 +166,9 @@ Po instalacji uruchom nową sesję programu PowerShell, żeby zmiana zmiennej PA
 weszła w życie, i sprawdź wynik: wiersz „FFmpeg” w raporcie `python -m gnb.cli
 diagnostyka` musi pokazywać wersję i ścieżkę.
 
-Brak FFmpega nie wywraca aplikacji — nagranie audio dostaje wtedy status błędu
-z czytelnym komunikatem, a pozostałe formaty źródeł są przetwarzane normalnie.
+Brak FFmpega nie wywraca aplikacji — nagranie audio dostaje wtedy status
+„pominiete” z czytelnym komunikatem, a pozostałe formaty źródeł są przetwarzane
+normalnie.
 
 #### Model transkrypcji Whisper — pobiera się sam przy pierwszym uruchomieniu
 
@@ -217,7 +218,7 @@ do zmiennej PATH, albo wskaż ścieżkę pliku wykonywalnego kluczem konfiguracj
 — więc wpis „Java” w raporcie diagnostyki dotyczy głównie innych sposobów
 instalacji Audiverisa, na przykład uruchamiania pliku `audiveris.jar` wprost
 poleceniem `java -jar`. Bez Audiverisa pliki PDF i obrazy oznaczone opcją
-`--nuty` dostają status źródła „blad” z czytelnym komunikatem, a reszta
+`--nuty` dostają status źródła „pominiete” z czytelnym komunikatem, a reszta
 aplikacji działa dalej bez zmian.
 
 ### LibreOffice — pliki ODT

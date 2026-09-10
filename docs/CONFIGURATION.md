@@ -237,7 +237,8 @@ Odczyt formatów natywnych, czyli MIDI, MusicXML, MXL i Guitar Pro, nie ma
    rozpoznawania zapisu nutowego z obrazu i z pliku PDF wskazanego opcją
    `--nuty` — patrz `docs/FORMATS.md`, sekcja „Materiały nutowe”. Wskazanie
    nieistniejącego pliku jest błędem konfiguracji; brak Audiverisa w ogóle
-   nie jest błędem konfiguracji, tylko statusem „blad” pojedynczego źródła.
+   nie jest błędem konfiguracji, tylko statusem „pominiete” pojedynczego
+   źródła, tak samo jak brak FFmpega albo Tesseracta.
    Limit czasu rozpoznawania (trzydzieści minut na stronę) jest stałą w
    kodzie, wzorem limitów Tesseracta i FFmpega, a nie polem konfiguracji.
 

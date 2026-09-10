@@ -550,7 +550,7 @@ nagranie muzyczne jest rozpoznawane i pomijane, nigdy transkrybowane.
    wyłącznie FFmpega, nie dekodera wbudowanego w bibliotekę transkrypcji, więc
    FFmpeg jest dla nagrań wymagany na każdym systemie. Jego brak nie wywraca
    aplikacji — nagranie dostaje wtedy status „pominiete” z czytelnym
-   komunikatem, tak jak przy braku Tesseracta czy Audiverisa, a pozostałe
+   komunikatem, tak jak przy braku Audiverisa dla skanu nut, a pozostałe
    źródła są przetwarzane normalnie.
 2. Pomiar udziału mowy. Filtr wykrywania aktywności mowy Silero, wbudowany
    w bibliotekę transkrypcji, podaje, jaka część długości nagrania to mowa.
@@ -644,10 +644,12 @@ MusicXML podany wprost, więc opis wygląda tak samo jak dla formatu natywnego,
 z trzema różnicami opisanymi niżej. Brak Audiverisa w systemie nie zatrzymuje
 aplikacji: to jedno źródło dostaje status „pominiete” z czytelnym komunikatem,
 a przetwarzanie pozostałych źródeł idzie dalej bez zmian. Status jest tu
-„pominiete”, nie „blad” — tak samo jak przy braku FFmpega albo Tesseracta,
+„pominiete”, nie „blad” — tak samo jak przy braku FFmpega dla nagrania mowy —
 bo brak opcjonalnego narzędzia zewnętrznego wyłącza konkretną ścieżkę
-przetwarzania, a nie jest awarią. Powód pominięcia trafia do manifestu i do
-raportu końcowego.
+przetwarzania, a nie jest awarią. Brak Tesseracta przy OCR to osobny przypadek:
+skan zostaje zapisany bez rozpoznanego tekstu, z ostrzeżeniem, a nie pominięty.
+Pominięte źródło nie tworzy pliku wynikowego, więc nie zajmuje slotu notatnika,
+a powód pominięcia trafia do manifestu i do raportu końcowego.
 
 Audiveris przetwarza wielostronicowy plik PDF jednym wywołaniem i sam łączy
 strony w jedną ciągłą partyturę — źródło dostaje jeden opis, nie po jednym na
@@ -837,6 +839,11 @@ materiałów źródłowych. Jedno źródło podzielone na trzy części zajmuje 
 a plik grupy łączący pięć źródeł zajmuje jeden. Tematyczny plik PDF grupy obrazów
 zajmuje jeden slot niezależnie od liczby obrazów. Raport końcowy liczy
 wykorzystanie limitu po sumie plików TXT i plików PDF do wgrania.
+
+Kontrola limitu w trakcie przetwarzania liczy tak samo: do limitu wchodzą tylko
+źródła, które dadzą plik wynikowy. Źródło pominięte oraz źródło zakończone
+błędem nie zajmują slotu, bo nie powstaje dla nich żaden plik, więc nie
+wypychają z limitu kolejnych prawidłowych źródeł.
 
 ## Metadane z danych strukturalnych strony
 

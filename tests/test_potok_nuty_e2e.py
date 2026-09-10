@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 from gnb.core.konfiguracja import Konfiguracja
-from gnb.ingestion.wejscie import przyjmij_plik
+from gnb.ingestion.wejscie import przyjmij_plik, przyjmij_tekst
 from gnb.music import audiveris
 from gnb.potok import przetworz_projekt
 
@@ -107,11 +107,13 @@ def test_skan_nut_z_flaga_nuty_dostaje_pominiecie_gdy_brak_audiverisa(
     Wykrywanie Audiverisa jest wymuszone na „nie znaleziono”, więc test jest
     szybki i deterministyczny niezależnie od tego, czy na maszynie uruchamiającej
     testy Audiveris jest zainstalowany. Brak opcjonalnego narzędzia zewnętrznego,
-    tak jak brak FFmpega czy Tesseracta, kończy się statusem źródła „pominiete”,
-    nie „blad” — ogólny dysponent w `gnb/potok.py` traktuje `BrakNarzedzia` jako
-    świadome pominięcie, obok `PominietoZrodlo` i `PrzekroczonoLimit`, bo brak
-    narzędzia opcjonalnego wyłącza konkretną ścieżkę, a nie jest awarią.
-    Prawdziwe rozpoznanie sprawdza test poniżej, z markerem `wolne`.
+    tak jak brak FFmpega dla nagrania mowy, kończy się statusem źródła
+    „pominiete”, nie „blad” — ogólny dysponent w `gnb/potok.py` traktuje
+    `BrakNarzedzia` jako świadome pominięcie, obok `PominietoZrodlo`
+    i `PrzekroczonoLimit`, bo brak narzędzia opcjonalnego wyłącza konkretną
+    ścieżkę, a nie jest awarią. Brak Tesseracta przy OCR nie trafia tą drogą:
+    ekstraktor łapie go sam i zamienia na ostrzeżenie. Prawdziwe rozpoznanie
+    sprawdza test poniżej, z markerem `wolne`.
 
     Test czerwieni się na dwa sposoby: gdy `BrakNarzedzia` znów zaczyna dawać
     status „blad” oraz gdy `--nuty` przestaje kierować obraz do ścieżki
@@ -135,6 +137,50 @@ def test_skan_nut_z_flaga_nuty_dostaje_pominiecie_gdy_brak_audiverisa(
     assert manifest["zrodla"][0]["status"] == "pominiete"
     raport = wynik.sciezka_raportu.read_text(encoding="utf-8")
     assert "Audiveris" in raport
+
+
+def test_pominiety_skan_nut_nie_zajmuje_limitu_liczby_zrodel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Skan nut pominięty z braku Audiverisa nie wypycha prawidłowego źródła z limitu.
+
+    Limit liczby źródeł notatnika jest ustawiony na jeden. Pierwsze wejście to
+    skan nut z opcją `--nuty` przy wymuszonym braku Audiverisa: kończy się
+    statusem „pominiete” i nie tworzy pliku wynikowego. Drugie wejście, zwykły
+    tekst, musi się zmieścić — pominięte źródło nie zajmuje slotu notatnika, bo
+    nie daje pliku do wgrania.
+
+    Test czerwieni się na stanie sprzed tej poprawki: `_liczba_aktywnych` liczyła
+    do limitu każdy status poza „blad”, więc pominięty skan wypełniał limit
+    i tekst również dostawał status „pominiete” z powodem „Przekroczono limit
+    liczby źródeł w notatniku”, a projekt kończył bez żadnego pliku wynikowego.
+    """
+    monkeypatch.setattr(shutil, "which", lambda _nazwa: None)
+    monkeypatch.delenv("PROGRAMFILES", raising=False)
+    monkeypatch.delenv("PROGRAMFILES(X86)", raising=False)
+    monkeypatch.setattr(audiveris, "_DOMYSLNE_SCIEZKI_WINDOWS", ())
+
+    wynik = przetworz_projekt(
+        [
+            przyjmij_plik(KATALOG_DANYCH / "nuty_skan.png", _MOMENT, nuty=True),
+            przyjmij_tekst("Zwykła notatka tekstowa, która musi zmieścić się w limicie.", _MOMENT),
+        ],
+        _bez_deduplikacji(tmp_path, limit_zrodel=1),
+        nazwa_projektu="Limit a pominięcie",
+        zegar=_zegar_krokowy(),
+    )
+
+    assert wynik.liczba_pominietych == 1
+    assert wynik.liczba_przetworzonych == 1
+    assert wynik.liczba_bledow == 0
+
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    statusy = {zrodlo["typ"]: zrodlo["status"] for zrodlo in manifest["zrodla"]}
+    assert statusy["plik_nuty"] == "pominiete"
+    assert statusy["tekst_wklejony"] == "spakowane"
+
+    pliki_txt = list((wynik.katalog_projektu / "pliki_wynikowe").glob("*.txt"))
+    assert len(pliki_txt) == 1
 
 
 @pytest.mark.wolne

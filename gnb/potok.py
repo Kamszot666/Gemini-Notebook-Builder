@@ -210,6 +210,9 @@ from gnb.persistence.projekt import UkladProjektu, ustal_uklad, utworz_katalogi
 _STATUSY_KONCOWE = frozenset(
     {StatusZrodla.SPAKOWANE.value, StatusZrodla.POMINIETE.value, StatusZrodla.BLAD.value}
 )
+# Statusy końcowe, przy których źródło nie tworzy pliku wynikowego zajmującego
+# slot notatnika, więc nie liczy się do limitu liczby źródeł.
+_STATUSY_BEZ_PLIKU_WYNIKOWEGO = frozenset({StatusZrodla.BLAD.value, StatusZrodla.POMINIETE.value})
 _ROZSZERZENIE_ORYGINALU_TEKSTU = "txt"
 _ROZSZERZENIE_ORYGINALU_NAPISOW = "json"
 
@@ -1737,8 +1740,19 @@ class _Wykonanie:
             plik.write(tekst)
 
     def _liczba_aktywnych(self) -> int:
+        # Do limitu liczby źródeł notatnika liczą się tylko źródła, które dają
+        # plik wynikowy zajmujący slot. Status „blad” oraz status „pominiete” są
+        # poza tą liczbą: źródło z błędem oraz źródło pominięte — czy to przez
+        # świadome pominięcie ekstraktora, przekroczenie limitu, czy brak
+        # narzędzia opcjonalnego — nie tworzą żadnego pliku wynikowego, więc nie
+        # zajmują miejsca w notatniku. Bez tego jedno wejście, które po
+        # rozpoznaniu okazuje się pominięte, wypchałoby z limitu prawidłowe
+        # źródło. Statusu „duplikat” nie ma sensu tu wymieniać: powstaje dopiero
+        # w fazie deduplikacji, po tej pętli, więc w tym miejscu nie występuje.
         return sum(
-            1 for stan in self._checkpoint.zrodla.values() if stan.status != StatusZrodla.BLAD.value
+            1
+            for stan in self._checkpoint.zrodla.values()
+            if stan.status not in _STATUSY_BEZ_PLIKU_WYNIKOWEGO
         )
 
     def _pomin(self, zrodlo: Zrodlo, pozycja: PozycjaWejsciowa, komunikat: str) -> None:

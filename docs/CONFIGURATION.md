@@ -230,6 +230,16 @@ Odczyt formatów natywnych, czyli MIDI, MusicXML, MXL i Guitar Pro, nie ma
    raportu diagnostyki. Wskazanie nieistniejącego pliku jest błędem
    konfiguracji. Powód, dla którego MuseScore nie jest uruchamiany, opisuje
    sekcja 18d pliku `CLAUDE.md`.
+2. `sciezka_audiveris`, zmienna `GNB_SCIEZKA_AUDIVERIS`. Pełna ścieżka pliku
+   wykonywalnego Audiverisa. Domyślnie pusta, co oznacza odnalezienie go
+   w zmiennej PATH oraz w znanych miejscach instalacji na Windows. W
+   przeciwieństwie do MuseScore Audiveris jest naprawdę uruchamiany, do
+   rozpoznawania zapisu nutowego z obrazu i z pliku PDF wskazanego opcją
+   `--nuty` — patrz `docs/FORMATS.md`, sekcja „Materiały nutowe”. Wskazanie
+   nieistniejącego pliku jest błędem konfiguracji; brak Audiverisa w ogóle
+   kończy się kontrolowanym pominięciem źródła, nie błędem konfiguracji.
+   Limit czasu rozpoznawania (trzydzieści minut na stronę) jest stałą w
+   kodzie, wzorem limitów Tesseracta i FFmpega, a nie polem konfiguracji.
 
 ## Pola transkrypcji nagrań mowy
 
@@ -402,6 +412,7 @@ sciezka_tesseract = ""
 sciezka_tessdata = ""
 
 sciezka_musescore = ""
+sciezka_audiveris = ""
 
 transkrypcja_wlaczona = true
 transkrypcja_model = "medium"

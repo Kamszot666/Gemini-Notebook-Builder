@@ -426,7 +426,7 @@ Realizuj etapami. Nie zaczynaj kolejnego, zanim poprzedni nie ma testów i nie d
 9. Etap siódmy: dostępny interfejs WWW z postępem, wznowieniem, polem instrukcji systemowej i polem promptu wyszukiwania.
 10. Etap ósmy: obrazy, OCR, PDF skanowany, tematyczne PDF z opisami.
 11. Etap dziewiąty: audio, wykrywanie mowy, transkrypcja nagrań mowy, odrzucanie materiału muzycznego.
-12. Etap dziesiąty: materiały nutowe, czyli MIDI, MusicXML, Guitar Pro oraz nuty w PDF i obrazach wraz z opisem tekstowym. Etap dzieli się na dwa pull requesty: część A obejmuje formaty natywne, czyli MIDI, MusicXML wraz z kontenerem MXL i Guitar Pro gp3, gp4 i gp5, oraz wykrywanie MuseScore; część B dodaje rozpoznawanie zapisu nutowego z obrazu i PDF przez Audiveris.
+12. Etap dziesiąty: materiały nutowe, czyli MIDI, MusicXML, Guitar Pro oraz nuty w PDF i obrazach wraz z opisem tekstowym. Etap dzieli się na dwa pull requesty: część A obejmuje formaty natywne, czyli MIDI, MusicXML wraz z kontenerem MXL i Guitar Pro gp3, gp4 i gp5, oraz wykrywanie MuseScore; część B dodaje rozpoznawanie zapisu nutowego z obrazu i PDF przez Audiveris. Ukończony, scalony pull requestami 25 (część A, wraz z poprawkami 26 i 27) i 28 (część B).
 13. Etap jedenasty: globalny skrót Control plus Shift plus F12 jako moduł opcjonalny.
 14. Etap dwunasty: pełny test end-to-end, uzupełnienie dokumentacji, raport końcowy.
 
@@ -549,7 +549,7 @@ Sekcje w tej dokładnie kolejności, ponieważ przy obcięciu kontekstu ma przet
 
 Treść kodu czytaj bezpośrednio z repozytorium, nigdy nie odtwarzaj z pamięci rozmowy. Plik niedokończony oznacz jako częściowy i napisz, czego brakuje. Jeżeli decyzja zmieniała się wielokrotnie, pokaż całą sekwencję zmian.
 
-Po wygenerowaniu pliku dopisz zdanie: „Pobierz ten plik i podmień nim poprzedni STAN_PROJEKTU.md w Wiedzy projektu.”
+Po wygenerowaniu pliku dopisz zdanie: „Pobierz ten plik i podmień nim poprzedni STAN_PROJEKTU.md w Wiedzy projektu.” Zdanie to dotyczy wyłącznie Claude Code, który dostępu do Wiedzy projektu nie ma. Jeżeli sesja taki dostęp ma — na przykład rozmowa prowadzona w projekcie Claude albo sesja Cowork podpięta do projektu — zapisz checkpoint wprost do Wiedzy projektu, podmieniając w niej poprzedni plik, i napisz użytkownikowi, że to zrobione, zamiast odsyłać go do ręcznej podmiany.
 
 ## 21. Najważniejsza zasada
 

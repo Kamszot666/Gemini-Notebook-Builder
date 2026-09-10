@@ -32,6 +32,7 @@ ozdobników, a polecenia do wpisania są w osobnych blokach.
 19. W logu szczegółowym jest wpis o wstawieniu atrapy modułu „av”.
 20. Plik MIDI albo Guitar Pro dostał status błędu: brak biblioteki z grupy `nuty`.
 21. Raport diagnostyki pokazuje „MuseScore: BRAK”, choć MuseScore jest zainstalowany.
+22. Plik nutowy z obrazu albo PDF nie został rozpoznany: brak Audiverisa.
 
 ## 1. Windows blokuje plik wykonywalny narzędzia deweloperskiego
 
@@ -470,3 +471,26 @@ $env:GNB_SCIEZKA_MUSESCORE = "C:/Program Files/MuseScore 4/bin/MuseScore4.exe"
 To wpływa wyłącznie na treść raportu diagnostyki. Aplikacja nie uruchamia
 MuseScore i nie renderuje podglądu partytury — opis tekstowy materiałów nutowych
 powstaje bez tego programu. Powód opisuje sekcja 18d pliku `CLAUDE.md`.
+
+## 22. Plik nutowy z obrazu albo PDF nie został rozpoznany: brak Audiverisa
+
+Objaw. Plik PDF albo obraz podany z opcją `--nuty` kończy się kontrolowanym
+pominięciem, a nie opisem partytury; raport diagnostyki w wierszu o Audiverisie
+pokazuje „BRAK”.
+
+Przyczyna. W przeciwieństwie do MuseScore, Audiveris jest w tej wersji aplikacji
+naprawdę uruchamiany — jego brak wprost blokuje rozpoznawanie notacji z obrazu
+i z pliku PDF, nie tylko treść raportu diagnostyki.
+
+Co zrobić. Zainstaluj Audiverisa i dopisz go do zmiennej PATH, albo wskaż
+ścieżkę pliku wykonywalnego wprost, zmienną środowiskową albo kluczem
+`sciezka_audiveris` w pliku konfiguracji:
+
+```powershell
+$env:GNB_SCIEZKA_AUDIVERIS = "C:/Program Files/Audiveris/Audiveris.exe"
+```
+
+Instalator Audiverisa dla Windows niesie własne, samodzielne środowisko Java —
+sprawdzone uruchomieniem — więc doinstalowanie systemowej Javy tego problemu
+nie rozwiąże. Wiersz „Java” w raporcie diagnostyki dotyczy innych sposobów
+instalacji Audiverisa, nie tej.

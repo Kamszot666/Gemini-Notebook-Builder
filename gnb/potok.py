@@ -512,6 +512,7 @@ def przetworz_projekt(
         transkrypcja_wlaczona=konfiguracja.transkrypcja_wlaczona,
         prog_udzialu_mowy=konfiguracja.transkrypcja_prog_udzialu_mowy,
         wymus_transkrypcje=wymus_transkrypcje,
+        sciezka_audiveris=konfiguracja.sciezka_audiveris,
     )
     czas_startu = zegar()
 
@@ -867,9 +868,13 @@ class _Wykonanie:
         pakowania mogła osadzić obraz w tematycznym pliku PDF.
 
         Postęp długiego etapu ekstrakcji jest raportowany inną fazą zależnie od
-        źródła: OCR dla skanu PDF, transkrypcja dla nagrania audio. Dla nagrania
-        audio zapisywany jest też jednorazowo powód wstawienia atrapy modułu
-        ``av``, jeżeli PyAV był na tej maszynie zablokowany.
+        źródła: OCR dla skanu PDF, transkrypcja dla nagrania audio, rozpoznawanie
+        nut dla zapisu nutowego z obrazu albo z pliku PDF przez Audiveris. Dla
+        nagrania audio zapisywany jest też jednorazowo powód wstawienia atrapy
+        modułu ``av``, jeżeli PyAV był na tej maszynie zablokowany. Ekstraktor
+        może dodatkowo zwrócić w `DokumentWyekstrahowany.plik_posredni` artefakt
+        pośredni do zachowania w wynikach pośrednich, na przykład MusicXML
+        wyprodukowany przez Audiveris przed odczytem parserem notacji.
         """
         identyfikator = zrodlo.identyfikator_zrodla
         bajty = _odczytaj_bajty_pliku(Path(pozycja.wejscie.wartosc), identyfikator)
@@ -882,14 +887,25 @@ class _Wykonanie:
         if zrodlo.typ_zrodla is TypZrodla.PLIK_AUDIO:
             postep_ekstrakcji = self._postep_transkrypcji(zrodlo.pochodzenie)
         elif zrodlo.typ_zrodla is TypZrodla.PLIK_NUTY:
-            # Odczyt materiału nutowego z formatu natywnego trwa milisekundy,
-            # więc nie ma osobnej fazy postępu.
-            postep_ekstrakcji = None
+            from gnb.extractors.plik_nuty_skanowane import FORMATY_NUTY_SKANOWANE
+
+            if pozycja.format_zrodla in FORMATY_NUTY_SKANOWANE:
+                # Rozpoznawanie notacji z obrazu albo z pliku PDF przez Audiveris
+                # trwa realnie długo, strona po stronie.
+                postep_ekstrakcji = self._postep_rozpoznawania_nut(zrodlo.pochodzenie)
+            else:
+                # Odczyt materiału nutowego z formatu natywnego trwa milisekundy,
+                # więc nie ma osobnej fazy postępu.
+                postep_ekstrakcji = None
         else:
             postep_ekstrakcji = self._postep_ocr(zrodlo.pochodzenie)
 
         ekstraktor = self._rejestr_binarny.dobierz(zrodlo.typ_zrodla, pozycja.format_zrodla)
         dokument = ekstraktor.wyekstrahuj(identyfikator, bajty, postep=postep_ekstrakcji)
+
+        if dokument.plik_posredni is not None:
+            sufiks, bajty_posrednie = dokument.plik_posredni
+            self._zapisz_bajty_posrednie(identyfikator, sufiks, bajty_posrednie)
 
         if zrodlo.typ_zrodla is TypZrodla.PLIK_AUDIO:
             self._odnotuj_atrape_av()
@@ -1796,6 +1812,27 @@ class _Wykonanie:
                 wykonano,
                 wszystkich,
                 f"Rozpoznawanie tekstu ze skanu „{pochodzenie}”, strona {wykonano} z {wszystkich}",
+            )
+
+        return zglos
+
+    def _postep_rozpoznawania_nut(self, pochodzenie: str) -> PostepEkstrakcji | None:
+        """Buduje wywołanie zwrotne postępu rozpoznawania nut dla jednego źródła.
+
+        Audiveris przetwarza wielostronicowy plik jednym wywołaniem i zgłasza
+        ukończenie kolejnych stron ze swojego strumienia wyjścia; adapter zamienia
+        to na te same dwie liczby co OCR skanu, strona po stronie.
+        """
+        if self._postep is None:
+            return None
+
+        def zglos(wykonano: int, wszystkich: int) -> None:
+            _zglos_postep(
+                self._postep,
+                FazaPotoku.ROZPOZNAWANIE_NUT,
+                wykonano,
+                wszystkich,
+                f"Rozpoznawanie zapisu nutowego „{pochodzenie}”, strona {wykonano} z {wszystkich}",
             )
 
         return zglos

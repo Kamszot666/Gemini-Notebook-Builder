@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
 
 from gnb.cli import _postep_wiersza_polecen, main
 from gnb.core.postep import FazaPotoku, ZdarzeniePostepu
+from gnb.music import audiveris
 
 KATALOG_DANYCH = Path(__file__).resolve().parent / "dane"
 
@@ -210,13 +212,31 @@ def test_przetworz_z_grupa_laczy_zrodla_w_jeden_plik(
     assert tresc.count("Identyfikator źródła: ") == 2
 
 
-def test_przetworz_z_flaga_nuty_pomija_pdf_z_komunikatem_o_audiverisie(
+def test_przetworz_z_flaga_nuty_kieruje_pdf_do_sciezki_audiverisa(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Sprawdza samo routowanie `--nuty`, bez uruchamiania prawdziwego Audiverisa.
+
+    Wykrywanie Audiverisa jest wymuszone na „nie znaleziono”, więc test jest
+    szybki i deterministyczny niezależnie od tego, czy na maszynie uruchamiającej
+    testy Audiveris jest zainstalowany — bez tego mieszania się z prawdziwym
+    środowiskiem programistycznym, w którym jest, ustawienie samej złej ścieżki
+    w konfiguracji zostałoby odrzucone już przy jej wczytywaniu, zanim
+    przetwarzanie w ogóle by ruszyło. Brak zewnętrznego narzędzia, tak jak brak
+    FFmpega czy Tesseracta, kończy się statusem źródła „blad”, nie „pominiete” —
+    ogólny dysponent w `gnb/potok.py` rozpoznaje tylko `PominietoZrodlo`
+    i `PrzekroczonoLimit` jako pominięcie, a `BrakNarzedzia` jest zwykłym
+    `BladGnb`. Prawdziwe rozpoznanie sprawdzają testy z markerem `wolne`
+    w tests/extractors/test_ekstraktory_nut.py.
+    """
     monkeypatch.setenv("GNB_KATALOG_WYNIKOW", str(tmp_path))
     monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    monkeypatch.setattr(shutil, "which", lambda _nazwa: None)
+    monkeypatch.delenv("PROGRAMFILES", raising=False)
+    monkeypatch.delenv("PROGRAMFILES(X86)", raising=False)
+    monkeypatch.setattr(audiveris, "_DOMYSLNE_SCIEZKI_WINDOWS", ())
     skan = tmp_path / "skan.pdf"
-    skan.write_bytes(b"%PDF-1.4\n%%EOF\n")
+    skan.write_bytes((KATALOG_DANYCH / "nuty_skan.pdf").read_bytes())
 
     kod = main(["przetworz", "--projekt", "Skan nut CLI", "--nuty", "--plik", str(skan)])
 
@@ -224,3 +244,4 @@ def test_przetworz_z_flaga_nuty_pomija_pdf_z_komunikatem_o_audiverisie(
     capsys.readouterr()
     raport = (tmp_path / "Skan nut CLI" / "raport.txt").read_text(encoding="utf-8")
     assert "Audiveris" in raport
+    assert "Liczba źródeł z błędem: 1" in raport

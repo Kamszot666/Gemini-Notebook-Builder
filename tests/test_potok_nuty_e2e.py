@@ -1,19 +1,26 @@
 """Testy end-to-end potoku dla materiałów nutowych.
 
-Odczyt formatów natywnych trwa milisekundy, więc żaden z tych testów nie nosi
-markera „wolne”. Testy MIDI i Guitar Pro wymagają bibliotek z grupy „nuty”,
-które grupa „dev” instaluje.
+Odczyt formatów natywnych trwa milisekundy, więc testy formatów natywnych nie
+noszą markera „wolne”. Testy MIDI i Guitar Pro wymagają bibliotek z grupy
+„nuty”, które grupa „dev” instaluje. Rozpoznawanie optyczne przez Audiveris
+trwa realnie długo, więc test wołający prawdziwy program nosi marker „wolne”
+i fikstury `wymaga_audiveris`; test samego routowania `--nuty` przez potok
+wymusza brakującą ścieżkę Audiverisa, żeby zostać szybki i deterministyczny.
 """
 
 from __future__ import annotations
 
 import json
+import shutil
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 from gnb.core.konfiguracja import Konfiguracja
 from gnb.ingestion.wejscie import przyjmij_plik
+from gnb.music import audiveris
 from gnb.potok import przetworz_projekt
 
 KATALOG_DANYCH = Path(__file__).resolve().parent / "dane"
@@ -92,7 +99,24 @@ def test_dwa_materialy_nutowe_w_grupie_daja_osobne_pliki_i_zdanie_w_raporcie(
     assert "Materiały nutowe (2) nie podlegają grupowaniu" in raport
 
 
-def test_skan_nut_z_flaga_nuty_jest_pomijany_z_powodem_o_audiverisie(tmp_path: Path) -> None:
+def test_skan_nut_z_flaga_nuty_dostaje_blad_gdy_brak_audiverisa(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sprawdza samo routowanie `--nuty` przez cały potok, bez prawdziwego Audiverisa.
+
+    Wykrywanie Audiverisa jest wymuszone na „nie znaleziono”, więc test jest
+    szybki i deterministyczny niezależnie od tego, czy na maszynie uruchamiającej
+    testy Audiveris jest zainstalowany. Brak zewnętrznego narzędzia, tak jak brak
+    FFmpega czy Tesseracta, kończy się statusem źródła „blad”, nie „pominiete” —
+    ogólny dysponent w `gnb/potok.py` rozpoznaje tylko `PominietoZrodlo`
+    i `PrzekroczonoLimit` jako pominięcie, a `BrakNarzedzia` jest zwykłym
+    `BladGnb`. Prawdziwe rozpoznanie sprawdza test poniżej, z markerem `wolne`.
+    """
+    monkeypatch.setattr(shutil, "which", lambda _nazwa: None)
+    monkeypatch.delenv("PROGRAMFILES", raising=False)
+    monkeypatch.delenv("PROGRAMFILES(X86)", raising=False)
+    monkeypatch.setattr(audiveris, "_DOMYSLNE_SCIEZKI_WINDOWS", ())
+
     wynik = przetworz_projekt(
         [przyjmij_plik(KATALOG_DANYCH / "nuty_skan.png", _MOMENT, nuty=True)],
         _bez_deduplikacji(tmp_path),
@@ -100,12 +124,47 @@ def test_skan_nut_z_flaga_nuty_jest_pomijany_z_powodem_o_audiverisie(tmp_path: P
         zegar=_zegar_krokowy(),
     )
 
-    assert wynik.liczba_pominietych == 1
-    assert wynik.liczba_bledow == 0
+    assert wynik.liczba_pominietych == 0
+    assert wynik.liczba_bledow == 1
     manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
-    assert manifest["zrodla"][0]["status"] == "pominiete"
+    assert manifest["zrodla"][0]["status"] == "blad"
     raport = wynik.sciezka_raportu.read_text(encoding="utf-8")
     assert "Audiveris" in raport
+
+
+@pytest.mark.wolne
+def test_skan_nut_z_flaga_nuty_zostaje_naprawde_rozpoznany(
+    wymaga_audiveris: None, tmp_path: Path
+) -> None:
+    wynik = przetworz_projekt(
+        [przyjmij_plik(KATALOG_DANYCH / "nuty_skan.png", _MOMENT, nuty=True)],
+        _bez_deduplikacji(tmp_path),
+        nazwa_projektu="Skan nut rozpoznany",
+        zegar=_zegar_krokowy(),
+    )
+
+    assert wynik.liczba_przetworzonych == 1
+    assert wynik.liczba_pominietych == 0
+    assert wynik.liczba_bledow == 0
+
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    zrodlo = manifest["zrodla"][0]
+    assert zrodlo["status"] == "spakowane"
+    assert "rozpoznanie optyczne" in zrodlo["metadane"]["nuty_format"]
+
+    pliki_txt = list((wynik.katalog_projektu / "pliki_wynikowe").glob("*.txt"))
+    assert len(pliki_txt) == 1
+
+    plik_posredni = list(
+        (wynik.katalog_projektu / "wyniki_posrednie").glob(
+            f"{zrodlo['identyfikator']}.audiveris.mxl"
+        )
+    )
+    assert len(plik_posredni) == 1
+
+    raport = wynik.sciezka_raportu.read_text(encoding="utf-8")
+    assert "Materiały do sprawdzenia" in raport
+    assert "optycznie" in raport
 
 
 def test_plik_guitar_pro_daje_txt_z_liczba_taktow(wymaga_pyguitarpro: None, tmp_path: Path) -> None:

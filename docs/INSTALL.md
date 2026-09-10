@@ -193,12 +193,11 @@ $env:GNB_TRANSKRYPCJA_MODEL = "small"
 Transkrypcja działa wyłącznie na procesorze. Ustawienie karty graficznej kończy
 się jawnym błędem konfiguracji — powód opisuje `CONFIGURATION.md`.
 
-### Etap dziesiąty: MuseScore, Java, Audiveris — materiały nutowe
+### Etap dziesiąty: MuseScore i Audiveris — materiały nutowe
 
-Część A etapu dziesiątego jest zrealizowana: odczyt MIDI, MusicXML, MXL
-i Guitar Pro gp3, gp4 i gp5 działa i wymaga wyłącznie bibliotek z grupy `nuty`,
-opisanej w sekcji czwartej. Żadne z narzędzi zewnętrznych nie jest do tego
-potrzebne.
+Odczyt MIDI, MusicXML, MXL i Guitar Pro gp3, gp4 i gp5 działa i wymaga
+wyłącznie bibliotek z grupy `nuty`, opisanej w sekcji czwartej. Żadne z narzędzi
+zewnętrznych nie jest do tego potrzebne.
 
 MuseScore jest wykrywany przez polecenie `diagnostyka`, ale aplikacja go nie
 uruchamia — nie renderuje podglądu partytury. Na Windows plik wykonywalny nie
@@ -208,10 +207,18 @@ konwencje nazw oraz znane katalogi instalacyjne. Ścieżkę można wskazać kluc
 konfiguracji `sciezka_musescore`. Powód, dla którego MuseScore nie jest
 uruchamiany, opisuje sekcja 18d pliku `CLAUDE.md`.
 
-Java i Audiveris będą potrzebne dopiero w części B etapu dziesiątego, do
-rozpoznawania zapisu nutowego z obrazu i pliku PDF. Ta część nie jest jeszcze
-zrealizowana; do tego czasu pliki PDF i obrazy oznaczone opcją `--nuty` są
-pomijane z czytelnym komunikatem.
+Audiveris rozpoznaje zapis nutowy z obrazu i z pliku PDF, wskazany opcją
+`--nuty` polecenia `przetworz` — patrz `docs/FORMATS.md`, sekcja „Materiały
+nutowe”, podsekcja „Rozpoznawanie optyczne z obrazu i PDF”. Zainstaluj go
+z [oficjalnej strony projektu](https://github.com/Audiveris/audiveris) i dopisz
+do zmiennej PATH, albo wskaż ścieżkę pliku wykonywalnego kluczem konfiguracji
+`sciezka_audiveris`. Instalator dla Windows niesie własne, samodzielne
+środowisko Java i systemowej Javy w ogóle nie używa — sprawdzone uruchomieniem
+— więc wpis „Java” w raporcie diagnostyki dotyczy głównie innych sposobów
+instalacji Audiverisa, na przykład uruchamiania pliku `audiveris.jar` wprost
+poleceniem `java -jar`. Bez Audiverisa pliki PDF i obrazy oznaczone opcją
+`--nuty` są pomijane z czytelnym komunikatem, a reszta aplikacji działa dalej
+bez zmian.
 
 ### LibreOffice — pliki ODT
 

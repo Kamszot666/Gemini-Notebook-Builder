@@ -27,7 +27,10 @@ class FazaPotoku(StrEnum):
     po stronie, żeby użytkownik nie został przy niemym oknie przez kilkanaście
     minut rozpoznawania grubego skanu. Faza transkrypcji jest zgłaszana wewnątrz
     ekstrakcji nagrania mowy, a jej licznik liczy minuty przetworzonego nagrania,
-    bo transkrypcja godzinnego nagrania trwa około godziny.
+    bo transkrypcja godzinnego nagrania trwa około godziny. Faza rozpoznawania
+    nut jest zgłaszana wewnątrz ekstrakcji zapisu nutowego z obrazu albo z pliku
+    PDF przez program Audiveris, strona po stronie — pojedyncza strona bywa
+    realnym skanem, a rozpoznanie trwa wtedy rzędu minut, nie sekund.
     """
 
     POBIERANIE_STRON = "pobieranie_stron"
@@ -35,6 +38,7 @@ class FazaPotoku(StrEnum):
     EKSTRAKCJA = "ekstrakcja"
     OCR = "ocr"
     TRANSKRYPCJA = "transkrypcja"
+    ROZPOZNAWANIE_NUT = "rozpoznawanie_nut"
     DEDUPLIKACJA = "deduplikacja"
     PAKOWANIE = "pakowanie"
     ZAKONCZENIE = "zakonczenie"

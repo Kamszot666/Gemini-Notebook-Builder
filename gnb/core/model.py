@@ -73,6 +73,12 @@ class DokumentWyekstrahowany:
     bloki: list[BlokTresci] = field(default_factory=list)
     metadane: dict[str, str] = field(default_factory=dict)
     ostrzezenia: list[str] = field(default_factory=list)
+    # Dodatkowy artefakt pośredni wygenerowany przez ekstraktor, na przykład
+    # MusicXML wyprodukowany przez Audiveris przed przepuszczeniem go przez
+    # parser notacji. Krotka niesie sufiks nazwy pliku oraz jego bajty; potok
+    # zapisuje ją do katalogu wyników pośrednich tym samym mechanizmem co
+    # oryginalne bajty obrazu. Większość ekstraktorów zostawia to pole puste.
+    plik_posredni: tuple[str, bytes] | None = None
 
 
 @dataclass(slots=True)

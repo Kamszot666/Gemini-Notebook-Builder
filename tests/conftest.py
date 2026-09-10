@@ -158,6 +158,20 @@ def wymaga_pyguitarpro() -> None:
         pytest.skip("Biblioteka PyGuitarPro nie jest zainstalowana (pip install gnb[nuty]).")
 
 
+@pytest.fixture
+def wymaga_audiveris() -> None:
+    """Pomija test, gdy w środowisku nie ma programu Audiveris.
+
+    Testy używające tej fikstury uruchamiają prawdziwy proces Audiverisa i mogą
+    trwać rzędu minut na realnym skanie, więc noszą też marker `wolne`. Ścieżkę
+    braku narzędzia chroni osobny, szybki test w tests/music/test_audiveris.py.
+    """
+    from gnb.music.audiveris import czy_dostepny
+
+    if not czy_dostepny():
+        pytest.skip("Audiveris nie jest zainstalowany w tym środowisku.")
+
+
 def _obraz_z_tekstem(
     wiersze: list[str],
     *,

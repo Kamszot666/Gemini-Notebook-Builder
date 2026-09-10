@@ -52,11 +52,11 @@ def test_diagnostyka_zwraca_kod_zero_niezaleznie_od_dostepnosci_narzedzi() -> No
 
 
 def test_diagnostyka_wymienia_wszystkie_sprawdzane_narzedzia() -> None:
-    """Raport musi wymieniać nazwę każdego z pięciu narzędzi z sekcji piątej CLAUDE.md."""
+    """Raport musi wymieniać nazwę każdego z sześciu narzędzi z sekcji piątej CLAUDE.md."""
 
     wynik = _uruchom_diagnostyke()
 
-    for nazwa in ("FFmpeg", "Tesseract", "LibreOffice", "MuseScore", "Java"):
+    for nazwa in ("FFmpeg", "Tesseract", "LibreOffice", "MuseScore", "Java", "Audiveris"):
         assert nazwa in wynik.stdout
 
 
@@ -183,3 +183,29 @@ def test_wyszukiwarka_zwracajaca_nic_daje_wiersz_brak_z_uczciwymi_zdaniami(
 
     assert wiersz.startswith("MuseScore: BRAK")
     assert "przestanie działać konwersja" not in wiersz
+
+
+def _wpis_java() -> Narzedzie:
+    return next(narzedzie for narzedzie in NARZEDZIA if narzedzie.nazwa == "Java")
+
+
+def test_wpis_java_nie_obiecuje_ze_jest_zawsze_potrzebna() -> None:
+    """Zweryfikowano uruchomieniem: instalator Audiverisa dla Windows niesie własną
+    Javę i systemowej w ogóle nie używa, więc wpis nie może twierdzić inaczej."""
+    wpis = _wpis_java()
+    assert "własne" in wpis.do_czego_sluzy or "samodzielne" in wpis.do_czego_sluzy
+    assert "nic w tej instalacji" in wpis.co_przestanie_dzialac
+
+
+def test_znajdz_wersje_woli_wiersz_z_cyfra_nad_dosłownie_pierwszy(tmp_path: Path) -> None:
+    """Chroni przed regresją do „zawsze pierwszy wiersz”. Audiveris wypisuje samą
+    nazwę programu na pierwszym wierszu, a numer wersji dopiero na drugim —
+    dokładnie ten przypadek, w którym dosłownie pierwszy wiersz by zawiódł.
+    """
+    skrypt = tmp_path / "falszywy_audiveris.py"
+    skrypt.write_text("print('Audiveris')\nprint('- Version:      5.11.0')\n", encoding="utf-8")
+
+    wersja = cli._znajdz_wersje(sys.executable, str(skrypt))
+
+    assert wersja is not None
+    assert "5.11.0" in wersja

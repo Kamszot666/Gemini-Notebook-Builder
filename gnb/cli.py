@@ -23,6 +23,7 @@ znaków sterujących przerysowujących wiersz.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -324,6 +325,37 @@ def _wiersz_jezykow_ocr() -> str:
     return f"Dane językowe OCR: {wykaz}. Polski („pol”) jest zainstalowany."
 
 
+def _wiersz_globalnego_skrotu() -> str:
+    """Buduje wiersz raportu o dostępności globalnego skrótu klawiszowego z etapu jedenastego.
+
+    Skrót jest modułem wyłącznie dla Windows, zgodnie z sekcją dwunastą
+    CLAUDE.md, więc na innych systemach ten wiersz mówi to wprost, zamiast
+    zgłaszać brak biblioteki comtypes jako usterkę.
+    """
+    if sys.platform != "win32":
+        return (
+            "Globalny skrót klawiszowy: niedostępny na tym systemie. Moduł "
+            "gnb.hotkeys działa wyłącznie na Windows; ustawienie "
+            "„globalny_skrot_wlaczony” nie ma tu żadnego skutku."
+        )
+    try:
+        konfiguracja = wczytaj_konfiguracje()
+    except BladGnb:
+        return "Globalny skrót klawiszowy: nie sprawdzono, bo nie udało się wczytać konfiguracji."
+    if not konfiguracja.globalny_skrot_wlaczony:
+        return "Globalny skrót klawiszowy: wyłączony ustawieniem „globalny_skrot_wlaczony”."
+    if importlib.util.find_spec("comtypes") is None:
+        return (
+            "Globalny skrót klawiszowy: włączony w konfiguracji, ale brakuje biblioteki "
+            'comtypes. Zainstaluj zależności ponownie: pip install -e ".[dev]".'
+        )
+    return (
+        "Globalny skrót klawiszowy: włączony (Control plus Shift plus F12). Rzeczywista "
+        "rejestracja zachodzi dopiero przy starcie serwera interfejsu poleceniem "
+        "„python -m gnb.ui.server”, nie w tej diagnostyce."
+    )
+
+
 def zbuduj_raport_diagnostyki() -> str:
     """Buduje pełną treść raportu diagnostyki jako jeden tekst z końcami wierszy LF."""
 
@@ -333,6 +365,7 @@ def zbuduj_raport_diagnostyki() -> str:
     ]
     wiersze.extend(_sprawdz_narzedzie(narzedzie) for narzedzie in NARZEDZIA)
     wiersze.append(_wiersz_jezykow_ocr())
+    wiersze.append(_wiersz_globalnego_skrotu())
     wiersze.append("")
     wiersze.append(
         "Koniec raportu. Brak narzędzia opcjonalnego nie zatrzymuje działania aplikacji."

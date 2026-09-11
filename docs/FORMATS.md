@@ -841,9 +841,13 @@ zajmuje jeden slot niezależnie od liczby obrazów. Raport końcowy liczy
 wykorzystanie limitu po sumie plików TXT i plików PDF do wgrania.
 
 Kontrola limitu w trakcie przetwarzania liczy tak samo: do limitu wchodzą tylko
-źródła, które dadzą plik wynikowy. Źródło pominięte oraz źródło zakończone
-błędem nie zajmują slotu, bo nie powstaje dla nich żaden plik, więc nie
-wypychają z limitu kolejnych prawidłowych źródeł.
+źródła, które dadzą plik wynikowy. Źródło pominięte, źródło zakończone błędem
+oraz źródło oznaczone jako duplikat nie zajmują slotu, bo nie powstaje dla nich
+żaden plik, więc nie wypychają z limitu kolejnych prawidłowych źródeł. Duplikat
+dochodzi do tej listy dopiero razem z pracą w kilku wywołaniach: checkpoint
+kumuluje źródła między uruchomieniami tego samego projektu, więc duplikat
+zapisany w poprzednim wywołaniu jest widoczny także przy kontroli limitu
+w kolejnym wywołaniu i musi być z niej wykluczony tak samo jak w bieżącym.
 
 ## Metadane z danych strukturalnych strony
 

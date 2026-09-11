@@ -211,8 +211,13 @@ _STATUSY_KONCOWE = frozenset(
     {StatusZrodla.SPAKOWANE.value, StatusZrodla.POMINIETE.value, StatusZrodla.BLAD.value}
 )
 # Statusy końcowe, przy których źródło nie tworzy pliku wynikowego zajmującego
-# slot notatnika, więc nie liczy się do limitu liczby źródeł.
-_STATUSY_BEZ_PLIKU_WYNIKOWEGO = frozenset({StatusZrodla.BLAD.value, StatusZrodla.POMINIETE.value})
+# slot notatnika, więc nie liczy się do limitu liczby źródeł. Status „duplikat”
+# należy tu również: checkpoint kumuluje źródła między uruchomieniami, więc
+# duplikat zapisany w poprzednim wywołaniu jest widoczny w kolejnym i bez tego
+# wpisu wypychałby z limitu prawidłowe źródło, mimo że sam nie zajmuje slotu.
+_STATUSY_BEZ_PLIKU_WYNIKOWEGO = frozenset(
+    {StatusZrodla.BLAD.value, StatusZrodla.POMINIETE.value, StatusZrodla.DUPLIKAT.value}
+)
 _ROZSZERZENIE_ORYGINALU_TEKSTU = "txt"
 _ROZSZERZENIE_ORYGINALU_NAPISOW = "json"
 
@@ -1747,8 +1752,11 @@ class _Wykonanie:
         # narzędzia opcjonalnego — nie tworzą żadnego pliku wynikowego, więc nie
         # zajmują miejsca w notatniku. Bez tego jedno wejście, które po
         # rozpoznaniu okazuje się pominięte, wypchałoby z limitu prawidłowe
-        # źródło. Statusu „duplikat” nie ma sensu tu wymieniać: powstaje dopiero
-        # w fazie deduplikacji, po tej pętli, więc w tym miejscu nie występuje.
+        # źródło. Status „duplikat” w bieżącym uruchomieniu powstaje dopiero
+        # w fazie deduplikacji, po tej pętli, więc tutaj nie występuje — ale
+        # checkpoint kumuluje źródła między uruchomieniami, więc duplikat
+        # zapisany w poprzednim wywołaniu jest tu już widoczny i też trzeba go
+        # wykluczyć, dlatego jest w _STATUSY_BEZ_PLIKU_WYNIKOWEGO.
         return sum(
             1
             for stan in self._checkpoint.zrodla.values()

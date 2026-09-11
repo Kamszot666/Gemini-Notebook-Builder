@@ -14,6 +14,12 @@ authors = [{ name = "Kamszot666" }]
 
 dependencies = [
     "charset-normalizer>=3.3",
+    # Dostęp do UI Automation i Shell.Application dla globalnego skrótu
+    # klawiszowego z etapu jedenastego, wyłącznie na Windows. Paczka comtypes
+    # jest w wersji 1.4.16 czystym pakietem „py3-none-any” bez żadnych plików
+    # DLL ani PYD w środku — sprawdzone rozpakowaniem pliku wheel — więc jest
+    # zgodna z regułą kontroli aplikacji Windows z sekcji 18d CLAUDE.md.
+    "comtypes>=1.4; sys_platform == 'win32'",
     "EbookLib>=0.18",
     "httpx>=0.27",
     "markdown-it-py>=3.0",
@@ -91,10 +97,13 @@ packages = ["gnb"]
 strict = true
 
 # Biblioteki yt-dlp, ebooklib, pypdfium2, reportlab, pillow-heif, faster-whisper,
-# mido oraz guitarpro nie dostarczają informacji o typach ani znacznika py.typed.
-# Brak znacznika w mido i guitarpro sprawdzono przez odczyt katalogu pakietu, nie
+# mido, guitarpro oraz comtypes nie dostarczają informacji o typach ani znacznika
+# py.typed. Brak znacznika sprawdzono przez odczyt katalogu pakietu, nie
 # zgadnięto. Nasz kod opakowuje te biblioteki wąskim adapterem z własnymi typami,
-# więc brak ich typów nie rozlewa się na resztę pakietu.
+# więc brak ich typów nie rozlewa się na resztę pakietu. Moduł comtypes.gen.* jest
+# dodatkowo generowany dopiero w czasie działania programu przez
+# comtypes.client.GetModule, więc mypy nie mógłby go zobaczyć nawet gdyby comtypes
+# miał znacznik py.typed.
 [[tool.mypy.overrides]]
 module = [
     "yt_dlp.*",
@@ -105,6 +114,7 @@ module = [
     "faster_whisper.*",
     "mido.*",
     "guitarpro.*",
+    "comtypes.*",
 ]
 ignore_missing_imports = true
 
@@ -119,4 +129,5 @@ testpaths = ["tests"]
 markers = [
     "siec: test wymaga dostępu do sieci, domyślnie pominięty",
     "wolne: test jest długotrwały, domyślnie pominięty",
+    "pulpit: test wymaga konkretnego stanu pulpitu, na przykład otwartej przeglądarki ze wskazaną stroną, domyślnie pominięty",
 ]

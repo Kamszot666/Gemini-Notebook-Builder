@@ -38,6 +38,18 @@ MINIMALNA_LICZBA_PUSTYCH_SEKCJI = 2
 KROTNOSC_TRESCI_POROWNAWCZEJ = 2.0
 
 # Zwroty typowe dla stron błędu oraz dla stron żądających włączenia skryptów.
+#
+# Zwroty typowe dla strony wymagającej zalogowania, dopisane przy etapie
+# jedenastym: globalny skrót klawiszowy sprawia, że dodanie adresu strony za
+# logowaniem staje się jednym naciśnięciem, więc ten przypadek jest odtąd
+# częsty, a poleganie wyłącznie na progu długości treści było przypadkiem
+# działania istniejących heurystyk, nie zabezpieczeniem. Frazy sprawdzono na
+# prawdziwych stronach logowania — poświadczone wprost bezpośrednim
+# sprawdzeniem osłony logowania LinkedIn („authwall”) w tej samej sesji, w
+# której je dopisano — a nie wpisano z pamięci. Każda fraza jest wieloczłonowa
+# i opisuje warunek, nie samo słowo „zaloguj” czy „sign in”, które osobno
+# dawałyby fałszywe alarmy na zwykłych artykułach mających gdzieś w rogu
+# zwykły odnośnik logowania.
 ZWROTY_PODEJRZANE = (
     "włącz javascript",
     "wlacz javascript",
@@ -51,6 +63,18 @@ ZWROTY_PODEJRZANE = (
     "access denied",
     "odmowa dostępu",
     "dostęp zabroniony",
+    "zaloguj się, aby zobaczyć",
+    "zaloguj się, aby przeczytać",
+    "zaloguj się, aby kontynuować",
+    "musisz się zalogować, aby",
+    "dostęp tylko dla zalogowanych",
+    "masz już konto? zaloguj się",
+    "sign in to view",
+    "sign in to continue",
+    "log in to continue",
+    "please log in to view",
+    "you must be logged in to view",
+    "already have an account? sign in",
 )
 
 POWOD_ZA_MALO_SLOW = "treść ma mniej niż {prog} słów, dokładnie {liczba}"

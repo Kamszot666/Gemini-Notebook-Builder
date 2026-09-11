@@ -96,11 +96,12 @@ python -m gnb.cli przetworz --lista-url SCIEZKA --sprawdz-liste
 python -m gnb.cli pamiec
 python -m gnb.cli pamiec --wyczysc
 python -m pytest -q
-python -m pytest -q -m "not siec and not wolne"
+python -m pytest -q -m "not siec and not wolne and not pulpit"
 python -m pytest -m siec
 python -m ruff check .
 python -m ruff format .
 python -m mypy gnb
+python -m mypy gnb --platform linux
 ```
 
 Koniec bloku komend uruchamiania i testów.
@@ -115,9 +116,10 @@ Zasady dotyczące komend:
 2. `python -m gnb.cli przetworz` uruchamia potok przetwarzania dla tekstu wklejonego, plików TXT i MD, adresów stron internetowych oraz adresów filmów z serwisu YouTube, dla których pobierane są napisy. Opcje `--plik`, `--tekst`, `--tekst-md`, `--url` i `--lista-url` można podawać wielokrotnie, `--projekt`, `--katalog` i `--grupa` są opcjonalne. Opcja `--grupa NAZWA` przypisuje wszystkie źródła jednego wywołania do wspólnej grupy tematycznej pakowania, w której małe źródła są łączone w jeden plik wynikowy; kolejną grupę w tym samym projekcie dodaje się osobnym wywołaniem, bo checkpoint kumuluje źródła między uruchomieniami. Wyjście jest czytelne liniowo, bez pasków postępu i znaków sterujących, i kończy się jednym zdaniem podsumowania: ile źródeł przetworzono, ile pominięto i w którym katalogu są wyniki. Kod wyjścia zero oznacza wykonany potok, kod dwa brak podanych źródeł. Zakres formatów obsługiwanych przez to polecenie rośnie w kolejnych etapach.
 3. Zanim cokolwiek zostanie pobrane, polecenie `przetworz` wypisuje podsumowanie listy adresów: liczbę wykrytych, poprawnych, duplikatów oraz odrzuconych wraz z powodem odrzucenia. Opcja `--sprawdz-liste` kończy pracę zaraz po tym podsumowaniu, bez pobierania. Kod wyjścia jest wtedy zerowy także wtedy, gdy część wpisów jest błędna, bo wykrycie błędnych wpisów jest zamierzonym wynikiem sprawdzenia. Kod niezerowy oznacza wyłącznie to, że pliku listy nie dało się odczytać.
 4. `python -m gnb.cli pamiec` pokazuje ścieżkę wspólnej pamięci podręcznej pobranych stron, informację o jej włączeniu, maksymalny wiek wpisu oraz liczbę zapamiętanych zasobów. Opcja `--wyczysc` usuwa całą jej zawartość. Pamięć podręczna jest wspólna dla wszystkich projektów i leży w katalogu danych aplikacji, obok pliku konfiguracji.
-5. Testy domyślnie nie korzystają z sieci. Testy sieciowe oznaczaj markerem `siec`, testy długotrwałe markerem `wolne`. Oba są domyślnie wyłączone.
-6. Testy kanaryjne z markerem `siec`, uruchamiane poleceniem `python -m pytest -m siec`, sprawdzają wyłącznie to, czy warstwy pobierania nadal przebijają się do serwisu. Uruchamiaj je po każdej aktualizacji `youtube-transcript-api` albo `yt-dlp` oraz wtedy, gdy pobieranie napisów zaczyna zawodzić bez zmian w naszym kodzie. Nie sprawdzają one treści napisów, bo autor filmu może ją poprawić, a test czerwieniłby się bez powodu. Przy braku dostępu do sieci pomijają się z czytelnym komunikatem zamiast kończyć błędem.
-7. Brak opcjonalnego narzędzia zewnętrznego nie może wywalić aplikacji. Ma skutkować czytelnym komunikatem i wyłączeniem konkretnej ścieżki przetwarzania.
+5. Testy domyślnie nie korzystają z sieci. Testy sieciowe oznaczaj markerem `siec`, testy długotrwałe markerem `wolne`, testy wymagające konkretnego stanu pulpitu — na przykład otwartej przeglądarki ze wskazaną stroną — markerem `pulpit`. Wszystkie trzy są domyślnie wyłączone. Test, który na Windows uruchamia się sam, bez ingerencji człowieka, na przykład rejestracja i wyrejestrowanie skrótu klawiszowego albo ustalenie nazwy procesu aktywnego okna, nie dostaje żadnego z tych markerów — oznacz go `pytest.mark.skipif(sys.platform != "win32")`, żeby uruchamiał się domyślnie na komputerze użytkownika.
+6. `python -m mypy gnb --platform linux` sprawdza kod pod kątem systemu Linux, mimo że deweloperski komputer jest na Windows. Od etapu jedenastego duża część kodu — moduł `gnb.hotkeys` — leży za sprawdzeniem `sys.platform == "win32"`, a pull request 26 pokazał, że różnica typowania między systemami potrafi wywrócić `main` mimo zielonych testów na Windows. Kod zależny od Windows pisz tak, żeby cała jego treść leżała wewnątrz bloku `if sys.platform == "win32":` — dzięki temu mypy z flagą `--platform linux` pomija tę gałąź zamiast zgłaszać błąd o symbolu, który na Linuksie nie istnieje, na przykład `ctypes.windll`.
+7. Testy kanaryjne z markerem `siec`, uruchamiane poleceniem `python -m pytest -m siec`, sprawdzają wyłącznie to, czy warstwy pobierania nadal przebijają się do serwisu. Uruchamiaj je po każdej aktualizacji `youtube-transcript-api` albo `yt-dlp` oraz wtedy, gdy pobieranie napisów zaczyna zawodzić bez zmian w naszym kodzie. Nie sprawdzają one treści napisów, bo autor filmu może ją poprawić, a test czerwieniłby się bez powodu. Przy braku dostępu do sieci pomijają się z czytelnym komunikatem zamiast kończyć błędem.
+8. Brak opcjonalnego narzędzia zewnętrznego nie może wywalić aplikacji. Ma skutkować czytelnym komunikatem i wyłączeniem konkretnej ścieżki przetwarzania.
 
 ## 6. Struktura repozytorium
 
@@ -303,6 +305,17 @@ Rozwiązanie przyjęte przez użytkownika:
 4. Nieudana rejestracja skrótu nigdy nie zatrzymuje aplikacji. Zapisz to w logu i pracuj dalej.
 5. Cały ten moduł jest opcjonalny. Na serwerze nie istnieje i aplikacja musi działać bez niego.
 
+Decyzje dotyczące zachowania skrótu, ustalone przy planowaniu etapu jedenastego, część A:
+
+6. Skrót działa wyłącznie wtedy, gdy uruchomiony jest serwer interfejsu poleceniem `python -m gnb.ui.server`. Rejestracja zachodzi przy starcie serwera, wyrejestrowanie przy jego zamknięciu. Nie powstaje żaden osobny proces w tle ani autostart.
+7. Naciśnięcie skrótu dodaje do aktywnego projektu to, co jest otwarte w aktywnym oknie: adres bieżącej strony w Chrome albo Firefoksie, albo zaznaczone pliki w Eksploratorze Windows. To dwie przeglądarki, z których użytkownik korzysta na co dzień — obie zostały sprawdzone bezpośrednio na jego komputerze.
+8. Aktywny projekt skrótu jest wyborem jawnym, nie „ostatnio otwartym projektem”. Użytkownik ustawia go przyciskiem „Ustaw jako aktywny projekt skrótu” na stronie projektu; strona główna i strona każdego projektu pokazują tekst „Aktywny projekt skrótu: nazwa” albo „Brak aktywnego projektu skrótu”. Powód: użytkownik naciska skrót w przeglądarce, na innej stronie niż interfejs, więc w tej chwili słyszy tylko dźwięk, nie widzi komunikatu. Samo zajrzenie na stronę innego projektu nie może więc po cichu przenieść miejsca, do którego trafia materiał — źródło w złym projekcie byłoby błędem poprawności danych, która w hierarchii priorytetów z sekcji czwartej stoi nad wygodą. Wybór żyje w pamięci serwera, chroniony zamkiem jak rejestr zadań; po restarcie serwera nie ma aktywnego projektu, dopóki użytkownik nie wybierze go ponownie.
+9. Potwierdzenie bez przenoszenia fokusu: dwa różne dźwięki przez `winsound.Beep` — sukces to dwa krótkie, rosnące tony, porażka to jeden niski, dłuższy ton, bo mają różnić się rytmem, nie tylko wysokością — plus trwały komunikat tekstowy w interfejsie (sekcja „Globalny skrót klawiszowy” na stronie głównej i na stronie projektu) i w logu `gnb.hotkeys`. `winsound.MessageBeep` odrzucony, bo gra z motywu dźwiękowego systemu, który użytkownik mógł wyciszyć niezależnie od głośności aplikacji.
+10. Bez schowka, w żadnej roli, także awaryjnej. Adres czytany jest przez UI Automation z paska adresu, dopasowywany po nazwie klasy kontrolki (`OmniboxViewViews` w Chrome, `urlbar-input` w Firefoksie), sprawdzonej bezpośrednio w obu przeglądarkach, nie po lokalizowanej nazwie elementu, która zależy od języka interfejsu.
+11. Kolejka: źródło dodane skrótem w trakcie trwającego przebiegu jest zapisywane od razu, a przetwarzane w kolejnym przebiegu — natychmiast, gdy rejestr zadań interfejsu jest wolny, albo automatycznie po zakończeniu bieżącego zadania. To nie jest nowy proces w tle: to dokończenie pracy, którą użytkownik już zaczął naciśnięciem skrótu.
+12. Klucz konfiguracji `globalny_skrot_wlaczony`, zmienna środowiskowa `GNB_GLOBALNY_SKROT_WLACZONY`, wartość domyślna prawda. Na systemie innym niż Windows klucz nie ma żadnego skutku, a diagnostyka mówi to wprost.
+13. Zaznaczony w przeglądarce tekst jako źródło z pierwszeństwem przed adresem strony był rozważony jako rozszerzenie części A, żeby obsłużyć strony wymagające zalogowania. Sprawdzone bezpośrednio na komputerze użytkownika, z uruchomionym NVDA, pięcioma różnymi sposobami zaznaczania — w tym zaznaczeniem klawiaturą i trybem przeglądania z karetką — że `TextPattern.GetSelection()` nie zwraca niepustego zaznaczenia treści strony ani w Chrome, ani w Firefoksie, mimo że ten sam mechanizm poprawnie odczytuje zaznaczenie w zwykłej kontrolce edycyjnej Windows (test kontrolny w Notatniku). Funkcja odłożona poza część A: frazy stron logowania w `ZWROTY_PODEJRZANE` w `gnb/output/ocena_jakosci.py` łagodzą ten sam problem inną drogą. Warunek rewizji: znalezienie innego sposobu odczytu zaznaczenia treści strony niż jednorazowe odpytanie `TextPattern.GetSelection()`, na przykład przez subskrypcję zdarzenia `TextSelectionChangedEvent`.
+
 ## 13. Katalogi projektów wynikowych
 
 Każdy temat otrzymuje osobny projekt i osobny katalog. Katalogi te powstają poza repozytorium.
@@ -467,7 +480,7 @@ Kolejność jest wiążąca.
 
 1. Na początku etapu utwórz gałąź funkcjonalną z aktualnego `main`, o nazwie w postaci `etap-NN-krotki-opis`, na przykład `etap-01-pipeline-tekstowy`. Nie pracuj bezpośrednio na `main`.
 2. W trakcie etapu rób małe, tematyczne commity z wiadomościami po polsku w trybie rozkazującym.
-3. Przed wysłaniem uruchom komplet kontroli: `python -m ruff check .`, `python -m ruff format --check .`, `python -m mypy gnb` oraz `python -m pytest -q -m "not siec and not wolne"`. Wszystkie muszą przejść. Postać `python -m` jest obowiązkowa z powodu opisanego w sekcji piątej.
+3. Przed wysłaniem uruchom komplet kontroli: `python -m ruff check .`, `python -m ruff format --check .`, `python -m mypy gnb`, `python -m mypy gnb --platform linux` oraz `python -m pytest -q -m "not siec and not wolne and not pulpit"`. Wszystkie muszą przejść. Postać `python -m` jest obowiązkowa z powodu opisanego w sekcji piątej.
 4. Jeżeli którakolwiek kontrola nie przechodzi, nie wysyłaj niczego. Napraw problem i powtórz krok trzeci. Wysłanie kodu z czerwonymi testami jest złamaniem tej procedury.
 5. Sprawdź, czy do commitów nie trafiło nic, co nie powinno być publiczne: sekrety, tokeny, bezwzględne ścieżki z nazwą konta użytkownika, prywatne materiały źródłowe, katalog wyników.
 6. Wyślij gałąź poleceniem `git push -u origin nazwa-galezi`.

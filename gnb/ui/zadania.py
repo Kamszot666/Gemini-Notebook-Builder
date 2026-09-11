@@ -7,10 +7,18 @@ zadanie: dwa równoległe przebiegi pisałyby do tego samego checkpointu. Drugie
 
 Wyjątek w wątku roboczym jest przechwytywany i zapisywany jako stan błędu,
 nigdy nie ucieka jako surowy ślad stosu.
+
+Rejestr pozwala też zarejestrować wywołania zwrotne uruchamiane po zakończeniu
+każdego zadania, niezależnie od tego, czy skończyło się powodzeniem, czy
+błędem. Służy to globalnemu skrótowi klawiszowemu z etapu jedenastego do
+automatycznego rozpoczęcia kolejnego przebiegu dla źródeł dodanych skrótem
+w trakcie poprzedniego przetwarzania — rejestr sam w sobie nic o skrócie nie
+wie.
 """
 
 from __future__ import annotations
 
+import logging
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -63,6 +71,18 @@ class RejestrZadan:
     def __init__(self) -> None:
         self._zamek = threading.Lock()
         self._zadanie: _Zadanie | None = None
+        self._nasluchy_zakonczenia: list[Callable[[], None]] = []
+
+    def dodaj_nasluch_zakonczenia(self, wywolanie: Callable[[], None]) -> None:
+        """Rejestruje wywołanie zwrotne uruchamiane po zakończeniu każdego zadania.
+
+        Służy między innymi globalnemu skrótowi klawiszowemu z etapu jedenastego:
+        po zakończeniu bieżącego zadania skrót sam sprawdza, czy w kolejce czeka
+        źródło dodane w międzyczasie, i jeśli tak, sam zaczyna kolejny przebieg.
+        Rejestr nic nie wie o skrócie — to skrót się do niego dopisuje.
+        """
+        with self._zamek:
+            self._nasluchy_zakonczenia.append(wywolanie)
 
     def uruchom(self, nazwa_projektu: str, praca: PracaWTle) -> None:
         """Uruchamia pracę w nowym wątku. Odrzuca żądanie, gdy zadanie już trwa."""
@@ -110,7 +130,19 @@ class RejestrZadan:
             with self._zamek:
                 zadanie.stan = StanZadania.BLAD
                 zadanie.komunikat_bledu = str(blad) or blad.__class__.__name__
-            return
+        else:
+            with self._zamek:
+                zadanie.wynik = wynik
+                zadanie.stan = StanZadania.ZAKONCZONE
+        self._powiadom_o_zakonczeniu()
+
+    def _powiadom_o_zakonczeniu(self) -> None:
         with self._zamek:
-            zadanie.wynik = wynik
-            zadanie.stan = StanZadania.ZAKONCZONE
+            nasluchy = list(self._nasluchy_zakonczenia)
+        for wywolanie in nasluchy:
+            try:
+                wywolanie()
+            except Exception:
+                logging.getLogger("gnb.ui").exception(
+                    "Nasłuch zakończenia zadania zgłosił nieobsłużony błąd."
+                )

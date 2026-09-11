@@ -16,11 +16,12 @@ from __future__ import annotations
 import json
 import logging
 import socket
+import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import cast
+from typing import Protocol, cast
 from urllib.parse import unquote, urlsplit
 
 from gnb.core.konfiguracja import Konfiguracja
@@ -40,6 +41,7 @@ from gnb.persistence.projekt import ustal_uklad, utworz_katalogi
 from gnb.potok import WynikPrzetwarzania, odtworz_wejscia, przetworz_projekt
 from gnb.ui import csrf, formularze, widoki
 from gnb.ui.projekty import niedokonczone
+from gnb.ui.stan_skrotu import AktywnyProjektSkrotu, OstatniKomunikatSkrotu
 from gnb.ui.widoki import BladPola, DaneFormularzaProjektu, PodsumowanieWyniku, sciezka_projektu
 from gnb.ui.zadania import RejestrZadan, StanZadania, ZadanieJuzTrwa
 
@@ -61,22 +63,32 @@ class _Serwer(ThreadingHTTPServer):
         adres: tuple[str, int],
         konfiguracja: Konfiguracja,
         rejestr: RejestrZadan,
+        aktywny_projekt_skrotu: AktywnyProjektSkrotu,
+        ostatni_komunikat_skrotu: OstatniKomunikatSkrotu,
     ) -> None:
         if ":" in adres[0]:
             self.address_family = socket.AF_INET6
         super().__init__(adres, _Handler)
         self.konfiguracja = konfiguracja
         self.rejestr = rejestr
+        self.aktywny_projekt_skrotu = aktywny_projekt_skrotu
+        self.ostatni_komunikat_skrotu = ostatni_komunikat_skrotu
 
 
 def zbuduj_serwer(
-    konfiguracja: Konfiguracja, rejestr: RejestrZadan | None = None
+    konfiguracja: Konfiguracja,
+    rejestr: RejestrZadan | None = None,
+    *,
+    aktywny_projekt_skrotu: AktywnyProjektSkrotu | None = None,
+    ostatni_komunikat_skrotu: OstatniKomunikatSkrotu | None = None,
 ) -> ThreadingHTTPServer:
     """Buduje serwer bez uruchamiania go. Wydzielone z ``uruchom_serwer`` na potrzeby testów."""
     return _Serwer(
         (konfiguracja.adres_nasluchu, konfiguracja.port_nasluchu),
         konfiguracja,
         rejestr or RejestrZadan(),
+        aktywny_projekt_skrotu or AktywnyProjektSkrotu(),
+        ostatni_komunikat_skrotu or OstatniKomunikatSkrotu(),
     )
 
 
@@ -85,22 +97,65 @@ def uruchom_serwer(konfiguracja: Konfiguracja, *, rejestr: RejestrZadan | None =
 
     Adres i port pochodzą z konfiguracji. Adres jest tam już zweryfikowany jako
     pętla zwrotna, więc serwer nie może przypadkiem wystawić się do sieci.
+
+    Globalny skrót klawiszowy z etapu jedenastego rejestruje się tutaj, razem
+    ze startem serwera, i wyrejestrowuje się przy jego zamknięciu — zgodnie
+    z decyzją pierwszą sekcji dwunastej CLAUDE.md nie ma dla niego żadnej innej
+    ścieżki uruchomienia. Dzieje się to wyłącznie na Windows i wyłącznie, gdy
+    ustawienie ``globalny_skrot_wlaczony`` jest włączone; nieudana rejestracja
+    jest tylko logowana i nie przerywa startu serwera.
     """
-    serwer = zbuduj_serwer(konfiguracja, rejestr)
+    serwer = cast("_Serwer", zbuduj_serwer(konfiguracja, rejestr))
     adres = f"http://{konfiguracja.adres_nasluchu}:{serwer.server_address[1]}/"
     print(f"Interfejs Gemini Notebook Builder działa pod adresem {adres}", flush=True)
     print(
         "Otwórz ten adres w przeglądarce. Serwer zatrzymasz klawiszami Control plus C.",
         flush=True,
     )
+    obsluga_skrotu = _uruchom_globalny_skrot(serwer)
     try:
         serwer.serve_forever()
     except KeyboardInterrupt:
         print("")
         print("Zatrzymywanie serwera.")
     finally:
+        if obsluga_skrotu is not None:
+            obsluga_skrotu.zatrzymaj()
         serwer.shutdown()
         serwer.server_close()
+
+
+class _ObslugaSkrotuLike(Protocol):
+    """Tylko to, czego ten moduł potrzebuje od ``gnb.hotkeys.ObslugaSkrotu``.
+
+    Protokół strukturalny, a nie import konkretnej klasy, żeby ten plik dało
+    się sprawdzić także poleceniem ``python -m mypy gnb --platform linux`` —
+    ``gnb.hotkeys`` na Linuksie nic nie eksportuje, patrz sekcja szósta
+    CLAUDE.md.
+    """
+
+    def zatrzymaj(self) -> None: ...
+
+
+def _uruchom_globalny_skrot(serwer: _Serwer) -> _ObslugaSkrotuLike | None:
+    """Uruchamia obsługę globalnego skrótu, gdy system i konfiguracja na to pozwalają.
+
+    Import ``gnb.hotkeys`` jest tu celowo lokalny i warunkowy: reszta pakietu
+    nie zakłada obecności tego modułu, zgodnie z sekcją szóstą CLAUDE.md, więc
+    serwer interfejsu musi działać bez niego na systemie innym niż Windows.
+    """
+    if sys.platform == "win32" and serwer.konfiguracja.globalny_skrot_wlaczony:
+        from gnb.hotkeys import ObslugaSkrotu
+
+        obsluga = ObslugaSkrotu(
+            serwer.konfiguracja,
+            serwer.aktywny_projekt_skrotu,
+            serwer.rejestr,
+            serwer.ostatni_komunikat_skrotu,
+        )
+        obsluga.uruchom()
+        return obsluga
+    return None
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -163,6 +218,10 @@ class _Handler(BaseHTTPRequestHandler):
             self._wznow_projekt(self._nazwa_z_url(sciezka[len("/projekt/") : -len("/wznow")]))
         elif sciezka.startswith("/projekt/") and sciezka.endswith("/pola"):
             self._zapisz_pola(self._nazwa_z_url(sciezka[len("/projekt/") : -len("/pola")]))
+        elif sciezka.startswith("/projekt/") and sciezka.endswith("/aktywny-skrot"):
+            self._ustaw_aktywny_projekt_skrotu(
+                self._nazwa_z_url(sciezka[len("/projekt/") : -len("/aktywny-skrot")])
+            )
         else:
             self._blad(404, "Nie znaleziono", "Pod tym adresem nie ma żadnej operacji.")
 
@@ -181,6 +240,8 @@ class _Handler(BaseHTTPRequestHandler):
             token_csrf=token,
             dane=dane,
             bledy=bledy,
+            aktywny_projekt_skrotu=self._serwer.aktywny_projekt_skrotu.aktualny(),
+            ostatni_komunikat_skrotu=self._serwer.ostatni_komunikat_skrotu.aktualny(),
         )
         self._wyslij_html(kod, html, token=token)
 
@@ -226,6 +287,8 @@ class _Handler(BaseHTTPRequestHandler):
             podsumowanie=podsumowanie,
             raport=raport,
             bledy=bledy,
+            aktywny_projekt_skrotu=self._serwer.aktywny_projekt_skrotu.aktualny(),
+            ostatni_komunikat_skrotu=self._serwer.ostatni_komunikat_skrotu.aktualny(),
         )
         self._wyslij_html(kod, html, token=token)
 
@@ -385,6 +448,26 @@ class _Handler(BaseHTTPRequestHandler):
                 bledy=[BladPola("instrukcja_systemowa", blad.komunikat)],
             )
             return
+        self._przekieruj(sciezka_projektu(uklad.nazwa_projektu))
+
+    def _ustaw_aktywny_projekt_skrotu(self, nazwa: str) -> None:
+        """Ustawia jawnie wybrany projekt jako cel globalnego skrótu klawiszowego.
+
+        Wybór jest jawny, nie „ostatnio otwarty”, zgodnie z decyzją drugą sekcji
+        dwunastej CLAUDE.md — patrz docstring ``AktywnyProjektSkrotu``.
+        """
+        wynik_formularza = self._parsuj_formularz()
+        if wynik_formularza is None:
+            return
+        if not self._csrf_ok(wynik_formularza.pole(csrf.NAZWA_POLA_FORMULARZA)):
+            return
+
+        uklad = ustal_uklad(self._konfiguracja.katalog_wynikow, nazwa)
+        if not uklad.katalog_projektu.is_dir():
+            self._blad(404, "Nie znaleziono projektu", f"Nie ma projektu o nazwie „{nazwa}”.")
+            return
+
+        self._serwer.aktywny_projekt_skrotu.ustaw(uklad.nazwa_projektu)
         self._przekieruj(sciezka_projektu(uklad.nazwa_projektu))
 
     # --- pomocnicze ---------------------------------------------------

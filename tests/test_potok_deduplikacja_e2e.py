@@ -177,6 +177,56 @@ def test_wylaczona_deduplikacja_zostawia_wszystkie_zrodla(tmp_path: Path) -> Non
     assert all(zrodlo["status"] == "spakowane" for zrodlo in manifest["zrodla"])
 
 
+def test_duplikat_z_poprzedniego_uruchomienia_nie_zajmuje_limitu(tmp_path: Path) -> None:
+    """Duplikat zapisany w checkpoincie z wcześniejszego wywołania nie liczy się do limitu.
+
+    Pierwsze wywołanie tego samego projektu daje jedno źródło spakowane i jedno
+    oznaczone jako duplikat. Drugie wywołanie, z niższym limitem źródeł i jednym
+    zupełnie nowym tekstem, musi to nowe źródło spakować, a nie pominąć z powodu
+    przekroczenia limitu — checkpoint z poprzedniego przebiegu widzi duplikat,
+    ale duplikat nie zajmuje slotu notatnika.
+    """
+    katalog_wynikow = tmp_path / "wyniki"
+    tekst_a = (
+        "Notatka o porzadkowaniu zrodel przed wgraniem ich do notatnika Gemini. "
+        "Warto najpierw sprawdzic duplikaty, zanim zajmiemy slot notatnika. "
+        "Dobrze jest tez ustalic wspolna nazwe projektu przed pierwszym uruchomieniem."
+    )
+    tekst_b = tekst_a + " Krotki dopisek."
+    moment_pierwszy = datetime(2026, 8, 29, 9, 0, tzinfo=UTC)
+
+    pierwsze = przetworz_projekt(
+        [przyjmij_tekst(tekst_a, moment_pierwszy), przyjmij_tekst(tekst_b, moment_pierwszy)],
+        Konfiguracja(katalog_wynikow=katalog_wynikow, limit_zrodel=3),
+        nazwa_projektu="Dup",
+        zegar=_zegar_krokowy(),
+    )
+    manifest_pierwszy = json.loads(pierwsze.sciezka_manifestu.read_text(encoding="utf-8"))
+    statusy_pierwsze = sorted(z["status"] for z in manifest_pierwszy["zrodla"])
+    assert statusy_pierwsze == ["duplikat", "spakowane"]
+
+    moment_drugi = datetime(2026, 8, 29, 9, 30, tzinfo=UTC)
+    tekst_nowy = "Zupelnie inny tekst o wycieczce w gory i noclegu w schronisku."
+
+    drugie = przetworz_projekt(
+        [przyjmij_tekst(tekst_nowy, moment_drugi)],
+        Konfiguracja(katalog_wynikow=katalog_wynikow, limit_zrodel=2),
+        nazwa_projektu="Dup",
+        zegar=_zegar_krokowy(),
+    )
+
+    manifest_drugi = json.loads(drugie.sciezka_manifestu.read_text(encoding="utf-8"))
+    pliki = list((drugie.katalog_projektu / "pliki_wynikowe").glob("*.txt"))
+    assert len(pliki) == 2
+
+    statusy_drugie = {z["identyfikator"]: z["status"] for z in manifest_drugi["zrodla"]}
+    identyfikatory_pierwsze = {z["identyfikator"] for z in manifest_pierwszy["zrodla"]}
+    nowe_identyfikatory = set(statusy_drugie) - identyfikatory_pierwsze
+    assert len(nowe_identyfikatory) == 1
+    (nowy_identyfikator,) = nowe_identyfikatory
+    assert statusy_drugie[nowy_identyfikator] == "spakowane"
+
+
 def test_tekst_wklejony_i_plik_o_tej_samej_tresci_sa_duplikatem(tmp_path: Path) -> None:
     """Deduplikacja działa też między różnymi typami wejścia, nie tylko plikami."""
     katalog = tmp_path / "wejscia"

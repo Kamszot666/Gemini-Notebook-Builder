@@ -649,3 +649,53 @@ def test_uboga_strona_jest_zapisana_ale_oznaczona_do_sprawdzenia(tmp_path: Path)
 
     log_wazny = (wynik.katalog_projektu / "logi" / "log_wazne.txt").read_text(encoding="utf-8")
     assert "Uwaga, podejrzany wynik ekstrakcji" in log_wazny
+
+
+_STRONA_ZA_LOGOWANIEM = (
+    '<html lang="pl"><head><title>Artykuł za logowaniem</title></head><body><article>'
+    "<h1>Artykuł za logowaniem</h1>"
+    "<p>Ten artykuł opisuje wydarzenie, które miało miejsce w zeszłym tygodniu i dotyczy"
+    " wielu czytelników zainteresowanych tym tematem od dłuższego czasu, ponieważ temat"
+    " ten wraca regularnie w rozmowach redakcyjnych i w komentarzach pod innymi tekstami"
+    " opublikowanymi wcześniej w tym samym serwisie internetowym.</p>"
+    "<p>Zaloguj się, aby przeczytać dalszą część tego artykułu oraz uzyskać dostęp do"
+    " pozostałych materiałów premium, dostępnych wyłącznie dla zalogowanych prenumeratorów"
+    " tego serwisu, którzy opłacili roczną albo miesięczną subskrypcję treści.</p>"
+    "</article></body></html>"
+)
+
+
+def test_strona_z_fraza_logowania_trafia_do_materialow_do_sprawdzenia(tmp_path: Path) -> None:
+    """Fraza logowania, nie tylko krótka treść, prowadzi do materiałów do sprawdzenia.
+
+    `_STRONA_ZA_LOGOWANIEM` ma dwa akapity i ponad pięćdziesiąt słów, więc próg
+    długości z `test_uboga_strona_jest_zapisana_ale_oznaczona_do_sprawdzenia` sam
+    z siebie by nie zadziałał. Jedynym powodem podejrzenia ma być zwrot „zaloguj
+    się, aby przeczytać” z `ZWROTY_PODEJRZANE` w `gnb/output/ocena_jakosci.py`,
+    sprawdzany tu przez cały potok, a nie tylko jednostkowo na samej funkcji oceny.
+    """
+    serwer = _Serwer({"/artykul": _odpowiedz(_STRONA_ZA_LOGOWANIEM.encode("utf-8"))})
+
+    wynik = przetworz_projekt(
+        _pozycje(_ADRES_ARTYKULU),
+        _konfiguracja(tmp_path),
+        nazwa_projektu="Test strony za logowaniem",
+        zegar=_zegar_krokowy(),
+        transport_http=serwer.transport(),
+    )
+
+    assert wynik.liczba_przetworzonych == 1
+    assert wynik.liczba_pominietych == 0
+
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    (zrodlo,) = manifest["zrodla"]
+    assert zrodlo["status"] == "spakowane"
+    assert zrodlo["ocena_jakosci"] == "podejrzana"
+    assert not any("słów" in powod for powod in zrodlo["powody_oceny"]), (
+        "próg długości nie miał tu prawa zadziałać, treść ma ponad 50 słów"
+    )
+    assert any("zaloguj się, aby przeczytać" in powod for powod in zrodlo["powody_oceny"])
+
+    raport = wynik.sciezka_raportu.read_text(encoding="utf-8")
+    assert "Materiały do sprawdzenia, liczba: 1" in raport
+    assert _ADRES_ARTYKULU in raport

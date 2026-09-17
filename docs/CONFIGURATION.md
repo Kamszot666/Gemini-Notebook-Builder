@@ -1,7 +1,7 @@
-# Konfiguracja — stan po etapie jedenastym, część A
+# Konfiguracja — stan po etapie dwunastym
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
-obsługuje po etapie dziewiątym. Pełna lista pól z sekcji jedenastej a pliku
+obsługuje po etapie dwunastym. Pełna lista pól z sekcji jedenastej a pliku
 `CLAUDE.md` powstanie w kolejnych etapach razem z funkcjami, których dotyczy.
 Treść dwóch pól
 tekstowych notatnika, czyli instrukcji systemowej i promptu wyszukiwania, nie

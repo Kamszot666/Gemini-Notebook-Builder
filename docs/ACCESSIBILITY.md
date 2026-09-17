@@ -1,4 +1,4 @@
-# Dostępność interfejsu WWW
+# Dostępność interfejsu WWW — stan po etapie dwunastym
 
 Ten dokument opisuje, jak obsługiwać interfejs Gemini Notebook Builder
 z klawiatury i z czytnikiem ekranu, oraz co interfejs ogłasza i jak często.
@@ -203,6 +203,16 @@ jest odrzucane: zapisuje się od razu w pamięci serwera i zostaje przetworzone
 w kolejnym przebiegu, uruchamianym samoczynnie po zakończeniu bieżącego
 zadania. To nie jest nowy proces w tle — to dokończenie pracy, którą już
 zacząłeś naciśnięciem skrótu.
+
+Ta kolejka żyje wyłącznie w pamięci procesu serwera. Jeżeli zamkniesz serwer
+interfejsu dokładnie wtedy, gdy kolejka ma jeszcze nieprzetworzone pozycje,
+te pozycje przepadają — mimo że usłyszałeś dźwięk sukcesu w chwili ich
+dodania. Nie dzieje się to po cichu: serwer przy zamknięciu zapisuje
+ostrzeżenie z liczbą utraconych pozycji i nazwą dotkniętego projektu do
+`log_wazne.txt`, do `log_szczegolowy.txt` tego projektu oraz do ostatniego
+komunikatu skrótu widocznego w interfejsie. Jeżeli po ponownym uruchomieniu
+serwera zobaczysz taki komunikat, dodaj brakujący materiał ponownie —
+program go nie odzyska sam.
 
 ### Strony wymagające zalogowania
 

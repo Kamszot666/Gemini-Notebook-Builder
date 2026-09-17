@@ -1,4 +1,4 @@
-# Dokumentacja Gemini Notebook Builder
+# Dokumentacja Gemini Notebook Builder — stan po etapie dwunastym
 
 Ten katalog zawiera dokumentację użytkową projektu, po polsku. Pełne zasady
 projektu, kontrakty danych i kolejność etapów opisuje `CLAUDE.md` w katalogu
@@ -7,7 +7,7 @@ o dokumentację skierowaną do osoby korzystającej z gotowej aplikacji.
 
 ## Stan dokumentacji
 
-Po części A etapu jedenastego, obok tego pliku, istnieje sześć dokumentów:
+Po etapie dwunastym, obok tego pliku, istnieje sześć dokumentów:
 
 1. `INSTALL.md` — przygotowanie Pythona i środowiska wirtualnego, instalacja
    zależności oraz instalacja narzędzi zewnętrznych z podziałem na etapy, w

@@ -1,4 +1,4 @@
-# Rozwiązywanie problemów
+# Rozwiązywanie problemów — stan po etapie dwunastym
 
 Ten dokument opisuje problemy, które wystąpiły w rzeczywistej pracy z aplikacją,
 oraz te, które wynikają wprost z jej budowy. Każdy przypadek ma tę samą budowę:
@@ -549,3 +549,24 @@ Przyczyna i co zrobić, według treści komunikatu:
    Przełącz się do jednego z nich albo, dla stron wymagających zalogowania,
    użyj obejścia z zapisem strony opisanego w `docs/ACCESSIBILITY.md`, sekcja
    „Globalny skrót klawiszowy”.
+
+## 25. Zamknąłem serwer, a skrót właśnie coś dodał — co się stało z tym źródłem
+
+Objaw. Naciśnięcie skrótu zagrało dźwięk sukcesu, ale po ponownym uruchomieniu
+serwera interfejsu dodanego materiału nie widać w projekcie.
+
+Przyczyna. Kolejka globalnego skrótu żyje wyłącznie w pamięci procesu serwera
+interfejsu, nie w pliku na dysku. Jeżeli serwer został zamknięty dokładnie
+w chwili, gdy w kolejce była jeszcze nieprzetworzona pozycja — bo inne
+przetwarzanie akurat trwało — ta pozycja przepadła razem z zamknięciem
+procesu. Dźwięk sukcesu potwierdzał tylko, że pozycja trafiła do kolejki,
+nie że została już przetworzona.
+
+Co zrobić. Sprawdź `log_wazne.txt` projektu: zamknięcie serwera z niepustą
+kolejką zapisuje tam ostrzeżenie z liczbą utraconych pozycji, to samo
+ostrzeżenie trafia do `log_szczegolowy.txt` i do ostatniego komunikatu skrótu
+w interfejsie. Jeżeli taki wpis tam jest, dodaj brakujący materiał ponownie —
+adres strony albo plik z Eksploratora, tak jak za pierwszym razem. Trwałego
+zapisu kolejki między uruchomieniami serwera aplikacja świadomie nie ma,
+zgodnie z sekcją 18e CLAUDE.md — okno utraty jest wąskie i wymaga zbiegu
+okoliczności, a każda utrata jest zgłaszana, nigdy cicha.

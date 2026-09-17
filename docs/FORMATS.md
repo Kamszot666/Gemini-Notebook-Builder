@@ -1,8 +1,8 @@
-# Obsługiwane formaty — stan po etapie dziesiątym, część B
+# Obsługiwane formaty — stan po etapie dwunastym
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
-Kolejne formaty, czyli ODT i PPTX, dojdą w etapach opisanych w sekcji
-osiemnastej pliku `CLAUDE.md`.
+Formaty ODT i PPTX nie są obsługiwane i nie są zaplanowane w żadnym etapie
+z sekcji osiemnastej pliku `CLAUDE.md`.
 
 ## Wejście
 

@@ -8,30 +8,32 @@ Aplikacja jest projektowana jako narzędzie dostępne dla osób niewidomych korz
 
 ## Stan projektu
 
-Projekt jest w fazie początkowej. Etap zerowy dostarczył szkielet repozytorium. Etap pierwszy dostarczył pierwszą działającą całość: potok przetwarzania dla tekstu wklejonego oraz plików TXT i MD, z wykrywaniem kodowania, normalizacją, jednolitym liczeniem słów, deterministyczną regułą wyboru między plikiem TXT a plikiem MD, zapisem wyników, manifestem, checkpointem z zapisem atomowym i dwoma plikami logów. Potok uruchamia się poleceniem `python -m gnb.cli przetworz`. Etap drugi dodał adresy stron internetowych: przyjmowanie pojedynczych adresów i list, kanoniczną postać adresu z wykrywaniem duplikatów przed pobraniem, asynchroniczne pobieranie z limitem czasu, ponowieniami i kulturą wobec serwera, respektowanie pliku `robots.txt`, wspólną pamięć podręczną opartą na SQLite oraz ekstrakcję treści artykułu z mechanizmem zapasowym. Etap trzeci dodał filmy z serwisu YouTube: rozpoznawanie wszystkich postaci adresu filmu, pobieranie napisów dwiema wzajemnie zapasowymi warstwami zamiast pobierania filmu, wybór między napisami tworzonymi ręcznie i automatycznie, sklejanie segmentów w akapity, opcjonalne znaczniki czasu oraz odrzucanie playlist i kanałów z czytelnym powodem. Etap czwarty A dodał metadane artykułu z danych strukturalnych JSON-LD, ocenę jakości ekstrakcji oraz nagłówek metadanych na początku każdego pliku wynikowego. Etap czwarty dodał siedem formatów plików lokalnych: HTML, CSV, SRT, VTT, PDF, DOCX i EPUB, w tym usuwanie powtarzalnego nagłówka i numeru strony z plików PDF. Kolejne etapy — obrazy, audio, materiały nutowe, deduplikacja, pakowanie, interfejs WWW — opisuje sekcja osiemnasta pliku `CLAUDE.md`. Bieżący stan architektury opisuje `docs/ARCHITECTURE.md`.
+Etapy od zerowego do jedenastego, część A, są ukończone. Potok przetwarzania obsługuje w jednym projekcie: tekst wklejony, pliki TXT i MD, adresy stron internetowych wraz z listami adresów i pamięcią podręczną, filmy z serwisu YouTube przez pobieranie napisów, dokumenty w formatach HTML, PDF, DOCX, EPUB, CSV, SRT i VTT, obrazy i skany rozpoznawane OCR-em i pakowane w tematyczne pliki PDF, nagrania mowy transkrybowane lokalnie z odrzucaniem materiału muzycznego, oraz materiały nutowe w formatach MIDI, MusicXML, Guitar Pro i w postaci skanu rozpoznawanego optycznie programem Audiveris. Każdy przebieg przechodzi przez wieloetapową deduplikację i pakowanie z uwzględnieniem trzech niezależnych limitów notatnika, zapisuje manifest, checkpoint z możliwością wznowienia i dwa pliki logów. Interfejs to lokalny, dostępny serwer WWW uruchamiany poleceniem `python -m gnb.ui.server`, z opcjonalnym globalnym skrótem klawiszowym Control plus Shift plus F12 dodającym do aktywnego projektu adres z przeglądarki albo zaznaczone pliki z Eksploratora. Szczegółową listę etapów i to, co jeszcze przed nami, opisuje sekcja osiemnasta pliku `CLAUDE.md`. Bieżący stan architektury opisuje `docs/ARCHITECTURE.md`.
 
 ## Co program ma umieć
 
 1. Importować adresy stron internetowych, pojedynczo i w paczkach, także z pliku tekstowego z listą adresów.
 2. Pobierać napisy z filmów YouTube zamiast pobierania samych filmów.
 3. Przyjmować tekst wklejany bezpośrednio przez użytkownika.
-4. Obsługiwać dokumenty w formatach TXT, MD, HTML, PDF, DOCX, EPUB, ODT, PPTX, CSV, SRT i VTT.
+4. Obsługiwać dokumenty w formatach TXT, MD, HTML, PDF, DOCX, EPUB, CSV, SRT i VTT.
 5. Rozpoznawać tekst na skanach i obrazach oraz łączyć obrazy w tematyczne pliki PDF z opisami.
 6. Transkrybować nagrania mowy lokalnie, bez wysyłania danych na zewnątrz, i rozpoznawać, kiedy nagranie zawiera muzykę zamiast mowy.
-7. Wykrywać powtórzenia wieloetapowo, zachowując informacje występujące tylko w jednym z porównywanych materiałów.
-8. Pakować materiały z uwzględnieniem trzech niezależnych ograniczeń notatnika: liczby źródeł, liczby słów w źródle i rozmiaru pliku.
-9. Zapisywać stan pracy tak, żeby przerwany projekt dało się wznowić bez powtarzania ukończonych etapów.
-10. Prowadzić manifest pozwalający ustalić pochodzenie każdego fragmentu w każdym pliku wynikowym.
+7. Czytać materiały nutowe w formatach MIDI, MusicXML i Guitar Pro oraz rozpoznawać zapis nutowy ze skanu i obrazu programem Audiveris, zawsze jako opis tekstowy, nigdy jako podgląd partytury.
+8. Wykrywać powtórzenia wieloetapowo, zachowując informacje występujące tylko w jednym z porównywanych materiałów.
+9. Pakować materiały z uwzględnieniem trzech niezależnych ograniczeń notatnika: liczby źródeł, liczby słów w źródle i rozmiaru pliku.
+10. Zapisywać stan pracy tak, żeby przerwany projekt dało się wznowić bez powtarzania ukończonych etapów.
+11. Prowadzić manifest pozwalający ustalić pochodzenie każdego fragmentu w każdym pliku wynikowym.
+12. Udostępniać dostępny interfejs WWW oraz opcjonalny globalny skrót klawiszowy dodający materiał do aktywnego projektu bez przełączania się do aplikacji.
 
 ## Wymagania
 
-Python w wersji 3.12 lub nowszej oraz system Windows 11. Część funkcji wymaga programów zewnętrznych: FFmpeg do obsługi audio, Tesseract do rozpoznawania tekstu, LibreOffice do formatu ODT. Brak któregoś z nich wyłącza tylko odpowiadającą mu funkcję, a nie całą aplikację.
+Python w wersji 3.12 lub nowszej oraz system Windows 11. Część funkcji wymaga programów zewnętrznych: FFmpeg do obsługi audio, Tesseract do rozpoznawania tekstu, MuseScore do samego wykrycia wersji materiałów nutowych (nie jest uruchamiany), Java i Audiveris do rozpoznawania zapisu nutowego ze skanu, oraz LibreOffice, dziś wykrywany, ale bez żadnego zastosowania w aplikacji, bo obsługa formatu ODT nie jest jeszcze zrealizowana. Brak któregokolwiek z tych narzędzi wyłącza tylko odpowiadającą mu funkcję, a nie całą aplikację — pełny opis daje `python -m gnb.cli diagnostyka`.
 
 ## Dokumentacja
 
 Zasady projektu, kontrakty danych, limity notatnika i kolejność prac opisuje plik `CLAUDE.md` w katalogu głównym.
 
-Dokumentacja użytkownika powstanie w katalogu `docs/` w miarę postępu prac.
+Dokumentacja użytkownika jest w katalogu `docs/`: instalacja, konfiguracja, obsługiwane formaty, dostępność, rozwiązywanie problemów i architektura. Spis treści i kolejność lektury opisuje `docs/README.md`.
 
 ## Prywatność
 

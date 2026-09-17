@@ -1,4 +1,4 @@
-# Architektura — stan po etapie jedenastym, część A
+# Architektura — stan po etapie dwunastym
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
 zakończeniu części A etapu jedenastego. Pełny docelowy podział na pakiety
@@ -517,8 +517,13 @@ natywnych, opisuje `docs/FORMATS.md`, sekcja „Materiały nutowe”.
 
 ## Pozostałe pakiety
 
-Pakiety `gnb.documents` i `gnb.hotkeys` istnieją jako puste, importowalne pakiety
-z docstringiem. Logika powstanie w kolejnych etapach.
+Pakiet `gnb.documents` jest dziś pusty. Adaptery formatów dokumentowych, które
+aplikacja faktycznie obsługuje, leżą razem z pozostałymi adapterami
+w `gnb.extractors`, opisanym w sekcji „Ekstraktory” wyżej — nie w `gnb.documents`,
+mimo że sekcja szósta CLAUDE.md przydziela im ten pakiet. Kod poszedł inną drogą,
+spójną samą w sobie, bo wszystkie ekstraktory leżą obok siebie w jednym miejscu;
+`gnb.documents` pozostaje zarezerwowany, bez logiki. Pakiet `gnb.hotkeys` nie
+jest pusty — opisuje go osobna sekcja „Pakiet gnb.hotkeys” wyżej w tym pliku.
 
 ## Testy
 
@@ -564,6 +569,50 @@ wygenerowanego HTML oraz pełny przebieg przez serwer na losowym porcie pętli
 zwrotnej. Test `tests/test_potok_wznowienie_e2e.py` sprawdza zapis listy wejść do
 checkpointu, odtworzenie wejść przy wznowieniu bez podania źródeł oraz kolejność
 zdarzeń postępu.
+
+Test `tests/test_potok_dokumentow_e2e.py` przeprowadza pełny przebieg dla
+dokumentów: wszystkie formaty dokumentowe naraz bez błędów, CSV i napisy bez
+oceny jakości (nie podlegają jej, bo nie mają ekstrakcji do oceniania), skan PDF
+bez warstwy tekstowej trafiający do materiałów do sprawdzenia, uszkodzony PDF
+i uszkodzony dokument niezatrzymujące pozostałych źródeł, oraz ostrzeżenie
+ekstraktora docierające do manifestu i raportu.
+
+Test `tests/test_potok_obrazy_e2e.py` przeprowadza pełny przebieg dla obrazów
+i skanów: rozpoznany tekst w wyniku, skan PDF rozpoznawany strona po stronie,
+grupa obrazów dająca jeden plik PDF na jeden slot, grupa mieszana obrazu
+i tekstu dająca dwa pliki — PDF dla obrazu, TXT dla tekstu, zgodnie z sekcją 18d
+CLAUDE.md — oraz skan bez OCR trafiający do materiałów do sprawdzenia zamiast
+znikać po cichu. Testy zależne od rozpoznania polskiego tekstu pomijają się
+czytelnym komunikatem, gdy w środowisku brakuje danych językowych Tesseracta.
+
+Test `tests/test_potok_audio_e2e.py` przeprowadza pełny przebieg dla nagrań
+mowy: wyłączoną transkrypcję pomijającą nagranie, materiał muzyczny odrzucany
+bez transkrypcji, nagranie mowy z nagłówkiem niosącym rozpoznany język oraz
+dłuższe nagranie w formacie m4a.
+
+Test `tests/test_potok_nuty_e2e.py` przeprowadza pełny przebieg dla materiałów
+nutowych: plik MIDI i plik Guitar Pro dające opis tekstowy z liczbą taktów, dwa
+materiały nutowe w jednej grupie dostające mimo to osobne pliki, skan nut
+z opcją `--nuty` pomijany bez Audiverisa i nie zajmujący przez to slotu limitu,
+oraz — z markerem `wolne` — prawdziwe rozpoznanie skanu przez zainstalowanego
+Audiverisa.
+
+Testy pakietu `gnb.hotkeys` są w `tests/hotkeys/`: stałe skrótu, kolejka,
+rozpoznanie tego, co dodać, na podstawie stanu aktywnego okna, cykl życia
+`ObslugaSkrotu` oraz warstwa Win32. Testy odczytu paska adresu przez UI
+Automation i zaznaczenia w Eksploratorze mają marker `pulpit`, bo wymagają
+odpowiednio otwartej przeglądarki albo Eksploratora z zaznaczeniem, i są
+domyślnie pominięte.
+
+Test `tests/test_potok_mieszany_e2e.py` jest testem scalającym, dodanym w etapie
+dwunastym: sprawdza jeden przebieg łączący naraz sześć typów źródeł — tekst
+wklejony, plik Markdown, dokument PDF, obraz, materiał nutowy natywny oraz skan
+nut pominięty z braku Audiverisa — i weryfikuje spójność między manifestem,
+raportem końcowym i rzeczywistą zawartością katalogu wyników, w tym sumami
+kontrolnymi policzonymi niezależnie z plików na dysku. Dziesięć pozostałych
+testów end-to-end sprawdza pojedyncze ścieżki potoku osobno; ten sprawdza, czy
+trzy niezależne opisy tego samego przebiegu — plik, manifest i raport —
+zgadzają się ze sobą, gdy typy źródeł są wymieszane w jednym wywołaniu.
 
 Testy kanaryjne w `tests/test_youtube_kanaryjny.py` są jedynymi, które sięgają do
 prawdziwego serwisu. Mają marker `siec`, są domyślnie wyłączone i sprawdzają

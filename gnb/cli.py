@@ -133,8 +133,14 @@ NARZEDZIA: tuple[Narzedzie, ...] = (
         nazwa="LibreOffice",
         polecenia=("soffice",),
         argument_wersji="--version",
-        do_czego_sluzy="konwersja plików ODT oraz część obsługi PPTX",
-        co_przestanie_dzialac="import plików w formacie ODT",
+        do_czego_sluzy=(
+            "bywa potrzebny do importu plików ODT; żadna ścieżka przetwarzania go dziś "
+            "nie używa, bo obsługa formatu ODT nie jest w aplikacji zrealizowana"
+        ),
+        co_przestanie_dzialac=(
+            "nic w tej wersji aplikacji — funkcja, której dotyczyłoby to narzędzie, "
+            "jeszcze nie istnieje"
+        ),
     ),
     Narzedzie(
         nazwa="MuseScore",

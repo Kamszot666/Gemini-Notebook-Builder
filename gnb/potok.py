@@ -59,7 +59,7 @@ from gnb.core.nazwy import (
     wygeneruj_nazwe_projektu,
 )
 from gnb.core.postep import FazaPotoku, WywolanieZwrotnePostepu, ZdarzeniePostepu
-from gnb.core.stale import StatusZrodla, TypWejscia, TypZrodla, WynikDeduplikacji
+from gnb.core.stale import FormatWynikowy, StatusZrodla, TypWejscia, TypZrodla, WynikDeduplikacji
 from gnb.core.wyjatki import (
     BladGnb,
     BladTrwaly,
@@ -655,6 +655,15 @@ class _Wykonanie:
         self._postep = postep
         self._pobrane: dict[str, WynikFazyPobrania] = pobrane if pobrane is not None else {}
         self._filmy: dict[str, WynikFazyFilmu] = filmy if filmy is not None else {}
+        # Liczba slotów notatnika rzeczywiście zajętych plikami TXT i PDF, licząca
+        # unikalne ścieżki, więc plik grupy dzielony przez kilka źródeł liczy się
+        # raz, a wersja MD nie liczy się wcale — zgodnie ze wzorem w raporcie
+        # końcowym. Ustawiana na starcie fazy pakowania w `zapisz_pliki_wynikowe`
+        # i zwiększana w `_stan_wyniku` przy każdym zapisanym pliku, żeby kontrola
+        # z sekcji 18e punkt czwarty CLAUDE.md widziała sloty faktycznie zajęte,
+        # a nie liczbę źródeł — ta druga miara nie widzi źródeł już podzielonych
+        # na kilka plików we wcześniejszym uruchomieniu.
+        self._sloty_pakowania_zajete = 0
 
     def przetworz(self, pozycja: PozycjaWejsciowa) -> None:
         """Przetwarza jedno wejście, aktualizując checkpoint i logi."""
@@ -1176,6 +1185,15 @@ class _Wykonanie:
         `--grupa`. Zignorowanie tej opcji dla plików nutowych jest odnotowywane
         w raporcie końcowym, żeby nie było cichym pominięciem.
         """
+        self._sloty_pakowania_zajete = len(
+            {
+                wynik.sciezka_wzgledna
+                for stan in self._checkpoint.zrodla.values()
+                if stan.status == StatusZrodla.SPAKOWANE.value
+                for wynik in stan.wyniki
+                if wynik.format != FormatWynikowy.MD.value
+            }
+        )
         limity = LimityPakowania.z_konfiguracji(
             self._konfiguracja.bezpieczny_limit_slow, self._konfiguracja.bezpieczny_limit_mb
         )
@@ -1349,7 +1367,43 @@ class _Wykonanie:
         if len(podzial.czesci) == 1:
             self._zapisz_zrodlo_niepodzielone(stan, tekst)
             return
+        pozostale = self._konfiguracja.limit_zrodel - self._sloty_pakowania_zajete
+        if len(podzial.czesci) > pozostale:
+            self._pomin_zrodlo_niemieszczace_sie_po_podziale(stan, len(podzial.czesci), pozostale)
+            return
         self._zapisz_czesci_zrodla(stan, podzial.czesci, list(podzial.ostrzezenia))
+
+    def _pomin_zrodlo_niemieszczace_sie_po_podziale(
+        self, stan: StanZrodla, liczba_czesci: int, pozostale_sloty: int
+    ) -> None:
+        """Pomija całe źródło, którego podział nie mieści się w pozostałym limicie.
+
+        Decyzja z sekcji 18e punkt czwarty CLAUDE.md: dokument bez środka albo
+        bez końca w notatniku jest naruszeniem poprawności danych, pierwszego
+        priorytetu z sekcji czwartej, a nie tylko drugiego — pominięcie całego
+        źródła jest stratą jawną i policzalną, cięcie w połowie byłoby stratą
+        cichą. Kontrola limitu w trakcie przyjmowania wejścia już zarezerwowała
+        dla tego źródła jeden slot jako dolne oszacowanie; tu, ze znaną już
+        liczbą części, okazuje się, że to za mało.
+        """
+        komunikat = (
+            f"Źródło po podziale potrzebuje {liczba_czesci} plików, a w limicie "
+            f"liczby źródeł zostało tylko {max(pozostale_sloty, 0)} wolnych miejsc. "
+            "Całe źródło zostało pominięte, żeby w notatniku nie powstał dokument "
+            "bez początku albo bez końca. Podnieś limit źródeł w konfiguracji, "
+            "podziel materiał ręcznie na mniejsze części albo usuń inne źródło "
+            "z projektu."
+        )
+        stan.status = StatusZrodla.POMINIETE.value
+        stan.komunikat_bledu = komunikat
+        stan.wyniki = []
+        self._zapisz_checkpoint()
+        self._dziennik_wazny.zapisz(ZDARZENIE_ZRODLO_POMINIETE)
+        self._loguj(
+            logging.WARNING,
+            stan.identyfikator,
+            f"Pominięto źródło {stan.identyfikator} po podziale: {komunikat}",
+        )
 
     def _oznacz_brak_tekstu_posredniego(self, stan: StanZrodla) -> None:
         """Zamienia brak pliku wyniku pośredniego na kontrolowany błąd źródła."""
@@ -1450,6 +1504,21 @@ class _Wykonanie:
             if tekst is None:
                 self._oznacz_brak_tekstu_posredniego(stan)
                 continue
+            # Sprawdzenie tego samego podziału, który `rozplanuj_grupe` policzy
+            # jeszcze raz chwilę niżej: tu decydujemy, czy źródło w ogóle wejdzie
+            # do grupy, więc `rozplanuj_grupe`, będąca czystą funkcją planującą
+            # bez wiedzy o limicie liczby źródeł, nie musi tej wiedzy dostawać.
+            # Dwa źródła w tej samej grupie przekraczające limit naraz są
+            # sprawdzane niezależnie względem tego samego, jeszcze niezmienionego
+            # budżetu — rzadki przypadek w rzadkim przypadku, świadomie
+            # niedomknięty, żeby nie budować rezerwacji budżetu na krzyż między
+            # źródłami jednej grupy.
+            liczba_czesci = len(podziel_na_czesci(tekst, limity).czesci)
+            if liczba_czesci > 1:
+                pozostale = self._konfiguracja.limit_zrodel - self._sloty_pakowania_zajete
+                if liczba_czesci > pozostale:
+                    self._pomin_zrodlo_niemieszczace_sie_po_podziale(stan, liczba_czesci, pozostale)
+                    continue
             po_identyfikatorze[stan.identyfikator] = stan
             zrodla_do_pakowania.append(
                 ZrodloDoPakowania(stan.identyfikator, tekst, grupa=nazwa_grupy)
@@ -1541,6 +1610,8 @@ class _Wykonanie:
         liczba_czesci: int | None,
     ) -> StanWyniku:
         """Buduje wpis stanu jednego pliku wynikowego z jego rzeczywistej zawartości."""
+        if plik.format != FormatWynikowy.MD:
+            self._sloty_pakowania_zajete += 1
         return StanWyniku(
             sciezka_wzgledna=plik.sciezka.relative_to(self._uklad.katalog_projektu).as_posix(),
             format=plik.format.value,

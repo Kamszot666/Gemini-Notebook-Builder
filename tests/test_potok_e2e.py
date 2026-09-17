@@ -266,6 +266,55 @@ def test_zrodlo_ponad_limit_slow_jest_dzielone_na_czesci_bez_utraty_tresci(
     assert f"Liczba plików TXT: {len(czesci) + 1}" in raport
 
 
+def test_zrodlo_ktorego_podzial_nie_miesci_sie_w_limicie_jest_pominiete_w_calosci(
+    tmp_path: Path,
+) -> None:
+    """Podział, który nie mieści się w pozostałym limicie źródeł, pomija całe źródło.
+
+    Decyzja z sekcji 18e punkt czwarty CLAUDE.md: dokument bez środka albo bez
+    końca w notatniku byłby cichą utratą poprawności danych, pierwszego
+    priorytetu z sekcji czwartej, a nie tylko drugiego. Limit źródeł jest tu
+    ustawiony na dwa, a duże źródło samo potrzebowałoby dziewięciu plików po
+    podziale, więc żaden z nich nie powstaje — inne, małe źródło tego samego
+    przebiegu i tak dostaje swój plik normalnie.
+    """
+    akapit = "Pierwsze zdanie jest krótkie. Drugie zdanie też jest krótkie. Trzecie kończy akapit."
+    duzy_tekst = "\n\n".join([akapit] * 3)
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path, bezpieczny_limit_slow=5, limit_zrodel=2)
+    moment = datetime(2026, 8, 26, 9, 0, tzinfo=UTC)
+    pozycje = [
+        przyjmij_tekst(duzy_tekst, moment),
+        przyjmij_tekst("Krótki tekst.", moment),
+    ]
+
+    wynik = przetworz_projekt(
+        pozycje,
+        konfiguracja,
+        nazwa_projektu="Test limitu po podziale",
+        zegar=_zegar_krokowy(),
+    )
+
+    assert wynik.liczba_bledow == 0
+    assert wynik.liczba_pominietych == 1
+    assert wynik.liczba_przetworzonych == 1
+
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    statusy = [zrodlo["status"] for zrodlo in manifest["zrodla"]]
+    assert statusy.count("pominiete") == 1
+    assert statusy.count("spakowane") == 1
+
+    pominiety = next(zrodlo for zrodlo in manifest["zrodla"] if zrodlo["status"] == "pominiete")
+    assert pominiety["pliki_wynikowe"] == []
+    assert "wolnych miejsc" in (pominiety["komunikat_bledu"] or "")
+
+    pliki_wynikowe = list((wynik.katalog_projektu / "pliki_wynikowe").iterdir())
+    assert len(pliki_wynikowe) == 1, "duże źródło nie zostawia żadnej ze swoich części na dysku"
+
+    raport = wynik.sciezka_raportu.read_text(encoding="utf-8")
+    assert "Źródła nieprzetworzone" in raport
+    assert "wolnych miejsc" in raport
+
+
 def test_plik_binarny_ponad_bezpieczny_limit_rozmiaru_jest_pominiety(tmp_path: Path) -> None:
     katalog_zrodel = tmp_path / "zrodla"
     katalog_zrodel.mkdir()

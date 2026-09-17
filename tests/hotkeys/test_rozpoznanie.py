@@ -55,6 +55,24 @@ def test_pasek_adresu_ze_spacjami_jest_przycinany() -> None:
     assert wynik.adres == "https://przyklad.pl"  # type: ignore[union-attr]
 
 
+def test_tekst_wyszukiwania_bez_kropki_w_pasku_adresu_daje_porazke() -> None:
+    """Wpisywane hasło wyszukiwania, jeszcze bez przejścia na stronę wyników,
+    nie może zostać po cichu potraktowane jako adres."""
+    okno = _okno(nazwa_procesu="chrome", tytul="Nowa karta")
+    wynik = rozpoznaj(okno, "jak naprawić drukarkę", [])
+
+    assert isinstance(wynik, PorazkaRozpoznania)
+    assert "nie wygląda na adres" in wynik.powod
+
+
+def test_tekst_wyszukiwania_z_dwukropkiem_w_pasku_adresu_daje_porazke() -> None:
+    okno = _okno(nazwa_procesu="firefox", tytul="Nowa karta")
+    wynik = rozpoznaj(okno, "wyszukaj: najlepsza kawa w Krakowie", [])
+
+    assert isinstance(wynik, PorazkaRozpoznania)
+    assert "nie wygląda na adres" in wynik.powod
+
+
 def test_opis_adresu_uzywa_tytulu_okna_gdy_dostepny() -> None:
     okno = _okno(nazwa_procesu="chrome", tytul="Tytuł strony")
     wynik = rozpoznaj(okno, "przyklad.pl", [])

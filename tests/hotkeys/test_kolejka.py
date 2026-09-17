@@ -75,3 +75,19 @@ def test_liczba_oczekujacych_sumuje_wszystkie_projekty() -> None:
     kolejka.dodaj("Drugi", _pozycja("c"))
 
     assert kolejka.liczba_oczekujacych() == 3
+
+
+def test_stan_pustej_kolejki_jest_pustym_slownikiem() -> None:
+    assert KolejkaSkrotu().stan() == {}
+
+
+def test_stan_zwraca_liczbe_pozycji_na_projekt_bez_usuwania() -> None:
+    kolejka = KolejkaSkrotu()
+    kolejka.dodaj("Pierwszy", _pozycja("a"))
+    kolejka.dodaj("Pierwszy", _pozycja("b"))
+    kolejka.dodaj("Drugi", _pozycja("c"))
+
+    assert kolejka.stan() == {"Pierwszy": 2, "Drugi": 1}
+    # Samo sprawdzenie stanu nie konsumuje pozycji.
+    assert kolejka.liczba_oczekujacych() == 3
+    assert kolejka.stan() == {"Pierwszy": 2, "Drugi": 1}

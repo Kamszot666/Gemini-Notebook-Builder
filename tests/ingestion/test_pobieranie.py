@@ -223,6 +223,7 @@ def test_zasob_inny_niz_html_jest_pomijany() -> None:
 
     assert isinstance(wynik, PominietePobranie)
     assert "application/pdf" in wynik.powod
+    assert "--plik" in wynik.powod
 
 
 def test_zasob_ponad_limit_rozmiaru_jest_pomijany() -> None:

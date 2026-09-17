@@ -566,8 +566,8 @@ def _pominiecie_z_typu_zawartosci(
     return PominietePobranie(
         adres=adres,
         powod=(
-            f"Zasób ma typ „{typ}”, a nie stronę HTML. Obsługa tego formatu przyjdzie "
-            "w kolejnych etapach, na razie źródło zostało pominięte."
+            f"Zasób ma typ „{typ}”, a nie stronę HTML. Ten adres prowadzi do pliku, "
+            "a nie do strony: pobierz plik na dysk i dodaj go opcją --plik."
         ),
     )
 

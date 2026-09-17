@@ -11,6 +11,13 @@ nic poza kolejnym lokalnie budowanym artefaktem.
 Moduł jest importowalny na każdym systemie; cała jego zawartość leży za
 sprawdzeniem ``sys.platform == "win32"`` z tego samego powodu co w
 ``_win32.py`` i ``_automatyzacja.py``.
+
+Obiekt ``Shell.Application`` jest tworzony od nowa przy każdym wywołaniu
+``odczytaj_zaznaczenie``, w wątku, który go używa — celowo, z tego samego
+powodu co w ``_automatyzacja.py``: wskaźnik COM utworzony w jednym wątku nie
+jest bezpieczny do użycia w innym bez marshalingu, a naciśnięcie skrótu jest
+obsługiwane w nowym wątku roboczym przy każdym naciśnięciu. Wołający
+w ``obsluga.py`` inicjuje COM w tym wątku przed wywołaniem tej funkcji.
 """
 
 from __future__ import annotations

@@ -18,6 +18,16 @@ pierwszym użyciu plik ``comtypes/gen/UIAutomationClient.py`` — zwykły,
 tekstowy kod Pythona wczytywany przez podpisany interpreter, nie żadną nową
 bibliotekę natywną, więc reguła kontroli aplikacji Windows z sekcji 18d
 CLAUDE.md tu nie ma zastosowania.
+
+Obiekt ``IUIAutomation`` jest tworzony od nowa przy każdym wywołaniu
+``odczytaj_pasek_adresu``, w wątku, który go używa, a nie raz przy imporcie
+modułu. Wskaźnik interfejsu COM utworzony w jednym wątku (apartamencie) nie
+jest bezpieczny do użycia wprost w innym wątku bez marshalingu — naciśnięcie
+skrótu jest obsługiwane w osobnym wątku roboczym tworzonym przy każdym
+naciśnięciu, patrz ``_win32.py``, więc obiekt utworzony raz przy imporcie
+w wątku startu serwera byłby używany z zupełnie innego wątku i groziłby
+błędem ``RPC_E_WRONG_THREAD``. Wołający w ``obsluga.py`` inicjuje COM w tym
+wątku roboczym przed wywołaniem tej funkcji.
 """
 
 from __future__ import annotations
@@ -35,18 +45,22 @@ if sys.platform == "win32":
     # Firefox dokłada do klasy dodatkowe, niestabilne sufiksy.
     _KLASY_PASKA_ADRESU = ("OmniboxViewViews", "urlbar-input")
 
-    _automatyzacja = comtypes.client.CreateObject(UIA.CUIAutomation, interface=UIA.IUIAutomation)
-
     def odczytaj_pasek_adresu(uchwyt: int) -> str | None:
         """Zwraca wartość paska adresu albo ``None``, gdy nie dało się jej odczytać.
 
         Różnica między pustym paskiem a nieudanym odczytem jest tu istotna dla
         wywołującego w ``rozpoznanie.py``: to dwie różne sytuacje, patrz sekcja
         dwunasta CLAUDE.md o zaznaczeniu, zastosowana analogicznie do adresu.
+
+        Obiekt automatyzacji jest tworzony tutaj, przy każdym wywołaniu, w wątku
+        wołającego — patrz uzasadnienie w dokumentacji modułu na górze pliku.
         """
         try:
-            element = _automatyzacja.ElementFromHandle(uchwyt)
-            warunek = _automatyzacja.CreatePropertyCondition(
+            automatyzacja = comtypes.client.CreateObject(
+                UIA.CUIAutomation, interface=UIA.IUIAutomation
+            )
+            element = automatyzacja.ElementFromHandle(uchwyt)
+            warunek = automatyzacja.CreatePropertyCondition(
                 UIA.UIA_IsValuePatternAvailablePropertyId, True
             )
             znalezione = element.FindAll(UIA.TreeScope_Descendants, warunek)

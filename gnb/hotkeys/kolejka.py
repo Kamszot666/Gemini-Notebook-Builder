@@ -57,3 +57,13 @@ class KolejkaSkrotu:
         """Łączna liczba oczekujących pozycji, sumowana po wszystkich projektach."""
         with self._zamek:
             return sum(len(pozycje) for pozycje in self._oczekujace.values())
+
+    def stan(self) -> dict[str, int]:
+        """Zwraca liczbę oczekujących pozycji dla każdego projektu, bez ich usuwania.
+
+        Służy raportowaniu przy zamknięciu serwera: ``ObslugaSkrotu.zatrzymaj``
+        woła tę metodę, żeby opisać ewentualną utratę zawartości kolejki, bez
+        zmiany jej stanu — samo raportowanie nie powinno konsumować pozycji.
+        """
+        with self._zamek:
+            return {nazwa: len(pozycje) for nazwa, pozycje in self._oczekujace.items() if pozycje}

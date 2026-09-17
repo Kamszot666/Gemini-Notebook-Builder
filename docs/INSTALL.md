@@ -1,4 +1,4 @@
-# Instalacja — stan po etapie dziesiątym, część A
+# Instalacja — stan po etapie jedenastym, część A
 
 Ten dokument opisuje przygotowanie środowiska do pracy z aplikacją: Pythona,
 środowiska wirtualnego, zależności oraz narzędzi zewnętrznych. Narzędzia

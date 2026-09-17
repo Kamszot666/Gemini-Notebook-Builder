@@ -33,6 +33,10 @@ ozdobników, a polecenia do wpisania są w osobnych blokach.
 20. Plik MIDI albo Guitar Pro dostał status „pominiete”: brak biblioteki z grupy `nuty`.
 21. Raport diagnostyki pokazuje „MuseScore: BRAK”, choć MuseScore jest zainstalowany.
 22. Plik nutowy z obrazu albo PDF nie został rozpoznany: brak Audiverisa. Źródło ma status „pominiete”.
+23. Globalny skrót Control plus Shift plus F12 nie działa: rejestracja się nie
+    powiodła.
+24. Skrót nie znajduje aktywnego projektu albo nie odczytuje adresu, mimo że
+    serwer interfejsu działa.
 
 ## 1. Windows blokuje plik wykonywalny narzędzia deweloperskiego
 
@@ -498,3 +502,50 @@ Instalator Audiverisa dla Windows niesie własne, samodzielne środowisko Java �
 sprawdzone uruchomieniem — więc doinstalowanie systemowej Javy tego problemu
 nie rozwiąże. Wiersz „Java” w raporcie diagnostyki dotyczy innych sposobów
 instalacji Audiverisa, nie tej.
+
+## 23. Globalny skrót Control plus Shift plus F12 nie działa: rejestracja się nie powiodła
+
+Objaw. Po naciśnięciu skrótu nic się nie dzieje: żadnego dźwięku, żadnego
+komunikatu. W logu `gnb.hotkeys`, zapisywanym przy starcie serwera interfejsu,
+jest wpis o nieudanej rejestracji globalnego skrótu.
+
+Przyczyna. Kombinacja Control plus Shift plus F12 jest już zarejestrowana
+przez inny program w tej sesji Windows — funkcja `RegisterHotKey` pozwala
+zarejestrować daną kombinację tylko raz naraz w całym systemie. Dwa typowe
+sprawcy: druga uruchomiona kopia serwera interfejsu albo własny gest wejściowy
+przypisany w NVDA do tej samej kombinacji, zwłaszcza w układzie klawiatury
+laptopowym, gdzie Caps Lock bywa klawiszem NVDA i użytkownicy dokładają do
+niego własne gesty na sąsiednich klawiszach.
+
+Co zrobić. Sprawdź w NVDA: Preferencje, Gesty wejściowe, czy kombinacja
+Control plus Shift plus F12 nie jest już przypisana do innego polecenia —
+programowo nie da się zajrzeć do gestów procesu NVDA, więc to jedyny sposób
+sprawdzenia. Zamknij też ewentualną drugą uruchomioną kopię `python -m
+gnb.ui.server`. Nieudana rejestracja nigdy nie zatrzymuje serwera interfejsu:
+reszta aplikacji, wraz z formularzem i przetwarzaniem, działa normalnie, tylko
+bez globalnego skrótu w tej sesji serwera.
+
+## 24. Skrót nie znajduje aktywnego projektu albo nie odczytuje adresu, mimo że serwer interfejsu działa
+
+Objaw. Naciśnięcie skrótu gra jeden niski, dłuższy ton (porażka), a komunikat
+na stronie głównej albo stronie projektu wyjaśnia dlaczego.
+
+Przyczyna i co zrobić, według treści komunikatu:
+
+1. „Brak aktywnego projektu skrótu” — żaden projekt nie został jeszcze
+   ustawiony jako aktywny w tej sesji serwera, albo serwer został od tego
+   czasu uruchomiony ponownie i wybór się wyczyścił. Otwórz stronę projektu
+   i aktywuj przycisk „Ustaw jako aktywny projekt skrótu”.
+2. „Nie udało się odczytać paska adresu” — okno przeglądarki jest aktywne, ale
+   UI Automation nie znalazło w nim kontrolki paska adresu, na przykład bo
+   pasek jest w trakcie przejścia w tryb pełnoekranowy. Wróć do zwykłego
+   widoku okna i naciśnij skrót jeszcze raz.
+3. „Pasek adresu jest pusty” — rzadki stan przejściowy przeglądarki. Kliknij
+   w treść strony i naciśnij skrót jeszcze raz.
+4. „Aktywne okno to Eksplorator plików bez zaznaczenia” — zaznacz plik albo
+   pliki w Eksploratorze przed naciśnięciem skrótu.
+5. „Aktywny program to NAZWA, nie wiem, jak z niego coś dodać” — skrót
+   w części A obsługuje wyłącznie Chrome, Firefox i Eksplorator Windows.
+   Przełącz się do jednego z nich albo, dla stron wymagających zalogowania,
+   użyj obejścia z zapisem strony opisanego w `docs/ACCESSIBILITY.md`, sekcja
+   „Globalny skrót klawiszowy”.

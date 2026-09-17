@@ -492,8 +492,8 @@ def uruchom_przetwarzanie(
     Służy do nadpisania tej decyzji dla konkretnego nagrania mowy z głośnym tłem.
 
     Argument `nuty` sprawia, że pliki PDF i obrazy tego wywołania są traktowane
-    jako materiał nutowy. Do czasu wdrożenia Audiverisa w drugiej części etapu
-    dziesiątego takie pliki są pomijane z czytelnym komunikatem.
+    jako materiał nutowy do rozpoznania programem Audiveris. Bez zainstalowanego
+    Audiverisa takie pliki dostają status „pominiete” z czytelnym komunikatem.
 
     Przy opcji `tylko_sprawdz_liste` polecenie kończy się po wypisaniu
     podsumowania listy adresów, z kodem zero także wtedy, gdy część wpisów jest
@@ -731,9 +731,9 @@ def main(argumenty: list[str] | None = None) -> int:
         action="store_true",
         dest="nuty",
         help=(
-            "Potraktuj pliki PDF i obrazy tego wywołania jako materiał nutowy. Rozpoznawanie "
-            "zapisu nutowego z obrazu wymaga programu Audiveris i dojdzie w drugiej części "
-            "etapu dziesiątego; do tego czasu takie pliki są pomijane z czytelnym komunikatem. "
+            "Skieruj pliki PDF i obrazy tego wywołania do rozpoznania zapisu nutowego. "
+            "Rozpoznawanie wymaga zainstalowanego programu Audiveris; bez niego takie źródła "
+            "dostają status „pominiete” z czytelnym komunikatem. "
             "Pliki MIDI, MusicXML i Guitar Pro są traktowane jako materiał nutowy bez tej opcji."
         ),
     )

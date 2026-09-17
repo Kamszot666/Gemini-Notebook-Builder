@@ -19,6 +19,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from gnb.core.url import czy_wyglada_na_adres
 from gnb.hotkeys.model import DodanieZeSkrotu, InformacjeOOknie, TypDodania
 
 # Nazwy procesów przeglądarek obsługiwanych w części A etapu jedenastego,
@@ -79,9 +80,20 @@ def _rozpoznaj_przegladarke(
         return PorazkaRozpoznania(
             f"Pasek adresu w oknie „{okno.tytul}” jest pusty. Nic nie dodano."
         )
-    return DodanieZeSkrotu(
-        typ=TypDodania.ADRES, opis=okno.tytul or adres, adres=_znormalizowany_adres(adres)
-    )
+    znormalizowany = _znormalizowany_adres(adres)
+    if not czy_wyglada_na_adres(znormalizowany):
+        # Pasek adresu zawiera to, co jest w nim wpisane, nie to, co jest
+        # załadowane — na przykład wpisywane właśnie hasło wyszukiwania, zanim
+        # przeglądarka przejdzie na stronę wyników. Sprawdzamy tą samą
+        # walidacją, z której korzysta reszta aplikacji przy przyjmowaniu URL
+        # (`gnb.core.url.waliduj_adres`), żeby nie dodawać do projektu czegoś,
+        # co i tak zostałoby odrzucone dalej w potoku, tylko wtedy bez dźwięku
+        # sukcesu i bez czytelnego powodu.
+        return PorazkaRozpoznania(
+            f"Zawartość paska adresu w oknie „{okno.tytul}” nie wygląda na adres "
+            "strony. Nic nie dodano."
+        )
+    return DodanieZeSkrotu(typ=TypDodania.ADRES, opis=okno.tytul or adres, adres=znormalizowany)
 
 
 def _rozpoznaj_eksplorator(

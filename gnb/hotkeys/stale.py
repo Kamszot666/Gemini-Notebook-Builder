@@ -9,8 +9,14 @@ from __future__ import annotations
 
 # Domyślna kombinacja skrótu: Control plus Shift plus F12, zgodnie z sekcją
 # dwunastą CLAUDE.md. Modyfikatory są sumą bitową stałych Win32 MOD_CONTROL
-# (0x0002) i MOD_SHIFT (0x0004); kod klawisza to VK_F12 (0x7B).
-MODYFIKATORY_SKROTU = 0x0002 | 0x0004
+# (0x0002), MOD_SHIFT (0x0004) i MOD_NOREPEAT (0x4000); kod klawisza to
+# VK_F12 (0x7B). MOD_NOREPEAT jest konieczny: bez niej automatyczne
+# powtarzanie klawiatury przy przytrzymaniu kombinacji generuje wiele
+# komunikatów WM_HOTKEY z jednego naciśnięcia, więc jedno dłuższe
+# przytrzymanie dodawałoby to samo źródło wielokrotnie. Dokumentacja
+# RegisterHotKey opisuje tę flagę wprost; dostępna od Windows 7, czyli na
+# każdym wspieranym Windows 11.
+MODYFIKATORY_SKROTU = 0x0002 | 0x0004 | 0x4000
 KOD_KLAWISZA_SKROTU = 0x7B
 
 # Identyfikator skrótu przekazywany do RegisterHotKey. Wartość dowolna, unikalna

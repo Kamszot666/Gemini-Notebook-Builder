@@ -79,6 +79,27 @@ def test_zachowuj_oryginaly_jest_domyslnie_wlaczone_i_da_sie_wylaczyc(tmp_path: 
 
     assert wczytaj_konfiguracje(plik, {}).zachowuj_oryginaly is True
 
+
+def test_globalny_skrot_wlaczony_jest_domyslnie_prawda(tmp_path: Path) -> None:
+    konfiguracja = wczytaj_konfiguracje(tmp_path / "nie_ma.toml", srodowisko={})
+    assert konfiguracja.globalny_skrot_wlaczony is True
+
+
+def test_globalny_skrot_wlaczony_da_sie_wylaczyc_plikiem(tmp_path: Path) -> None:
+    plik = tmp_path / "konfiguracja.toml"
+    plik.write_text("globalny_skrot_wlaczony = false\n", encoding="utf-8")
+
+    konfiguracja = wczytaj_konfiguracje(plik, srodowisko={})
+    assert konfiguracja.globalny_skrot_wlaczony is False
+
+
+def test_zmienna_srodowiskowa_globalnego_skrotu_ma_pierwszenstwo(tmp_path: Path) -> None:
+    plik = tmp_path / "konfiguracja.toml"
+    plik.write_text("globalny_skrot_wlaczony = true\n", encoding="utf-8")
+
+    konfiguracja = wczytaj_konfiguracje(plik, srodowisko={"GNB_GLOBALNY_SKROT_WLACZONY": "false"})
+    assert konfiguracja.globalny_skrot_wlaczony is False
+
     plik.write_text("zachowuj_oryginaly = false\n", encoding="utf-8")
     assert wczytaj_konfiguracje(plik, {}).zachowuj_oryginaly is False
 

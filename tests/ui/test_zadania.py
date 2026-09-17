@@ -69,3 +69,50 @@ def test_drugie_uruchomienie_w_trakcie_pierwszego_jest_odrzucane() -> None:
 
 def test_brak_zadania_daje_none() -> None:
     assert RejestrZadan().informacja() is None
+
+
+def test_nasluch_zakonczenia_jest_wolany_po_udanym_zadaniu() -> None:
+    """Globalny skrót dopisuje się tu, żeby samoczynnie opróżnić kolejkę po zadaniu."""
+    rejestr = RejestrZadan()
+    wywolania: list[None] = []
+    rejestr.dodaj_nasluch_zakonczenia(lambda: wywolania.append(None))
+
+    rejestr.uruchom("Projekt", lambda _postep: None)
+    _poczekaj_na_stan(rejestr, StanZadania.ZAKONCZONE)
+
+    for _ in range(200):
+        if wywolania:
+            break
+        time.sleep(0.01)
+    assert wywolania
+
+
+def test_nasluch_zakonczenia_jest_wolany_takze_po_bledzie() -> None:
+    rejestr = RejestrZadan()
+    wywolania: list[None] = []
+    rejestr.dodaj_nasluch_zakonczenia(lambda: wywolania.append(None))
+
+    def praca(_postep):  # type: ignore[no-untyped-def]
+        raise RuntimeError("błąd")
+
+    rejestr.uruchom("Projekt", praca)
+    _poczekaj_na_stan(rejestr, StanZadania.BLAD)
+
+    for _ in range(200):
+        if wywolania:
+            break
+        time.sleep(0.01)
+    assert wywolania
+
+
+def test_wyjatek_w_nasluchu_zakonczenia_nie_ucieka() -> None:
+    """Wadliwy nasłuch nie może przerwać oznaczenia zadania jako zakończonego."""
+    rejestr = RejestrZadan()
+
+    def nasluch_z_bledem() -> None:
+        raise RuntimeError("nasłuch się wywrócił")
+
+    rejestr.dodaj_nasluch_zakonczenia(nasluch_z_bledem)
+    rejestr.uruchom("Projekt", lambda _postep: None)
+
+    _poczekaj_na_stan(rejestr, StanZadania.ZAKONCZONE)

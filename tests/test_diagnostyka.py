@@ -197,6 +197,66 @@ def test_wpis_java_nie_obiecuje_ze_jest_zawsze_potrzebna() -> None:
     assert "nic w tej instalacji" in wpis.co_przestanie_dzialac
 
 
+def test_wiersz_globalnego_skrotu_na_systemie_innym_niz_windows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Na systemie innym niż Windows raport nazywa brak modułu wprost, bez sugestii usterki."""
+    monkeypatch.setattr(cli.sys, "platform", "linux")
+
+    wiersz = cli._wiersz_globalnego_skrotu()
+
+    assert wiersz.startswith("Globalny skrót klawiszowy: niedostępny na tym systemie.")
+    assert "comtypes" not in wiersz
+
+
+def test_wiersz_globalnego_skrotu_gdy_wylaczony_w_konfiguracji(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.setattr(
+        cli, "wczytaj_konfiguracje", lambda: cli.Konfiguracja(globalny_skrot_wlaczony=False)
+    )
+
+    wiersz = cli._wiersz_globalnego_skrotu()
+
+    assert "wyłączony ustawieniem" in wiersz
+
+
+def test_wiersz_globalnego_skrotu_gdy_wlaczony_ale_bez_comtypes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.setattr(
+        cli, "wczytaj_konfiguracje", lambda: cli.Konfiguracja(globalny_skrot_wlaczony=True)
+    )
+    monkeypatch.setattr(cli.importlib.util, "find_spec", lambda _nazwa: None)
+
+    wiersz = cli._wiersz_globalnego_skrotu()
+
+    assert "brakuje biblioteki" in wiersz
+    assert "comtypes" in wiersz
+
+
+def test_wiersz_globalnego_skrotu_gdy_wlaczony_i_dostepny(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.setattr(
+        cli, "wczytaj_konfiguracje", lambda: cli.Konfiguracja(globalny_skrot_wlaczony=True)
+    )
+    monkeypatch.setattr(cli.importlib.util, "find_spec", lambda _nazwa: object())
+
+    wiersz = cli._wiersz_globalnego_skrotu()
+
+    assert "włączony (Control plus Shift plus F12)" in wiersz
+    assert "python -m gnb.ui.server" in wiersz
+
+
+def test_raport_diagnostyki_wymienia_globalny_skrot() -> None:
+    raport = cli.zbuduj_raport_diagnostyki()
+    assert "Globalny skrót klawiszowy:" in raport
+
+
 def test_znajdz_wersje_woli_wiersz_z_cyfra_nad_dosłownie_pierwszy(tmp_path: Path) -> None:
     """Chroni przed regresją do „zawsze pierwszy wiersz”. Audiveris wypisuje samą
     nazwę programu na pierwszym wierszu, a numer wersji dopiero na drugim —

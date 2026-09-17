@@ -114,7 +114,7 @@ if sys.platform == "win32":
 
             moment = datetime.now(UTC)
             if wynik.typ is TypDodania.ADRES:
-                assert wynik.adres is not None, "rozpoznanie.py zawsze ustawia adres dla TypDodania.ADRES"
+                assert wynik.adres is not None, "rozpoznanie.py zawsze ustawia adres tu"
                 pozycja = przyjmij_url(
                     wynik.adres, moment, self._konfiguracja.dodatkowe_parametry_sledzace
                 )

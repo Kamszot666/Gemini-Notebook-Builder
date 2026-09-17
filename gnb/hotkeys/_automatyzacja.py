@@ -35,9 +35,7 @@ if sys.platform == "win32":
     # Firefox dokłada do klasy dodatkowe, niestabilne sufiksy.
     _KLASY_PASKA_ADRESU = ("OmniboxViewViews", "urlbar-input")
 
-    _automatyzacja = comtypes.client.CreateObject(
-        UIA.CUIAutomation, interface=UIA.IUIAutomation
-    )
+    _automatyzacja = comtypes.client.CreateObject(UIA.CUIAutomation, interface=UIA.IUIAutomation)
 
     def odczytaj_pasek_adresu(uchwyt: int) -> str | None:
         """Zwraca wartość paska adresu albo ``None``, gdy nie dało się jej odczytać.

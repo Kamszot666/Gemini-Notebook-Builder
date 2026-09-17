@@ -43,8 +43,7 @@ if sys.platform == "win32":
                     continue
                 zaznaczone = okno.Document.SelectedItems()
                 return tuple(
-                    Path(str(zaznaczone.Item(pozycja).Path))
-                    for pozycja in range(zaznaczone.Count)
+                    Path(str(zaznaczone.Item(pozycja).Path)) for pozycja in range(zaznaczone.Count)
                 )
             except (comtypes.COMError, AttributeError, OSError):
                 continue

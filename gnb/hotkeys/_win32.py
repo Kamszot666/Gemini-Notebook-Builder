@@ -86,9 +86,7 @@ if sys.platform == "win32":
         _user32.GetWindowThreadProcessId(uchwyt, ctypes.byref(pid))
         if not pid.value:
             return ""
-        uchwyt_procesu = _kernel32.OpenProcess(
-            _PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value
-        )
+        uchwyt_procesu = _kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
         if not uchwyt_procesu:
             return ""
         try:

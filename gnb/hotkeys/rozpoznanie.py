@@ -76,7 +76,9 @@ def _rozpoznaj_przegladarke(
         )
     adres = adres_paska.strip()
     if not adres:
-        return PorazkaRozpoznania(f"Pasek adresu w oknie „{okno.tytul}” jest pusty. Nic nie dodano.")
+        return PorazkaRozpoznania(
+            f"Pasek adresu w oknie „{okno.tytul}” jest pusty. Nic nie dodano."
+        )
     return DodanieZeSkrotu(
         typ=TypDodania.ADRES, opis=okno.tytul or adres, adres=_znormalizowany_adres(adres)
     )
@@ -86,7 +88,9 @@ def _rozpoznaj_eksplorator(
     pliki_zaznaczone: Sequence[Path],
 ) -> DodanieZeSkrotu | PorazkaRozpoznania:
     if not pliki_zaznaczone:
-        return PorazkaRozpoznania("Aktywne okno to Eksplorator plików bez zaznaczenia. Nic nie dodano.")
+        return PorazkaRozpoznania(
+            "Aktywne okno to Eksplorator plików bez zaznaczenia. Nic nie dodano."
+        )
     pierwszy = pliki_zaznaczone[0].name
     if len(pliki_zaznaczone) == 1:
         opis = pierwszy

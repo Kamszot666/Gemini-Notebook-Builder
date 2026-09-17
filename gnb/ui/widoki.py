@@ -23,6 +23,7 @@ from gnb.persistence.pola_notatnika import PolaNotatnika
 from gnb.ui.csrf import NAZWA_POLA_FORMULARZA
 from gnb.ui.html import escapuj
 from gnb.ui.projekty import ProjektNaLiscie
+from gnb.ui.stan_skrotu import KomunikatSkrotu
 from gnb.ui.zadania import InformacjaOZadaniu, StanZadania
 
 SCIEZKA_POSTEPU = "/postep"
@@ -163,6 +164,8 @@ def strona_glowna(
     token_csrf: str,
     dane: DaneFormularzaProjektu | None = None,
     bledy: list[BladPola] | None = None,
+    aktywny_projekt_skrotu: str | None = None,
+    ostatni_komunikat_skrotu: KomunikatSkrotu | None = None,
 ) -> str:
     """Strona główna: formularz nowego projektu oraz wykaz niedokończonych projektów."""
     dane = dane or DaneFormularzaProjektu()
@@ -195,8 +198,35 @@ def strona_glowna(
 <button type="submit">Utwórz projekt i rozpocznij przetwarzanie</button>
 </form>"""
 
-    tresc = formularz + _sekcja_niedokonczone(projekty, token_csrf)
+    tresc = (
+        formularz
+        + _sekcja_niedokonczone(projekty, token_csrf)
+        + _sekcja_skrotu_glowna(aktywny_projekt_skrotu, ostatni_komunikat_skrotu)
+    )
     return _dokument("Gemini Notebook Builder", tresc, skrypt=_SKRYPT_FOKUS_BLEDOW if bledy else "")
+
+
+def _sekcja_skrotu_glowna(
+    aktywny_projekt_skrotu: str | None, ostatni_komunikat_skrotu: KomunikatSkrotu | None
+) -> str:
+    """Stan globalnego skrótu na stronie głównej: bez przycisku, on jest przy projekcie."""
+    status = (
+        f"Aktywny projekt skrótu: {escapuj(aktywny_projekt_skrotu)}."
+        if aktywny_projekt_skrotu
+        else "Brak aktywnego projektu skrótu."
+    )
+    return (
+        '<div class="blok">\n<h2>Globalny skrót klawiszowy</h2>\n'
+        f"<p>{status}</p>\n"
+        f"{_akapit_ostatniego_komunikatu(ostatni_komunikat_skrotu)}\n</div>"
+    )
+
+
+def _akapit_ostatniego_komunikatu(komunikat: KomunikatSkrotu | None) -> str:
+    if komunikat is None:
+        return ""
+    wynik = "powodzenie" if komunikat.sukces else "porażka"
+    return f'<p class="pomoc">Ostatnie zdarzenie skrótu ({wynik}): {escapuj(komunikat.tekst)}</p>'
 
 
 def _sekcja_niedokonczone(projekty: list[ProjektNaLiscie], token_csrf: str) -> str:
@@ -242,6 +272,8 @@ def strona_projektu(
     podsumowanie: PodsumowanieWyniku | None = None,
     raport: str | None = None,
     bledy: list[BladPola] | None = None,
+    aktywny_projekt_skrotu: str | None = None,
+    ostatni_komunikat_skrotu: KomunikatSkrotu | None = None,
 ) -> str:
     """Strona projektu: region postępu, dwa pola tekstowe oraz raport po zakończeniu."""
     bledy = bledy or []
@@ -255,6 +287,11 @@ def strona_projektu(
             f'<div class="blok">\n<h2>Raport końcowy</h2>\n<pre>{escapuj(raport)}</pre>\n</div>'
         )
 
+    czesci.append(
+        _sekcja_skrotu_projektu(
+            sciezka, nazwa, aktywny_projekt_skrotu, ostatni_komunikat_skrotu, token_csrf
+        )
+    )
     czesci.append(_sekcja_pol(sciezka, pola, limit_znakow_instrukcji, token_csrf, bledy))
     czesci.append(f'<p><a href="{escapuj(sciezka)}">Odśwież stan</a></p>')
     czesci.append('<p><a href="/">Wróć do strony głównej</a></p>')
@@ -310,6 +347,41 @@ def _sekcja_podsumowania(podsumowanie: PodsumowanieWyniku) -> str:
         f"<li>Wznowiono istniejący projekt: {wznowienie}</li>\n"
         f"<li>Katalog projektu: {escapuj(podsumowanie.katalog_projektu)}</li>\n"
         "</ul>\n</div>"
+    )
+
+
+def _sekcja_skrotu_projektu(
+    sciezka: str,
+    nazwa: str,
+    aktywny_projekt_skrotu: str | None,
+    ostatni_komunikat_skrotu: KomunikatSkrotu | None,
+    token_csrf: str,
+) -> str:
+    """Stan globalnego skrótu na stronie projektu, z przyciskiem ustawienia go jako aktywnego.
+
+    Przycisk nie pokazuje się, gdy ten projekt już jest aktywny — nie ma co
+    ustawiać jeszcze raz tego samego.
+    """
+    if aktywny_projekt_skrotu == nazwa:
+        status = "Ten projekt jest teraz aktywnym projektem globalnego skrótu."
+        przycisk = ""
+    else:
+        status = (
+            f"Aktywny projekt skrótu: {escapuj(aktywny_projekt_skrotu)}."
+            if aktywny_projekt_skrotu
+            else "Brak aktywnego projektu skrótu."
+        )
+        przycisk = (
+            f'<form method="post" action="{escapuj(sciezka)}/aktywny-skrot">\n'
+            f"{_pole_csrf(token_csrf)}\n"
+            '<button type="submit">Ustaw jako aktywny projekt skrótu</button>\n'
+            "</form>"
+        )
+    return (
+        '<div class="blok">\n<h2>Globalny skrót klawiszowy</h2>\n'
+        f"<p>{status}</p>\n"
+        f"{przycisk}\n"
+        f"{_akapit_ostatniego_komunikatu(ostatni_komunikat_skrotu)}\n</div>"
     )
 
 

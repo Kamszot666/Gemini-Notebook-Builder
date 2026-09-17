@@ -24,8 +24,10 @@ nagrań mowy: włączenie transkrypcji, model Whisper, język, urządzenie, typ
 obliczeń, liczba wątków procesora, próg wykrywania aktywności mowy oraz próg
 udziału mowy decydujący o odrzuceniu nagrania niemownego, a od etapu dziesiątego
 także ścieżka pliku wykonywalnego MuseScore, wykrywanego przez diagnostykę, ale
-nieuruchamianego. Pozostałe pola wymienione w sekcji jedenastej a pliku
-CLAUDE.md dojdą w kolejnych etapach.
+nieuruchamianego, a od etapu jedenastego także włączenie globalnego skrótu
+klawiszowego. Ten ostatni klucz istnieje na każdym systemie, ale ma skutek
+wyłącznie na Windows, zgodnie z sekcją dwunastą CLAUDE.md. Pozostałe pola
+wymienione w sekcji jedenastej a pliku CLAUDE.md dojdą w kolejnych etapach.
 
 Adres nasłuchu musi wskazywać pętlę zwrotną. Sekcja jedenasta CLAUDE.md zakazuje
 nasłuchu na innym adresie, ponieważ interfejs nie ma uwierzytelniania, więc
@@ -117,6 +119,13 @@ DOMYSLNA_OCR_ROZDZIELCZOSC_PDF_DPI = 300
 DOMYSLNA_OCR_LICZBA_PROCESOW = 0
 DOMYSLNA_SCIEZKA_TESSERACT = ""
 DOMYSLNA_SCIEZKA_TESSDATA = ""
+
+# Włączenie globalnego skrótu klawiszowego, czyli etapu jedenastego. Klucz
+# istnieje na każdym systemie, zgodnie z sekcją jedenastą a CLAUDE.md, ale ma
+# skutek wyłącznie na Windows — moduł ``gnb.hotkeys`` w ogóle nie istnieje na
+# pozostałych systemach, więc tam ustawienie jest bez znaczenia, a diagnostyka
+# mówi to wprost.
+DOMYSLNY_GLOBALNY_SKROT_WLACZONY = True
 
 # Ścieżka pliku wykonywalnego MuseScore. Wartość pusta oznacza automatyczne
 # odnalezienie w zmiennej PATH i w znanych miejscach instalacji. MuseScore jest
@@ -260,6 +269,7 @@ _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
     PREFIKS_ZMIENNYCH + "PORT_NASLUCHU": "port_nasluchu",
     PREFIKS_ZMIENNYCH + "LIMIT_ZNAKOW_INSTRUKCJI_SYSTEMOWEJ": "limit_znakow_instrukcji_systemowej",
     PREFIKS_ZMIENNYCH + "MAKSYMALNY_ROZMIAR_WYSYLKI_MB": "maksymalny_rozmiar_wysylki_mb",
+    PREFIKS_ZMIENNYCH + "GLOBALNY_SKROT_WLACZONY": "globalny_skrot_wlaczony",
 }
 _ZNANE_POLA = frozenset(_ZMIENNE_SRODOWISKOWE.values())
 
@@ -347,6 +357,7 @@ class Konfiguracja:
     port_nasluchu: int = DOMYSLNY_PORT_NASLUCHU
     limit_znakow_instrukcji_systemowej: int = DOMYSLNY_LIMIT_ZNAKOW_INSTRUKCJI_SYSTEMOWEJ
     maksymalny_rozmiar_wysylki_mb: int = DOMYSLNY_MAKSYMALNY_ROZMIAR_WYSYLKI_MB
+    globalny_skrot_wlaczony: bool = DOMYSLNY_GLOBALNY_SKROT_WLACZONY
 
 
 def sciezka_pliku_konfiguracji(srodowisko: Mapping[str, str] | None = None) -> Path:
@@ -535,6 +546,9 @@ def wczytaj_konfiguracje(
         ),
         maksymalny_rozmiar_wysylki_mb=_jako_liczba(
             scalone, "maksymalny_rozmiar_wysylki_mb", domyslna.maksymalny_rozmiar_wysylki_mb
+        ),
+        globalny_skrot_wlaczony=_jako_prawda_falsz(
+            scalone, "globalny_skrot_wlaczony", domyslna.globalny_skrot_wlaczony
         ),
     )
     if konfiguracja.deduplikacja_prog_do_przegladu > konfiguracja.deduplikacja_prog_duplikatu:

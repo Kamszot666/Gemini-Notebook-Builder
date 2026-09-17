@@ -11,8 +11,10 @@ from pathlib import Path
 import pytest
 
 from gnb.core.konfiguracja import Konfiguracja
+from gnb.persistence.projekt import ustal_uklad, utworz_katalogi
 from gnb.ui import csrf
 from gnb.ui.serwer import zbuduj_serwer
+from gnb.ui.stan_skrotu import AktywnyProjektSkrotu
 from gnb.ui.zadania import RejestrZadan
 
 
@@ -35,6 +37,16 @@ class _Klient:
         self._zapamietaj_ciasteczko(odpowiedz)
         odpowiedz.read()
         return odpowiedz
+
+    def get_tekst(self, sciezka: str) -> tuple[http.client.HTTPResponse, str]:
+        """Jak `get`, ale zwraca też treść odpowiedzi jako tekst do przeszukania."""
+        polaczenie = self._polaczenie()
+        naglowki = {"Cookie": self.ciasteczko} if self.ciasteczko else {}
+        polaczenie.request("GET", sciezka, headers=naglowki)
+        odpowiedz = polaczenie.getresponse()
+        self._zapamietaj_ciasteczko(odpowiedz)
+        tekst = odpowiedz.read().decode("utf-8")
+        return odpowiedz, tekst
 
     def post(self, sciezka: str, cialo: bytes, typ: str) -> http.client.HTTPResponse:
         polaczenie = self._polaczenie()
@@ -146,3 +158,95 @@ def test_nieznana_sciezka_daje_404(serwer: tuple[str, int, RejestrZadan]) -> Non
     host, port, _ = serwer
     odpowiedz = _Klient(host, port).get("/nie-ma-takiej-strony")
     assert odpowiedz.status == 404
+
+
+@pytest.fixture
+def serwer_z_projektem(
+    tmp_path: Path,
+) -> Iterator[tuple[str, int, AktywnyProjektSkrotu]]:
+    """Serwer z jednym już istniejącym katalogiem projektu, do testów skrótu."""
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path / "wyniki", port_nasluchu=0)
+    uklad = ustal_uklad(konfiguracja.katalog_wynikow, "Projekt Testowy")
+    utworz_katalogi(uklad, z_materialami_zrodlowymi=False)
+
+    aktywny_projekt_skrotu = AktywnyProjektSkrotu()
+    instancja = zbuduj_serwer(
+        konfiguracja, RejestrZadan(), aktywny_projekt_skrotu=aktywny_projekt_skrotu
+    )
+    host, port = instancja.server_address[0], instancja.server_address[1]
+    watek = threading.Thread(target=instancja.serve_forever, daemon=True)
+    watek.start()
+    try:
+        yield str(host), int(port), aktywny_projekt_skrotu
+    finally:
+        instancja.shutdown()
+        instancja.server_close()
+        watek.join(timeout=5)
+
+
+def _token(klient: _Klient) -> str:
+    return klient.ciasteczko.split("=", 1)[1] if klient.ciasteczko else ""
+
+
+def test_ustawienie_aktywnego_projektu_skrotu_zapisuje_stan_i_przekierowuje(
+    serwer_z_projektem: tuple[str, int, AktywnyProjektSkrotu],
+) -> None:
+    host, port, aktywny_projekt_skrotu = serwer_z_projektem
+    klient = _Klient(host, port)
+    klient.get("/")
+
+    cialo = f"token_csrf={_token(klient)}".encode()
+    odpowiedz = klient.post(
+        "/projekt/Projekt%20Testowy/aktywny-skrot", cialo, "application/x-www-form-urlencoded"
+    )
+
+    assert odpowiedz.status == 303
+    assert odpowiedz.getheader("Location") == "/projekt/Projekt%20Testowy"
+    assert aktywny_projekt_skrotu.aktualny() == "Projekt Testowy"
+
+
+def test_ustawienie_aktywnego_projektu_skrotu_bez_csrf_jest_odrzucane(
+    serwer_z_projektem: tuple[str, int, AktywnyProjektSkrotu],
+) -> None:
+    host, port, aktywny_projekt_skrotu = serwer_z_projektem
+    klient = _Klient(host, port)
+    klient.get("/")
+
+    odpowiedz = klient.post(
+        "/projekt/Projekt%20Testowy/aktywny-skrot", b"", "application/x-www-form-urlencoded"
+    )
+
+    assert odpowiedz.status == 403
+    assert aktywny_projekt_skrotu.aktualny() is None
+
+
+def test_ustawienie_aktywnego_projektu_skrotu_dla_nieistniejacego_projektu_daje_404(
+    serwer_z_projektem: tuple[str, int, AktywnyProjektSkrotu],
+) -> None:
+    host, port, _ = serwer_z_projektem
+    klient = _Klient(host, port)
+    klient.get("/")
+
+    cialo = f"token_csrf={_token(klient)}".encode()
+    odpowiedz = klient.post(
+        "/projekt/Nie%20Ma%20Takiego/aktywny-skrot", cialo, "application/x-www-form-urlencoded"
+    )
+
+    assert odpowiedz.status == 404
+
+
+def test_strona_projektu_po_ustawieniu_aktywnym_nie_pokazuje_juz_przycisku(
+    serwer_z_projektem: tuple[str, int, AktywnyProjektSkrotu],
+) -> None:
+    host, port, _ = serwer_z_projektem
+    klient = _Klient(host, port)
+    klient.get("/")
+    cialo = f"token_csrf={_token(klient)}".encode()
+    klient.post(
+        "/projekt/Projekt%20Testowy/aktywny-skrot", cialo, "application/x-www-form-urlencoded"
+    )
+
+    strona, tekst = klient.get_tekst("/projekt/Projekt%20Testowy")
+    assert strona.status == 200
+    assert "Ten projekt jest teraz aktywnym projektem globalnego skrótu." in tekst
+    assert "Ustaw jako aktywny projekt skrótu" not in tekst

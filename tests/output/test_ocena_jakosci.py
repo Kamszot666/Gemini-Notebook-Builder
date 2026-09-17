@@ -61,6 +61,30 @@ def test_zadanie_wlaczenia_skryptow_jest_podejrzane() -> None:
     assert any("javascript" in powod.lower() for powod in ocena.powody)
 
 
+def test_strona_wymagajaca_zalogowania_jest_podejrzana() -> None:
+    tekst = "Zaloguj się, aby przeczytać dalszą część tego artykułu w całości."
+    ocena = ocen_jakosc(tekst, tytul="Artykuł premium")
+
+    assert ocena.czy_podejrzana
+    assert any("zaloguj się, aby przeczytać" in powod for powod in ocena.powody)
+
+
+def test_strona_wymagajaca_zalogowania_po_angielsku_jest_podejrzana() -> None:
+    ocena = ocen_jakosc(_tekst_poprawny() + "\n\nSign in to continue reading.", tytul="Title")
+
+    assert ocena.czy_podejrzana
+    assert any("sign in to continue" in powod for powod in ocena.powody)
+
+
+def test_zwykly_artykul_z_pojedynczym_odnosnikiem_logowania_nie_jest_podejrzany() -> None:
+    """Sam odnośnik „Zaloguj się” w nawigacji zwykłego artykułu nie może dawać fałszywego alarmu."""
+    tekst = _tekst_poprawny() + "\n\nStopka: Zaloguj się, aby zostawić komentarz pod artykułem."
+    ocena = ocen_jakosc(tekst, tytul="Zwykły artykuł")
+
+    assert ocena.ocena == OCENA_POPRAWNA
+    assert not ocena.czy_podejrzana
+
+
 def test_powtorzony_akapit_jest_podejrzany() -> None:
     tekst = "\n\n".join([_AKAPIT, _AKAPIT, _AKAPIT, "Inny akapit z zupełnie inną treścią."])
     ocena = ocen_jakosc(tekst, tytul="Tytuł")

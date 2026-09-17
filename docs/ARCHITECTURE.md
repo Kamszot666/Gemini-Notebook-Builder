@@ -1,7 +1,7 @@
-# Architektura — stan po etapie dziesiątym, część A
+# Architektura — stan po etapie jedenastym, część A
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
-zakończeniu części A etapu dziesiątego. Pełny docelowy podział na pakiety
+zakończeniu części A etapu jedenastego. Pełny docelowy podział na pakiety
 opisuje sekcja szósta `CLAUDE.md`.
 
 ## Potok przetwarzania
@@ -365,6 +365,52 @@ istniejący potok z żądaniem HTTP przez semantyczny, dostępny HTML.
   303. Nieobsłużony wyjątek staje się stroną 500.
 - `gnb/ui/server.py` — punkt wejścia `python -m gnb.ui.server`. Nazwa pliku jest
   angielska, bo to część kontraktu komend; logika i komunikaty są po polsku.
+- `gnb/ui/stan_skrotu.py` — `AktywnyProjektSkrotu` i `OstatniKomunikatSkrotu`,
+  stan globalnego skrótu widoczny w interfejsie. Nie zależy od Windows: żyje
+  w `gnb.ui`, nie w `gnb.hotkeys`, żeby strony dało się wyrenderować i
+  przetestować także na Linuksie, niezależnie od tego, czy skrót tam działa.
+
+## Pakiet gnb.hotkeys
+
+Globalny skrót klawiszowy Control plus Shift plus F12 z etapu jedenastego,
+część A. Moduł wyłącznie dla Windows: cała zawartość plików zależnych od
+Windows leży za sprawdzeniem `sys.platform == "win32"`, żeby dało się je
+zaimportować (i sprawdzić poleceniem `python -m mypy gnb --platform linux`)
+także na Linuksie, gdzie po prostu nic nie eksportują. Reszta pakietu `gnb`
+importuje z niego wyłącznie warunkowo, wewnątrz `gnb/ui/serwer.py`, przy
+starcie serwera.
+
+- `gnb/hotkeys/stale.py` — kombinacja skrótu i parametry dwóch dźwięków
+  potwierdzenia. Bez zależności od Windows, testowalne wszędzie.
+- `gnb/hotkeys/model.py` — `InformacjeOOknie`, `DodanieZeSkrotu`, `TypDodania`.
+  Typy współdzielone między odczytem stanu pulpitu a rozpoznaniem źródła, bez
+  zależności od Windows.
+- `gnb/hotkeys/rozpoznanie.py` — czysta funkcja `rozpoznaj`: z gotowych już
+  informacji o aktywnym oknie, ewentualnego adresu paska i ewentualnej listy
+  zaznaczonych plików ustala, co dodać do aktywnego projektu, albo zwraca
+  `PorazkaRozpoznania` z czytelnym powodem. Testowalne bez Windows.
+- `gnb/hotkeys/kolejka.py` — `KolejkaSkrotu`: źródła dodane skrótem w trakcie
+  trwającego przebiegu, pogrupowane po nazwie projektu. Bez zależności od
+  Windows.
+- `gnb/hotkeys/_win32.py` — `ctypes`: `WatekSkrotu` rejestruje skrót i prowadzi
+  jego pętlę komunikatów w dedykowanym wątku, bo `RegisterHotKey` i
+  `UnregisterHotKey` muszą zajść w tym samym wątku Win32. Naciśnięcie skrótu
+  jest obsługiwane w osobnym wątku roboczym, nie w wątku pętli komunikatów.
+  Ustala też aktywne okno: uchwyt, tytuł, nazwę klasy i nazwę procesu.
+- `gnb/hotkeys/_automatyzacja.py` — `comtypes` i UI Automation: odczyt paska
+  adresu Chrome i Firefoksa, dopasowywany po nazwie klasy kontrolki
+  (`OmniboxViewViews`, `urlbar-input`), sprawdzonej bezpośrednio w obu
+  przeglądarkach, nie po lokalizowanej nazwie zależnej od języka interfejsu.
+- `gnb/hotkeys/_eksplorator.py` — `comtypes` i `Shell.Application` z późnym,
+  dynamicznym wiązaniem: zaznaczone elementy aktywnego okna Eksploratora
+  plików.
+- `gnb/hotkeys/_dzwieki.py` — `winsound.Beep`, nie `MessageBeep`, żeby dźwięk
+  nie zależał od motywu dźwiękowego systemu.
+- `gnb/hotkeys/obsluga.py` — `ObslugaSkrotu`: spina wszystko powyższe z
+  rejestrem zadań i stanem skrótu z `gnb.ui`. Po naciśnięciu skrótu dodaje
+  źródło do kolejki i, jeśli rejestr zadań jest wolny, od razu zaczyna
+  przebieg; ten sam mechanizm uruchamia się automatycznie po zakończeniu
+  każdego zadania w rejestrze, przez `RejestrZadan.dodaj_nasluch_zakonczenia`.
 
 ## Wiersz poleceń
 

@@ -7,7 +7,7 @@ o dokumentację skierowaną do osoby korzystającej z gotowej aplikacji.
 
 ## Stan dokumentacji
 
-Po części A etapu dziesiątego, obok tego pliku, istnieje sześć dokumentów:
+Po części A etapu jedenastego, obok tego pliku, istnieje sześć dokumentów:
 
 1. `INSTALL.md` — przygotowanie Pythona i środowiska wirtualnego, instalacja
    zależności oraz instalacja narzędzi zewnętrznych z podziałem na etapy, w
@@ -31,7 +31,8 @@ Po części A etapu dziesiątego, obok tego pliku, istnieje sześć dokumentów:
    pakowanie i podział plików wynikowych, w tym tematyczne pliki PDF grup obrazów.
 5. `ACCESSIBILITY.md` — obsługa dostępnego interfejsu WWW z klawiatury i z NVDA,
    zachowanie regionów o roli „status”, dławienie komunikatów postępu, pola
-   instrukcji systemowej i promptu wyszukiwania, wznowienie projektu.
+   instrukcji systemowej i promptu wyszukiwania, wznowienie projektu oraz
+   globalny skrót klawiszowy Control plus Shift plus F12 z etapu jedenastego.
 6. `TROUBLESHOOTING.md` — objaw, przyczyna i sposób postępowania dla problemów
    napotkanych w rzeczywistej pracy: blokady narzędzi deweloperskich i biblioteki
    PyAV przez kontrolę aplikacji Windows, błędów weryfikacji certyfikatu, pracy
@@ -39,7 +40,8 @@ Po części A etapu dziesiątego, obok tego pliku, istnieje sześć dokumentów:
    bez treści, projektów z poprzedniej wersji aplikacji, źródeł usuniętych jako
    duplikat, usuniętego podkatalogu wyników pośrednich, źródeł podzielonych
    na części, zajętego portu interfejsu, braku Tesseracta, braku polskich danych
-   językowych OCR, braku FFmpega oraz pierwszego pobrania modelu transkrypcji.
+   językowych OCR, braku FFmpega, pierwszego pobrania modelu transkrypcji oraz
+   nieudanej rejestracji globalnego skrótu klawiszowego.
 
 ## Interfejs WWW
 

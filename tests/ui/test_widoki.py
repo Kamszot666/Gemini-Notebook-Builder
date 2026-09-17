@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 
 from gnb.persistence.pola_notatnika import PolaNotatnika
 from gnb.ui.projekty import ProjektNaLiscie
+from gnb.ui.stan_skrotu import KomunikatSkrotu
 from gnb.ui.widoki import (
     BladPola,
     DaneFormularzaProjektu,
@@ -178,3 +180,69 @@ def test_projekt_do_wznowienia_ma_wlasny_przycisk() -> None:
     assert "Podatki 2026" in html
     assert "/projekt/Podatki%202026/wznow" in html
     assert "Wznów ten projekt" in html
+
+
+def test_strona_glowna_bez_aktywnego_projektu_skrotu_mowi_to_wprost() -> None:
+    html = strona_glowna(projekty=[], token_csrf="t")
+    assert "Brak aktywnego projektu skrótu." in html
+
+
+def test_strona_glowna_pokazuje_nazwe_aktywnego_projektu_skrotu() -> None:
+    html = strona_glowna(projekty=[], token_csrf="t", aktywny_projekt_skrotu="Podatki 2026")
+    assert "Aktywny projekt skrótu: Podatki 2026." in html
+
+
+def test_strona_glowna_pokazuje_ostatni_komunikat_skrotu() -> None:
+    komunikat = KomunikatSkrotu(
+        tekst="Dodano adres strony: Przykład", sukces=True, czas=datetime.now(UTC)
+    )
+    html = strona_glowna(projekty=[], token_csrf="t", ostatni_komunikat_skrotu=komunikat)
+    assert "Dodano adres strony: Przykład" in html
+    assert "powodzenie" in html
+
+
+def test_strona_projektu_bez_aktywnego_skrotu_ma_przycisk_ustawienia() -> None:
+    html = strona_projektu(
+        nazwa="Projekt",
+        informacja=None,
+        pola=PolaNotatnika(),
+        limit_znakow_instrukcji=10_000,
+        token_csrf="t",
+    )
+    assert "Ustaw jako aktywny projekt skrótu" in html
+    assert "Brak aktywnego projektu skrótu." in html
+
+
+def test_strona_projektu_juz_aktywnego_nie_ma_przycisku_ustawienia() -> None:
+    html = strona_projektu(
+        nazwa="Projekt",
+        informacja=None,
+        pola=PolaNotatnika(),
+        limit_znakow_instrukcji=10_000,
+        token_csrf="t",
+        aktywny_projekt_skrotu="Projekt",
+    )
+    assert "Ustaw jako aktywny projekt skrótu" not in html
+    assert "Ten projekt jest teraz aktywnym projektem globalnego skrótu." in html
+
+
+def test_strona_projektu_innego_aktywnego_pokazuje_jego_nazwe_i_przycisk() -> None:
+    html = strona_projektu(
+        nazwa="Projekt B",
+        informacja=None,
+        pola=PolaNotatnika(),
+        limit_znakow_instrukcji=10_000,
+        token_csrf="t",
+        aktywny_projekt_skrotu="Projekt A",
+    )
+    assert "Aktywny projekt skrótu: Projekt A." in html
+    assert "Ustaw jako aktywny projekt skrótu" in html
+
+
+def test_ostatni_komunikat_skrotu_z_niebezpieczna_trescia_jest_escapowany() -> None:
+    zlosliwy = "</p><script>alert(1)</script>"
+    komunikat = KomunikatSkrotu(tekst=zlosliwy, sukces=False, czas=datetime.now(UTC))
+    html = strona_glowna(projekty=[], token_csrf="t", ostatni_komunikat_skrotu=komunikat)
+
+    assert "<script>alert(1)</script>" not in html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html

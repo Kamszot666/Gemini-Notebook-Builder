@@ -1,4 +1,4 @@
-# Konfiguracja — stan po etapie dziesiątym, część A
+# Konfiguracja — stan po etapie jedenastym, część A
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
 obsługuje po etapie dziewiątym. Pełna lista pól z sekcji jedenastej a pliku
@@ -321,6 +321,16 @@ Interfejs uruchamiasz poleceniem `python -m gnb.ui.server`.
 4. `maksymalny_rozmiar_wysylki_mb`, zmienna `GNB_MAKSYMALNY_ROZMIAR_WYSYLKI_MB`.
    Bezpieczny limit rozmiaru pliku wysyłanego przez formularz interfejsu.
    Domyślnie 190. Żądanie z większą treścią jest odrzucane, a nie obcinane.
+5. `globalny_skrot_wlaczony`, zmienna `GNB_GLOBALNY_SKROT_WLACZONY`. Włączenie
+   globalnego skrótu klawiszowego Control plus Shift plus F12 z etapu
+   jedenastego, część A. Domyślnie włączony. Skrót działa wyłącznie na Windows
+   i wyłącznie, gdy jest uruchomiony serwer interfejsu poleceniem `python -m
+   gnb.ui.server`: rejestracja zachodzi przy jego starcie, wyrejestrowanie przy
+   zamknięciu. Na systemie innym niż Windows to ustawienie nie ma żadnego
+   skutku — polecenie `diagnostyka` mówi to wprost. Naciśnięcie skrótu dodaje
+   do jawnie wybranego aktywnego projektu skrótu adres bieżącej strony w Chrome
+   albo Firefoksie, albo zaznaczone pliki w Eksploratorze Windows; szczegóły
+   opisuje `docs/ACCESSIBILITY.md`, sekcja „Globalny skrót klawiszowy”.
 
 ## Pamięć podręczna pobranych stron
 
@@ -435,6 +445,7 @@ adres_nasluchu = "127.0.0.1"
 port_nasluchu = 8765
 limit_znakow_instrukcji_systemowej = 10000
 maksymalny_rozmiar_wysylki_mb = 190
+globalny_skrot_wlaczony = true
 ```
 
 Koniec przykładowego pliku konfiguracji.

@@ -26,8 +26,11 @@ udziału mowy decydujący o odrzuceniu nagrania niemownego, a od etapu dziesiąt
 także ścieżka pliku wykonywalnego MuseScore, wykrywanego przez diagnostykę, ale
 nieuruchamianego, a od etapu jedenastego także włączenie globalnego skrótu
 klawiszowego. Ten ostatni klucz istnieje na każdym systemie, ale ma skutek
-wyłącznie na Windows, zgodnie z sekcją dwunastą CLAUDE.md. Pozostałe pola
-wymienione w sekcji jedenastej a pliku CLAUDE.md dojdą w kolejnych etapach.
+wyłącznie na Windows, zgodnie z sekcją dwunastą CLAUDE.md. Z listy w sekcji
+jedenastej a pliku CLAUDE.md brakuje dwóch pól: gotowych profili planów
+notatnika (Standard, Plus, Pro, Ultra) oraz trybu pakowania — ich dołożenie
+wymaga osobnej decyzji, nie jest zaplanowane w żadnym etapie z sekcji
+osiemnastej.
 
 Adres nasłuchu musi wskazywać pętlę zwrotną. Sekcja jedenasta CLAUDE.md zakazuje
 nasłuchu na innym adresie, ponieważ interfejs nie ma uwierzytelniania, więc

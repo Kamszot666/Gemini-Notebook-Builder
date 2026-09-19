@@ -135,6 +135,7 @@ def domyslny_rejestr_binarny(
     prog_udzialu_mowy: float = 0.5,
     wymus_transkrypcje: bool = False,
     sciezka_audiveris: str = "",
+    nuty_zapis_dzwiekow_wlaczony: bool = True,
 ) -> RejestrEkstraktorowBinarnych:
     """Buduje rejestr ekstraktorów formatów binarnych.
 
@@ -150,9 +151,11 @@ def domyslny_rejestr_binarny(
     oraz flagi wymuszenia transkrypcji dla materiału niemownego. Adapter zapisu
     nutowego z obrazu i PDF potrzebuje ścieżki do programu Audiveris wskazanej
     w konfiguracji; pusta wartość oznacza szukanie w PATH i w znanych miejscach
-    instalacji. Pozostałe trzy adaptery nutowe nie potrzebują żadnych ustawień.
-    Wszystkie te wartości pochodzą z konfiguracji projektu i z opcji wiersza
-    poleceń. Gdy nie podano ustawień, OCR i transkrypcja są wyłączone.
+    instalacji. Adapter Guitar Pro, od etapu trzynastego, potrzebuje informacji,
+    czy zapis dźwięków ścieżek strunowych jest włączony. Pozostałe dwa adaptery
+    nutowe nie potrzebują żadnych ustawień. Wszystkie te wartości pochodzą
+    z konfiguracji projektu i z opcji wiersza poleceń. Gdy nie podano ustawień,
+    OCR i transkrypcja są wyłączone.
     """
     from gnb.audio.transkrypcja import UstawieniaTranskrypcji
     from gnb.extractors.plik_audio import EkstraktorAudio
@@ -186,7 +189,7 @@ def domyslny_rejestr_binarny(
             ),
             EkstraktorMidi(),
             EkstraktorMusicXml(),
-            EkstraktorGuitarPro(),
+            EkstraktorGuitarPro(zapis_dzwiekow_wlaczony=nuty_zapis_dzwiekow_wlaczony),
             EkstraktorNutSkanowanych(sciezka_audiveris),
         )
     )

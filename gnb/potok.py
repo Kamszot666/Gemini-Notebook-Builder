@@ -527,6 +527,7 @@ def przetworz_projekt(
         prog_udzialu_mowy=konfiguracja.transkrypcja_prog_udzialu_mowy,
         wymus_transkrypcje=wymus_transkrypcje,
         sciezka_audiveris=konfiguracja.sciezka_audiveris,
+        nuty_zapis_dzwiekow_wlaczony=konfiguracja.nuty_zapis_dzwiekow_wlaczony,
     )
     czas_startu = zegar()
 

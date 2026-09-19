@@ -29,6 +29,9 @@ class EkstraktorGuitarPro:
     metoda = METODA_EKSTRAKCJI
     tekst_zawiera_znaczniki = False
 
+    def __init__(self, *, zapis_dzwiekow_wlaczony: bool = True) -> None:
+        self._zapis_dzwiekow_wlaczony = zapis_dzwiekow_wlaczony
+
     def obsluguje(self, typ_zrodla: TypZrodla, format_zrodla: str) -> bool:
         return typ_zrodla is TypZrodla.PLIK_NUTY and format_zrodla in FORMATY_GUITARPRO
 
@@ -47,7 +50,9 @@ class EkstraktorGuitarPro:
         if not czy_dostepna_biblioteka():
             raise BrakNarzedzia(KOMUNIKAT_BRAK_BIBLIOTEKI, identyfikator_zrodla)
         try:
-            opis = przeczytaj_guitarpro(bajty)
+            opis = przeczytaj_guitarpro(
+                bajty, zapis_dzwiekow_wlaczony=self._zapis_dzwiekow_wlaczony
+            )
         except BladGnb as blad:
             if blad.identyfikator_zrodla is None:
                 blad.identyfikator_zrodla = identyfikator_zrodla

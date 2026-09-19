@@ -26,7 +26,9 @@ udziału mowy decydujący o odrzuceniu nagrania niemownego, a od etapu dziesiąt
 także ścieżka pliku wykonywalnego MuseScore, wykrywanego przez diagnostykę, ale
 nieuruchamianego, a od etapu jedenastego także włączenie globalnego skrótu
 klawiszowego. Ten ostatni klucz istnieje na każdym systemie, ale ma skutek
-wyłącznie na Windows, zgodnie z sekcją dwunastą CLAUDE.md. Z listy w sekcji
+wyłącznie na Windows, zgodnie z sekcją dwunastą CLAUDE.md. Od etapu trzynastego
+dochodzi też włączenie zapisu dźwięków ścieżek strunowych w opisie materiału
+nutowego Guitar Pro. Z listy w sekcji
 jedenastej a pliku CLAUDE.md brakuje dwóch pól: gotowych profili planów
 notatnika (Standard, Plus, Pro, Ultra) oraz trybu pakowania — ich dołożenie
 wymaga osobnej decyzji, nie jest zaplanowane w żadnym etapie z sekcji
@@ -141,6 +143,14 @@ DOMYSLNA_SCIEZKA_MUSESCORE = ""
 # rozpoznaje zapis nutowy z obrazu i z pliku PDF w drugiej części etapu
 # dziesiątego, patrz gnb/music/audiveris.py.
 DOMYSLNA_SCIEZKA_AUDIVERIS = ""
+
+# Włączenie zapisu dźwięków ścieżek strunowych w opisie materiału nutowego
+# Guitar Pro, dodane w etapie trzynastym. Domyślnie włączone, bo to jest cel,
+# dla którego moduł materiałów nutowych powstał — opis bez żadnego dźwięku nie
+# spełnia zadania notatnika dla ucznia niewidomego. Klucz istnieje po to, żeby
+# dało się to wyłączyć dla utworu, którego zapis wychodzi zbyt długi do
+# odsłuchu, patrz sekcja piętnasta CLAUDE.md.
+DOMYSLNY_NUTY_ZAPIS_DZWIEKOW_WLACZONY = True
 
 # Ustawienia transkrypcji nagrań mowy, czyli etapu dziewiątego. Biblioteką jest
 # faster-whisper na silniku CTranslate2. Transkrypcja działa wyłącznie na
@@ -257,6 +267,7 @@ _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
     PREFIKS_ZMIENNYCH + "SCIEZKA_TESSDATA": "sciezka_tessdata",
     PREFIKS_ZMIENNYCH + "SCIEZKA_MUSESCORE": "sciezka_musescore",
     PREFIKS_ZMIENNYCH + "SCIEZKA_AUDIVERIS": "sciezka_audiveris",
+    PREFIKS_ZMIENNYCH + "NUTY_ZAPIS_DZWIEKOW_WLACZONY": "nuty_zapis_dzwiekow_wlaczony",
     PREFIKS_ZMIENNYCH + "TRANSKRYPCJA_WLACZONA": "transkrypcja_wlaczona",
     PREFIKS_ZMIENNYCH + "TRANSKRYPCJA_MODEL": "transkrypcja_model",
     PREFIKS_ZMIENNYCH + "TRANSKRYPCJA_JEZYK": "transkrypcja_jezyk",
@@ -345,6 +356,7 @@ class Konfiguracja:
     sciezka_tessdata: str = DOMYSLNA_SCIEZKA_TESSDATA
     sciezka_musescore: str = DOMYSLNA_SCIEZKA_MUSESCORE
     sciezka_audiveris: str = DOMYSLNA_SCIEZKA_AUDIVERIS
+    nuty_zapis_dzwiekow_wlaczony: bool = DOMYSLNY_NUTY_ZAPIS_DZWIEKOW_WLACZONY
     transkrypcja_wlaczona: bool = DOMYSLNA_TRANSKRYPCJA_WLACZONA
     transkrypcja_model: str = DOMYSLNY_TRANSKRYPCJA_MODEL
     transkrypcja_jezyk: str = DOMYSLNY_TRANSKRYPCJA_JEZYK
@@ -510,6 +522,9 @@ def wczytaj_konfiguracje(
         ),
         sciezka_audiveris=_jako_sciezka_pliku(
             scalone, "sciezka_audiveris", domyslna.sciezka_audiveris
+        ),
+        nuty_zapis_dzwiekow_wlaczony=_jako_prawda_falsz(
+            scalone, "nuty_zapis_dzwiekow_wlaczony", domyslna.nuty_zapis_dzwiekow_wlaczony
         ),
         transkrypcja_wlaczona=_jako_prawda_falsz(
             scalone, "transkrypcja_wlaczona", domyslna.transkrypcja_wlaczona

@@ -1,4 +1,4 @@
-# Obsługiwane formaty — stan po etapie dwunastym
+# Obsługiwane formaty — stan po etapie trzynastym
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
 Formaty ODT i PPTX nie są obsługiwane i nie są zaplanowane w żadnym etapie
@@ -612,6 +612,62 @@ części. Pola nieznane są pomijane, a nie zapisywane wartością zastępczą. 
 takiego opisu jest zawsze na poziomie niskim, więc dla materiału nutowego nigdy
 nie powstaje wersja Markdown. Dla formatu natywnego nie zapisujemy zbiorczej
 oceny pewności odczytu — pojedyncze fakty niosą własną uczciwość.
+
+### Zapis dźwięków ścieżki strunowej (Guitar Pro)
+
+Od etapu trzynastego opis pliku Guitar Pro zawiera dodatkowo sam zapis
+dźwięków, nie tylko metadane. Bez tego opis „mówił o utworze”, ale „nie mówił
+utworu” — nie zawierał ani jednego dźwięku, więc nie dawał się wykorzystać do
+nauki gry na pamięć. Ta część opisu jest opcją włączoną domyślnie, kluczem
+konfiguracji `nuty_zapis_dzwiekow_wlaczony`.
+
+Opisywana jest każda ścieżka strunowa pliku, czyli taka, która ma niepustą
+listę strun i nie jest ścieżką perkusyjną — nie tylko ta, która wygląda na
+partię basu. Ani nazwa ścieżki, ani numer instrumentu General MIDI nie
+pozwalają wiarygodnie rozpoznać, która ścieżka jest basem: na sprawdzonym
+pliku z rzeczywistego repertuaru ścieżka basowa nazywała się „Guitar w Octave
+Bass” i miała numer instrumentu gitary elektrycznej tłumionej. Zamiast
+zgadywać, opisywane są wszystkie ścieżki strunowe.
+
+Dla każdej takiej ścieżki opis podaje najpierw jej strój — nazwy dźwięków
+pustych strun wzięte z pliku, od najniższej do najwyższej, nigdy z założenia
+stroju standardowego — a potem takt po takcie zapis w postaci: nazwa struny,
+numer progu (albo „pusta struna” dla progu zerowego), nazwa dźwięku
+z numerem oktawy i wartość rytmiczna. Nazwą struny jest sama litera dźwięku;
+numer oktawy dochodzi do niej tylko wtedy, gdy w obrębie tej samej ścieżki
+dwie struny mają tę samą literę, na przykład przy stroju obniżonym — inaczej
+nazwa przestałaby jednoznacznie wskazywać strunę. Nazwa samego dźwięku ma
+oktawę zawsze, bo to jest twierdzenie o konkretnej wysokości, nie etykieta.
+Bezpośrednio sąsiadujące takty o identycznej treści — tej samej sekwencji par
+struna-próg w tej samej kolejności i tej samej wartości rytmicznej każdego
+zdarzenia, łącznie z kropką i nietypowym podziałem — są zwijane w jeden wiersz
+zbiorczy, na przykład „Takty 2–3: jak takt 1.”; takt o tej samej sekwencji
+progów, ale innym rytmie, identyczny nie jest i nie zostaje zwinięty. Zwijane
+są wyłącznie takty bezpośrednio sąsiadujące, nigdy odległe powtórzenia
+w innym miejscu utworu, żeby nie zmuszać słuchacza czytnika ekranu do skoku
+pamięciowego wstecz o wiele taktów.
+
+Opisywany jest tylko główny głos (voice) każdego taktu. Ścieżka, której drugi,
+niezależny głos niesie własne nuty, dostaje o tym wyraźne ostrzeżenie w opisie
+i w manifeście, żeby pominięcie nie było ciche.
+
+Ten zapis dotyczy dziś wyłącznie formatu Guitar Pro, gdzie dane struna-próg są
+wprost w pliku, bez zgadywania. Dla MIDI, gdzie zapisana jest tylko wysokość
+dźwięku, a ten sam dźwięk da się zagrać w kilku miejscach gryfu, dopisanie
+pozycji na gryfie byłoby zgadywaniem — pozostaje poza zakresem. Dla MusicXML
+z zapisaną tabulaturą to samo rozszerzenie jest możliwe bez zgadywania, ale
+wymaga osobnej pracy parsowania noty, której ten etap nie obejmuje.
+
+Etap trzynasty naprawił przy tej okazji także odczyt tonacji plików Guitar
+Pro. Pole tonacji na poziomie całego utworu w bibliotece PyGuitarPro dla
+żadnej wersji formatu nie może zwrócić trybu molowego — sam plik nie zapisuje
+tam trybu, tylko liczbę krzyżyków albo bemoli. Prawdziwy tryb, gdy plik go
+zapisuje, jest w nagłówku pierwszego taktu, więc odczyt bierze tonację
+najpierw stamtąd. Wartość domyślna, czyli zero krzyżyków i tryb durowy, jest
+nierozróżnialna od braku jakiegokolwiek oznaczenia tonacji w pliku, więc opis
+w tym przypadku nie wypisuje wiersza tonacji wcale — wypisanie „Tonacja:
+C-dur” byłoby przedstawieniem przypuszczenia jako faktu. Zamiast tego opis
+dostaje uwagę wyjaśniającą, że plik nie zawiera oznaczenia tonacji.
 
 Liczba taktów z MusicXML i Guitar Pro jest dokładna, bo pochodzi wprost ze
 znaczników taktów. Liczba taktów z MIDI jest zawsze przybliżona, bo format MIDI

@@ -42,6 +42,25 @@ _KONCOWY_AKAPIT = (
 _ADNOTACJA_PRZYBLIZENIA = "wartość przybliżona, wyliczona z długości nagrania MIDI w czasie"
 
 
+@dataclass(slots=True, frozen=True)
+class ZapisDzwiekowSciezki:
+    """Zapis dźwięków jednej ścieżki strunowej, takt po takcie.
+
+    Pole `strojenie` niesie nazwy dźwięków pustych strun, od najniższego do
+    najwyższego, wzięte ze stroju zapisanego w pliku źródłowym — nigdy z
+    założenia stroju standardowego, zgodnie z sekcją piętnastą CLAUDE.md.
+    Pole `takty` niesie gotowe do wypisania wiersze taktów, już po zwinięciu
+    bezpośrednio sąsiadujących taktów identycznych w jeden wiersz „Takty M–N:
+    jak takt M.”. Etap budowania tych wierszy leży w `gnb/music/guitarpro.py`,
+    bo wymaga struktur PyGuitarPro — ten moduł tylko przechowuje i wyświetla
+    gotowy wynik.
+    """
+
+    nazwa_sciezki: str
+    strojenie: tuple[str, ...]
+    takty: tuple[str, ...]
+
+
 @dataclass(slots=True)
 class OpisPartytury:
     """Zestaw informacji o materiale nutowym odczytany z pliku źródłowego.
@@ -62,6 +81,11 @@ class OpisPartytury:
     założenia interpretacyjne, na przykład przyjęcie trybu durowego przy braku
     oznaczenia w pliku; te trafiają do tekstu opisu i do metadanych, ale nie do
     sekcji „Materiały do sprawdzenia”.
+
+    Pole `zapis_dzwiekow`, dodane w etapie trzynastym, niesie dźwięki każdej
+    ścieżki strunowej pliku Guitar Pro, takt po takcie — struna, próg, nazwa
+    dźwięku i wartość rytmiczna. Puste dla plików bez żadnej ścieżki strunowej
+    oraz dla formatów, które tego jeszcze nie odczytują (MIDI i MusicXML).
     """
 
     format_zrodlowy: str
@@ -76,6 +100,7 @@ class OpisPartytury:
     struktura_czesci: list[str] = field(default_factory=list)
     ostrzezenia_zmian: list[str] = field(default_factory=list)
     uwagi_odczytu: list[str] = field(default_factory=list)
+    zapis_dzwiekow: list[ZapisDzwiekowSciezki] = field(default_factory=list)
 
 
 def _nazwa_formatu(format_zrodlowy: str) -> str:
@@ -131,6 +156,15 @@ def opis_jako_tekst(opis: OpisPartytury) -> str:
         wiersze.append("Uwagi odczytu:")
         wiersze.extend(f"  - {uwaga}" for uwaga in opis.uwagi_odczytu)
 
+    if opis.zapis_dzwiekow:
+        wiersze.append("")
+        wiersze.append("Zapis dźwięków ścieżek strunowych:")
+        for sciezka in opis.zapis_dzwiekow:
+            wiersze.append("")
+            wiersze.append(f"Zapis dźwięków ścieżki „{sciezka.nazwa_sciezki}”:")
+            wiersze.append(f"  Strój: {', '.join(sciezka.strojenie)}.")
+            wiersze.extend(f"  - {takt}" for takt in sciezka.takty)
+
     wiersze.append("")
     wiersze.append(_KONCOWY_AKAPIT)
     return "\n".join(wiersze)
@@ -171,6 +205,8 @@ def opis_jako_metadane(opis: OpisPartytury) -> dict[str, str]:
         metadane["nuty_zmiany"] = " | ".join(opis.ostrzezenia_zmian)
     if opis.uwagi_odczytu:
         metadane["nuty_uwagi_odczytu"] = " | ".join(opis.uwagi_odczytu)
+    if opis.zapis_dzwiekow:
+        metadane["nuty_zapis_dzwiekow_liczba_sciezek"] = str(len(opis.zapis_dzwiekow))
     return metadane
 
 

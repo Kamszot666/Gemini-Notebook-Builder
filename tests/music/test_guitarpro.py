@@ -60,9 +60,17 @@ def test_wersja_zapisu_trafia_do_uwag_bez_parsowania_na_liczbe() -> None:
     assert any("FICHIER GUITAR PRO" in uwaga for uwaga in opis.uwagi_odczytu)
 
 
-def test_tonacja_z_wyliczenia_a_nie_przez_str() -> None:
+def test_tonacja_domyslna_jest_pomijana_z_uwaga_zamiast_udawac_c_dur() -> None:
+    """Zero krzyżyków i tryb durowy jest nierozróżnialne od braku tonacji w pliku.
+
+    `tabulatura_akordy.gp5` ma dokładnie tę wartość domyślną, więc opis nie
+    twierdzi „Tonacja: C-dur” jako fakt, tylko wyjaśnia w uwadze, dlaczego
+    wiersza tonacji nie ma — zgodnie z decyzją zapisaną w sekcji piętnastej
+    CLAUDE.md przy naprawie usterki zgłoszonej na przebiegu etapu trzynastego.
+    """
     opis = przeczytaj_guitarpro(Path("tests/dane/tabulatura_akordy.gp5").read_bytes())
-    assert opis.tonacja == "C-dur"
+    assert opis.tonacja is None
+    assert any("nie zawiera oznaczenia tonacji" in uwaga for uwaga in opis.uwagi_odczytu)
 
 
 def test_uszkodzony_plik_konczy_sie_bledem_trwalym() -> None:

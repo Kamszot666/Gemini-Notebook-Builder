@@ -304,3 +304,13 @@ def test_transkrypcja_prog_udzialu_mowy_powyzej_jednego_konczy_sie_bledem(tmp_pa
             tmp_path / "nie_ma.toml",
             srodowisko={"GNB_TRANSKRYPCJA_PROG_UDZIALU_MOWY": "1.5"},
         )
+
+
+def test_nuty_zapis_dzwiekow_domyslnie_wlaczony_i_da_sie_wylaczyc(tmp_path: Path) -> None:
+    domyslna = wczytaj_konfiguracje(tmp_path / "nie_ma.toml", srodowisko={})
+    assert domyslna.nuty_zapis_dzwiekow_wlaczony is True
+
+    wylaczona = wczytaj_konfiguracje(
+        tmp_path / "nie_ma.toml", srodowisko={"GNB_NUTY_ZAPIS_DZWIEKOW_WLACZONY": "nie"}
+    )
+    assert wylaczona.nuty_zapis_dzwiekow_wlaczony is False

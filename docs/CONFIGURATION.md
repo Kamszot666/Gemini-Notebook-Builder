@@ -1,7 +1,7 @@
-# Konfiguracja — stan po etapie dwunastym
+# Konfiguracja — stan po etapie trzynastym
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
-obsługuje po etapie dwunastym. Z listy w sekcji jedenastej a pliku
+obsługuje po etapie trzynastym. Z listy w sekcji jedenastej a pliku
 `CLAUDE.md` brakuje dwóch pól: gotowych profili planów notatnika (Standard,
 Plus, Pro, Ultra) oraz trybu pakowania — ich dołożenie wymaga osobnej decyzji,
 nie jest zaplanowane w żadnym etapie z sekcji osiemnastej.
@@ -221,10 +221,18 @@ tekstu, z ostrzeżeniem.
 
 ## Pola materiałów nutowych
 
-Odczyt formatów natywnych, czyli MIDI, MusicXML, MXL i Guitar Pro, nie ma
-żadnych pól konfiguracji — działa po zainstalowaniu grupy zależności `nuty`.
+Odczyt formatów natywnych, czyli MIDI, MusicXML, MXL i Guitar Pro, działa po
+zainstalowaniu grupy zależności `nuty` i ma dziś jedno pole konfiguracji,
+opisane niżej jako pierwsze — reszta odczytu nie ma żadnych ustawień.
 
-1. `sciezka_musescore`, zmienna `GNB_SCIEZKA_MUSESCORE`. Pełna ścieżka pliku
+1. `nuty_zapis_dzwiekow_wlaczony`, zmienna `GNB_NUTY_ZAPIS_DZWIEKOW_WLACZONY`.
+   Wartość logiczna, domyślnie prawda. Włącza zapis dźwięków ścieżek
+   strunowych w opisie pliku Guitar Pro, dodany w etapie trzynastym — patrz
+   `docs/FORMATS.md`, sekcja „Zapis dźwięków ścieżki strunowej”. Wyłączenie
+   przywraca zakres opisu sprzed etapu trzynastego, same metadane bez
+   dźwięków; przydatne dla utworu, którego pełny zapis wychodzi zbyt długi do
+   wygodnego odsłuchu czytnikiem ekranu.
+2. `sciezka_musescore`, zmienna `GNB_SCIEZKA_MUSESCORE`. Pełna ścieżka pliku
    wykonywalnego MuseScore. Domyślnie pusta, co oznacza odnalezienie go
    w zmiennej PATH oraz w znanych miejscach instalacji na Windows. MuseScore
    jest wyłącznie wykrywany przez polecenie `diagnostyka` i nie jest przez
@@ -232,7 +240,7 @@ Odczyt formatów natywnych, czyli MIDI, MusicXML, MXL i Guitar Pro, nie ma
    raportu diagnostyki. Wskazanie nieistniejącego pliku jest błędem
    konfiguracji. Powód, dla którego MuseScore nie jest uruchamiany, opisuje
    sekcja 18d pliku `CLAUDE.md`.
-2. `sciezka_audiveris`, zmienna `GNB_SCIEZKA_AUDIVERIS`. Pełna ścieżka pliku
+3. `sciezka_audiveris`, zmienna `GNB_SCIEZKA_AUDIVERIS`. Pełna ścieżka pliku
    wykonywalnego Audiverisa. Domyślnie pusta, co oznacza odnalezienie go
    w zmiennej PATH oraz w znanych miejscach instalacji na Windows. W
    przeciwieństwie do MuseScore Audiveris jest naprawdę uruchamiany, do
@@ -426,6 +434,7 @@ sciezka_tessdata = ""
 
 sciezka_musescore = ""
 sciezka_audiveris = ""
+nuty_zapis_dzwiekow_wlaczony = true
 
 transkrypcja_wlaczona = true
 transkrypcja_model = "medium"

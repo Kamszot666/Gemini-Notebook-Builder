@@ -1,8 +1,8 @@
-# Architektura — stan po etapie dwunastym
+# Architektura — stan po etapie trzynastym
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
-zakończeniu części A etapu jedenastego. Pełny docelowy podział na pakiety
-opisuje sekcja szósta `CLAUDE.md`.
+zakończeniu etapu trzynastego. Pełny docelowy podział na pakiety opisuje
+sekcja szósta `CLAUDE.md`.
 
 ## Potok przetwarzania
 
@@ -488,12 +488,18 @@ ekstrakcji.
   oraz mapa perkusji kanału dziesiątego, po polsku.
 - `gnb/music/tonacje.py` — odwzorowanie oznaczeń tonacji z MIDI, MusicXML
   i Guitar Pro na polskie nazwy.
+- `gnb/music/nuty_teoria.py` — nazywanie pojedynczych dźwięków z numeru MIDI
+  i wartości rytmicznych po polsku, dodane w etapie trzynastym dla zapisu
+  dźwięków ścieżki strunowej.
 - `gnb/music/midi.py` — odczyt MIDI biblioteką `mido`. Liczba taktów jest zawsze
   przybliżona, bo format nie zapisuje podziału na takty.
 - `gnb/music/musicxml.py` — odczyt MusicXML i kontenera MXL biblioteką
   standardową `xml.etree.ElementTree`. Liczba taktów dokładna.
 - `gnb/music/guitarpro.py` — odczyt Guitar Pro gp3, gp4 i gp5 biblioteką
-  `PyGuitarPro`. Brak biblioteki kończy się `BrakNarzedzia`.
+  `PyGuitarPro`. Brak biblioteki kończy się `BrakNarzedzia`. Od etapu
+  trzynastego dodatkowo buduje, dla każdej ścieżki strunowej, zapis jej
+  dźwięków takt po takcie — szczegóły w `docs/FORMATS.md`, sekcja „Materiały
+  nutowe”.
 - `gnb/music/musescore.py` — odnajdywanie pliku wykonywalnego MuseScore wzorem
   `gnb/images/tesseract.py`. MuseScore nie jest uruchamiany; moduł służy tylko
   diagnostyce.

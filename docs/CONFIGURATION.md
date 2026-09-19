@@ -1,8 +1,10 @@
 # Konfiguracja — stan po etapie dwunastym
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
-obsługuje po etapie dwunastym. Pełna lista pól z sekcji jedenastej a pliku
-`CLAUDE.md` powstanie w kolejnych etapach razem z funkcjami, których dotyczy.
+obsługuje po etapie dwunastym. Z listy w sekcji jedenastej a pliku
+`CLAUDE.md` brakuje dwóch pól: gotowych profili planów notatnika (Standard,
+Plus, Pro, Ultra) oraz trybu pakowania — ich dołożenie wymaga osobnej decyzji,
+nie jest zaplanowane w żadnym etapie z sekcji osiemnastej.
 Treść dwóch pól
 tekstowych notatnika, czyli instrukcji systemowej i promptu wyszukiwania, nie
 jest polem pliku konfiguracji: zapisuje się ją razem z projektem, w pliku

@@ -840,14 +840,20 @@ a plik grupy łączący pięć źródeł zajmuje jeden. Tematyczny plik PDF grup
 zajmuje jeden slot niezależnie od liczby obrazów. Raport końcowy liczy
 wykorzystanie limitu po sumie plików TXT i plików PDF do wgrania.
 
-Kontrola limitu w trakcie przetwarzania liczy tak samo: do limitu wchodzą tylko
-źródła, które dadzą plik wynikowy. Źródło pominięte, źródło zakończone błędem
-oraz źródło oznaczone jako duplikat nie zajmują slotu, bo nie powstaje dla nich
-żaden plik, więc nie wypychają z limitu kolejnych prawidłowych źródeł. Duplikat
-dochodzi do tej listy dopiero razem z pracą w kilku wywołaniach: checkpoint
-kumuluje źródła między uruchomieniami tego samego projektu, więc duplikat
-zapisany w poprzednim wywołaniu jest widoczny także przy kontroli limitu
-w kolejnym wywołaniu i musi być z niej wykluczony tak samo jak w bieżącym.
+Kontrola limitu w trakcie przetwarzania jest dolnym oszacowaniem, nie dokładną
+liczbą, bo liczba plików, jakie ostatecznie da pakowanie, nie jest jeszcze
+znana. Źródło pominięte, źródło zakończone błędem oraz źródło oznaczone jako
+duplikat nie zajmują slotu, bo nie powstaje dla nich żaden plik, więc nie
+wypychają z limitu kolejnych prawidłowych źródeł. Duplikat dochodzi do tej
+listy dopiero razem z pracą w kilku wywołaniach: checkpoint kumuluje źródła
+między uruchomieniami tego samego projektu, więc duplikat zapisany
+w poprzednim wywołaniu jest widoczny także przy kontroli limitu w kolejnym
+wywołaniu i musi być z niej wykluczony tak samo jak w bieżącym. Źródła jednej
+grupy tematycznej liczą się w tej kontroli jako jeden slot, niezależnie od
+liczby członków grupy, ponieważ w typowym przypadku grupa daje jeden wspólny
+plik — materiał nutowy jest tu wyjątkiem, bo nie podlega grupowaniu
+i zawsze liczy się osobno. Dokładna liczba plików do wgrania, po ich
+faktycznym powstaniu w fazie pakowania, jest wyłącznie w raporcie końcowym.
 
 ## Metadane z danych strukturalnych strony
 

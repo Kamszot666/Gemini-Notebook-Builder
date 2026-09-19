@@ -699,7 +699,11 @@ class _Wykonanie:
             )
             return
 
-        if istniejacy is None and self._liczba_aktywnych() >= self._konfiguracja.limit_zrodel:
+        if (
+            istniejacy is None
+            and not self._grupa_ma_juz_slot(zrodlo, pozycja.grupa)
+            and self._liczba_aktywnych() >= self._konfiguracja.limit_zrodel
+        ):
             self._pomin(
                 zrodlo, pozycja, "Przekroczono limit liczby źródeł w notatniku. Źródło pominięte."
             )
@@ -1828,10 +1832,40 @@ class _Wykonanie:
         # checkpoint kumuluje źródła między uruchomieniami, więc duplikat
         # zapisany w poprzednim wywołaniu jest tu już widoczny i też trzeba go
         # wykluczyć, dlatego jest w _STATUSY_BEZ_PLIKU_WYNIKOWEGO.
-        return sum(
-            1
+        #
+        # Źródła jednej grupy tematycznej dają w fazie pakowania jeden wspólny
+        # plik, więc liczą się tu jako jeden slot, a nie jako liczba swoich
+        # członków — inaczej ta kontrola blokowałaby przyjmowanie kolejnych
+        # źródeł grupy przy wolnych slotach notatnika (sekcja 18e CLAUDE.md,
+        # punkt o dolnym oszacowaniu kontroli w trakcie przyjmowania wejścia).
+        # Materiał nutowy jest wyjątkiem: nie podlega grupowaniu tematycznemu
+        # niezależnie od nadanej mu nazwy grupy i zawsze dostaje własny plik,
+        # więc liczy się osobno, tak jak źródło bez grupy.
+        grupy_zajete: set[str] = set()
+        pojedyncze = 0
+        for stan in self._checkpoint.zrodla.values():
+            if stan.status in _STATUSY_BEZ_PLIKU_WYNIKOWEGO:
+                continue
+            if stan.grupa_pakowania and stan.typ != TypZrodla.PLIK_NUTY.value:
+                grupy_zajete.add(stan.grupa_pakowania)
+            else:
+                pojedyncze += 1
+        return pojedyncze + len(grupy_zajete)
+
+    def _grupa_ma_juz_slot(self, zrodlo: Zrodlo, grupa: str | None) -> bool:
+        """Mówi, czy nazwana grupa ma już aktywnego członka, a więc już zajęty slot.
+
+        Kolejne źródło dołączone do takiej grupy trafia do tego samego pliku
+        grupy w fazie pakowania i nie zajmuje nowego slotu, więc kontrola limitu
+        z `_liczba_aktywnych` nie powinna go blokować, nawet gdy limit jest już
+        wypełniony przez inne źródła i grupy. Materiał nutowy nigdy nie ma tu
+        racji bytu, bo nie podlega grupowaniu tematycznemu.
+        """
+        if not grupa or zrodlo.typ_zrodla is TypZrodla.PLIK_NUTY:
+            return False
+        return any(
+            stan.grupa_pakowania == grupa and stan.status not in _STATUSY_BEZ_PLIKU_WYNIKOWEGO
             for stan in self._checkpoint.zrodla.values()
-            if stan.status not in _STATUSY_BEZ_PLIKU_WYNIKOWEGO
         )
 
     def _pomin(self, zrodlo: Zrodlo, pozycja: PozycjaWejsciowa, komunikat: str) -> None:

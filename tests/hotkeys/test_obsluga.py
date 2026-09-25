@@ -55,7 +55,7 @@ class _FalszywyRejestr:
     def dodaj_nasluch_zakonczenia(self, wywolanie: object) -> None:
         self._nasluchy.append(wywolanie)
 
-    def uruchom(self, nazwa_projektu: str, _praca: object) -> None:
+    def uruchom(self, nazwa_projektu: str, _praca: object, *, liczba_pozycji: int = 0) -> None:
         if self._przy_pierwszym_wywolaniu is not None:
             wywolanie, self._przy_pierwszym_wywolaniu = self._przy_pierwszym_wywolaniu, None
             wywolanie()  # type: ignore[operator]

@@ -24,9 +24,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
-from gnb.core.postep import WywolanieZwrotnePostepu
+from gnb.core.postep import WywolanieZwrotnePostepu, ZdarzeniePostepu
 from gnb.potok import WynikPrzetwarzania
-from gnb.ui.postep import DlawikPostepu
+from gnb.ui.postep import DlawikPostepu, KalkulatorProcentu
 
 # Praca zlecana rejestrowi: funkcja przyjmująca wywołanie zwrotne postępu
 # i zwracająca podsumowanie przetwarzania. Rejestr podaje jej dławik postępu.
@@ -60,6 +60,7 @@ class InformacjaOZadaniu:
 class _Zadanie:
     nazwa_projektu: str
     dlawik: DlawikPostepu
+    kalkulator_procentu: KalkulatorProcentu
     stan: StanZadania = StanZadania.TRWA
     wynik: WynikPrzetwarzania | None = None
     komunikat_bledu: str | None = None
@@ -84,15 +85,26 @@ class RejestrZadan:
         with self._zamek:
             self._nasluchy_zakonczenia.append(wywolanie)
 
-    def uruchom(self, nazwa_projektu: str, praca: PracaWTle) -> None:
-        """Uruchamia pracę w nowym wątku. Odrzuca żądanie, gdy zadanie już trwa."""
+    def uruchom(self, nazwa_projektu: str, praca: PracaWTle, *, liczba_pozycji: int = 0) -> None:
+        """Uruchamia pracę w nowym wątku. Odrzuca żądanie, gdy zadanie już trwa.
+
+        Argument `liczba_pozycji` to liczba wejść przekazanych do przetworzenia
+        w tym wywołaniu — budżet fazy ekstrakcji dla `KalkulatorProcentu`. Musi
+        być znana z góry, żeby procent postępu nie cofał się, gdy pobieranie
+        stron albo napisów zdąży się zakończyć, zanim ekstrakcja zgłosi
+        pierwsze źródło.
+        """
         with self._zamek:
             if self._zadanie is not None and self._zadanie.stan is StanZadania.TRWA:
                 raise ZadanieJuzTrwa(
                     f"Trwa już przetwarzanie projektu „{self._zadanie.nazwa_projektu}”. "
                     "Poczekaj na jego zakończenie, zanim uruchomisz kolejne."
                 )
-            zadanie = _Zadanie(nazwa_projektu=nazwa_projektu, dlawik=DlawikPostepu())
+            zadanie = _Zadanie(
+                nazwa_projektu=nazwa_projektu,
+                dlawik=DlawikPostepu(),
+                kalkulator_procentu=KalkulatorProcentu(liczba_pozycji),
+            )
             self._zadanie = zadanie
 
         watek = threading.Thread(
@@ -124,8 +136,11 @@ class RejestrZadan:
     def _wykonaj(self, zadanie: _Zadanie, praca: PracaWTle) -> None:
         # Wątek roboczy przechwytuje każdy wyjątek: nie ma go komu przekazać
         # wyżej, a jego wyciek zabiłby wątek bez śladu w interfejsie.
+        def przyjmij_z_procentem(zdarzenie: ZdarzeniePostepu) -> None:
+            zadanie.dlawik.przyjmij(zadanie.kalkulator_procentu.opatrz_procentem(zdarzenie))
+
         try:
-            wynik = praca(zadanie.dlawik.przyjmij)
+            wynik = praca(przyjmij_z_procentem)
         except Exception as blad:
             with self._zamek:
                 zadanie.stan = StanZadania.BLAD

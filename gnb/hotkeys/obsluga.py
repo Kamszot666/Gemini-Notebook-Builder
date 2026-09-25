@@ -255,7 +255,7 @@ if sys.platform == "win32":
                 )
 
             try:
-                self._rejestr.uruchom(nazwa_projektu, praca)
+                self._rejestr.uruchom(nazwa_projektu, praca, liczba_pozycji=len(pozycje))
             except ZadanieJuzTrwa:
                 # Rejestr zdążył się zająć między odczytem a próbą uruchomienia —
                 # wrzucamy z powrotem. Jeżeli zostało ponowienie, próbujemy od

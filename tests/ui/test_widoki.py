@@ -153,6 +153,93 @@ def test_strona_projektu_po_zakonczeniu_pokazuje_raport_bez_skryptu_postepu() ->
     assert "Źródła przetworzone: 5" in html
 
 
+def _strona_z_raportem(raport: str) -> str:
+    informacja = InformacjaOZadaniu(
+        nazwa_projektu="Projekt",
+        stan=StanZadania.ZAKONCZONE,
+        komunikat_postepu="Projekt zakończony",
+        komunikat_bledu=None,
+        wynik=None,
+    )
+    return strona_projektu(
+        nazwa="Projekt",
+        informacja=informacja,
+        pola=PolaNotatnika(),
+        limit_znakow_instrukcji=10_000,
+        token_csrf="t",
+        podsumowanie=PodsumowanieWyniku(
+            liczba_przetworzonych=1,
+            liczba_pominietych=0,
+            liczba_bledow=0,
+            katalog_projektu="C:/wyniki/Projekt",
+            wznowiono=False,
+        ),
+        raport=raport,
+    )
+
+
+def test_adres_http_w_raporcie_staje_sie_odnosnikiem_w_nowej_karcie() -> None:
+    html = _strona_z_raportem("Źródło: https://przyklad.pl/artykul\n")
+
+    assert (
+        '<a href="https://przyklad.pl/artykul" target="_blank" '
+        'rel="noopener noreferrer">https://przyklad.pl/artykul '
+        "(otwiera się w nowej karcie)</a>" in html
+    )
+
+
+def test_zlosliwy_adres_w_raporcie_nie_wyrywa_sie_z_atrybutu_ani_nie_wstawia_znacznika() -> None:
+    """Test ma się czerwienić, gdyby escapowanie adresu kiedyś zniknęło.
+
+    Adres kończy się cudzysłowem, nawiasem ostrym i tagiem script — dokładnie
+    tak, jak wymaga tego lista zmian etapu czternastego, pozycja trzecia.
+    """
+    zlosliwy = 'https://zly.pl/"><script>alert(1)</script>'
+    html = _strona_z_raportem(f"Źródło: {zlosliwy}\n")
+
+    assert "<script>alert(1)</script>" not in html
+    assert '"><script>' not in html
+    # Sam odnośnik istnieje, ale cały złośliwy ogon jest escapowany w środku
+    # tekstu i atrybutu href, nie wyrywa się z nich.
+    assert "&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;" in html
+
+
+def test_adres_javascript_w_raporcie_nigdy_nie_staje_sie_odnosnikiem() -> None:
+    html = _strona_z_raportem("Uwaga: javascript:alert(1) w treści.\n")
+    assert '<a href="javascript:' not in html
+
+
+def test_strona_projektu_po_zakonczeniu_ma_formularz_dosylania_zrodel() -> None:
+    html = _strona_z_raportem("Raport końcowy projektu: Projekt\n")
+
+    assert '<label for="dosylanie-tekst">Tekst wklejony</label>' in html
+    assert 'action="/projekt/Projekt/dosylanie"' in html
+    assert "Dodaj źródła i uruchom kolejny przebieg" in html
+
+
+def test_strona_projektu_w_trakcie_przetwarzania_odpytuje_od_razu_i_ma_id_nagłowka() -> None:
+    informacja = InformacjaOZadaniu(
+        nazwa_projektu="Projekt",
+        stan=StanZadania.TRWA,
+        komunikat_postepu="Postęp: 20 procent, pobrano 3 z 11 źródeł",
+        komunikat_bledu=None,
+        wynik=None,
+    )
+    html = strona_projektu(
+        nazwa="Projekt",
+        informacja=informacja,
+        pola=PolaNotatnika(),
+        limit_znakow_instrukcji=10_000,
+        token_csrf="t",
+    )
+    assert '<h2 id="naglowek-stanu">' in html
+    # Skrypt musi odpytać stan od razu, nie dopiero po pierwszych 4 sekundach —
+    # w przeciwnym razie krótki przebieg (kilka sekund) kończy się, zanim
+    # pierwszy odczyt w ogóle nastąpi, i użytkownik nie usłyszy żadnego
+    # pośredniego komunikatu postępu.
+    assert "odswiez();\n  setInterval(odswiez, 4000);" in html
+
+
 def test_strona_promptu_pokazuje_prompt_i_zapewnia_ze_nic_nie_wysyla() -> None:
     html = strona_promptu(nazwa="Projekt", prompt="Znajdź artykuły o NVDA.")
     assert "Znajdź artykuły o NVDA." in html

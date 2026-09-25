@@ -16,6 +16,7 @@ napisu do HTML.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from urllib.parse import quote
 
@@ -153,6 +154,34 @@ def _pole_csrf(token_csrf: str) -> str:
     )
 
 
+_WZORZEC_ADRESU_HTTP = re.compile(r"https?://\S+")
+
+
+def _tekst_z_odnosnikami(tekst: str) -> str:
+    """Zamienia adresy http i https w tekście na odnośniki otwierane w nowej karcie.
+
+    Adres innego schematu, na przykład ``javascript:``, nigdy nie staje się
+    odnośnikiem — wzorzec dopasowuje wyłącznie ``http://`` i ``https://``.
+    Bezpieczeństwo nie zależy jednak od tego, co adres zawiera: cały dopasowany
+    fragment przechodzi przez ``escapuj`` zarówno w atrybucie ``href``, jak
+    i w widocznym tekście, więc nawet adres ze sztucznie doklejonym cudzysłowem
+    albo nawiasem ostrym nie wyrywa się z atrybutu ani nie wstawia własnego
+    znacznika — zostaje po prostu dziwnie wyglądającym, nieszkodliwym tekstem.
+    """
+    fragmenty: list[str] = []
+    pozycja = 0
+    for dopasowanie in _WZORZEC_ADRESU_HTTP.finditer(tekst):
+        fragmenty.append(escapuj(tekst[pozycja : dopasowanie.start()]))
+        adres = escapuj(dopasowanie.group(0))
+        fragmenty.append(
+            f'<a href="{adres}" target="_blank" rel="noopener noreferrer">'
+            f"{adres} (otwiera się w nowej karcie)</a>"
+        )
+        pozycja = dopasowanie.end()
+    fragmenty.append(escapuj(tekst[pozycja:]))
+    return "".join(fragmenty)
+
+
 def sciezka_projektu(nazwa: str) -> str:
     """Buduje ścieżkę adresu strony projektu, z nazwą zakodowaną do postaci bezpiecznej w URL."""
     return "/projekt/" + quote(nazwa, safe="")
@@ -274,18 +303,25 @@ def strona_projektu(
     bledy: list[BladPola] | None = None,
     aktywny_projekt_skrotu: str | None = None,
     ostatni_komunikat_skrotu: KomunikatSkrotu | None = None,
+    grupa_ostatniego_wyslania: str = "",
+    dane_dosylania: DaneFormularzaProjektu | None = None,
+    bledy_dosylania: list[BladPola] | None = None,
 ) -> str:
     """Strona projektu: region postępu, dwa pola tekstowe oraz raport po zakończeniu."""
     bledy = bledy or []
     sciezka = sciezka_projektu(nazwa)
     czesci = [f"<h1>Projekt: {escapuj(nazwa)}</h1>", _sekcja_postepu(sciezka, informacja)]
 
-    if podsumowanie is not None:
-        czesci.append(_sekcja_podsumowania(podsumowanie))
-    if raport is not None:
-        czesci.append(
-            f'<div class="blok">\n<h2>Raport końcowy</h2>\n<pre>{escapuj(raport)}</pre>\n</div>'
-        )
+    fragment_wyniku = _fragment_wyniku(
+        podsumowanie,
+        raport,
+        sciezka,
+        grupa_ostatniego_wyslania,
+        token_csrf,
+        dane_dosylania,
+        bledy_dosylania,
+    )
+    czesci.append(f'<div id="wynik-po-zakonczeniu">{fragment_wyniku}</div>')
 
     czesci.append(
         _sekcja_skrotu_projektu(
@@ -302,15 +338,112 @@ def strona_projektu(
         fragmenty_skryptu.append(
             _SKRYPT_POSTEPU.replace("SCIEZKA_POSTEPU", escapuj(SCIEZKA_POSTEPU))
         )
-    if bledy:
+    if bledy or bledy_dosylania:
         fragmenty_skryptu.append(_SKRYPT_FOKUS_BLEDOW)
     return _dokument(f"Projekt: {nazwa}", "\n".join(czesci), skrypt="\n".join(fragmenty_skryptu))
+
+
+def _fragment_wyniku(
+    podsumowanie: PodsumowanieWyniku | None,
+    raport: str | None,
+    sciezka: str,
+    grupa_ostatniego_wyslania: str,
+    token_csrf: str,
+    dane_dosylania: DaneFormularzaProjektu | None,
+    bledy_dosylania: list[BladPola] | None,
+) -> str:
+    """Buduje blok pokazywany po zakończeniu przebiegu: podsumowanie, raport i formularz dosyłania.
+
+    Ten sam blok budują dwie ścieżki: pełne wyrenderowanie strony projektu przy
+    wejściu na nią po zakończeniu, oraz odpytywanie postępu, które wstawia go do
+    strony bez przeładowania, gdy przebieg kończy się w trakcie odsłuchu — patrz
+    ``fragment_po_zakonczeniu`` i skrypt ``_SKRYPT_POSTEPU``. Formularz dosyłania
+    pojawia się tylko wtedy, gdy jest już co najmniej jeden raport, bo dosyła się
+    źródła do istniejącego projektu, a nie tworzy nowy.
+    """
+    if podsumowanie is None and raport is None:
+        return ""
+    czesci = []
+    if podsumowanie is not None:
+        czesci.append(_sekcja_podsumowania(podsumowanie))
+    if raport is not None:
+        czesci.append(_sekcja_raportu(raport))
+        czesci.append(
+            _formularz_dosylania(
+                sciezka, grupa_ostatniego_wyslania, token_csrf, dane_dosylania, bledy_dosylania
+            )
+        )
+    return "\n".join(czesci)
+
+
+def fragment_po_zakonczeniu(
+    podsumowanie: PodsumowanieWyniku,
+    raport: str,
+    sciezka: str,
+    grupa_ostatniego_wyslania: str,
+    token_csrf: str,
+) -> str:
+    """Buduje fragment HTML wstawiany bez przeładowania strony po zakończeniu przebiegu.
+
+    Wołane przez obsługę żądania ``/postep``, pozycja pierwsza listy zmian etapu
+    czternastego: region stanu ogłasza jedno zdanie, a treść raportu pojawia się
+    od razu pod nim, zamiast wymagać aktywowania odnośnika „Odśwież stan”.
+    """
+    return _fragment_wyniku(
+        podsumowanie, raport, sciezka, grupa_ostatniego_wyslania, token_csrf, None, None
+    )
+
+
+def _sekcja_raportu(raport: str) -> str:
+    """Blok raportu końcowego z adresami http i https jako klikalnymi odnośnikami."""
+    return (
+        '<div class="blok">\n<h2>Raport końcowy</h2>\n'
+        f"<pre>{_tekst_z_odnosnikami(raport)}</pre>\n</div>"
+    )
+
+
+def _formularz_dosylania(
+    sciezka: str,
+    grupa_ostatniego_wyslania: str,
+    token_csrf: str,
+    dane: DaneFormularzaProjektu | None,
+    bledy: list[BladPola] | None,
+) -> str:
+    """Formularz dosyłania kolejnych źródeł do już przetworzonego projektu.
+
+    Te same pola co formularz nowego projektu na stronie głównej, bez pola nazwy
+    projektu — nazwa jest już znana z adresu strony i trafia jako pole ukryte.
+    Pole grupy jest domyślnie wypełnione nazwą grupy ostatniego wysłania, żeby
+    kolejne źródła trafiały do tego samego pliku bez przepisywania nazwy.
+    """
+    dane = dane or DaneFormularzaProjektu(grupa=grupa_ostatniego_wyslania)
+    bledy = bledy or []
+    atrybuty_tekst, blad_tekst = _opis_bledu_pola(bledy, "dosylanie-tekst")
+    atrybuty_adresy, blad_adresy = _opis_bledu_pola(bledy, "dosylanie-adresy")
+    return f"""<form class="blok" method="post" action="{escapuj(sciezka)}/dosylanie"
+  enctype="multipart/form-data">
+{_pole_csrf(token_csrf)}
+{_lista_bledow(bledy)}
+<h2>Dodaj kolejne źródła do tego projektu</h2>
+<label for="dosylanie-tekst">Tekst wklejony</label>
+<textarea id="dosylanie-tekst" name="tekst"{atrybuty_tekst}>{escapuj(dane.tekst)}</textarea>
+{blad_tekst}
+<label for="dosylanie-adresy">Adresy stron i filmów, po jednym w wierszu</label>
+<textarea id="dosylanie-adresy" name="adresy"{atrybuty_adresy}>{escapuj(dane.adresy)}</textarea>
+{blad_adresy}
+<label for="dosylanie-pliki">Pliki z dysku</label>
+<input type="file" id="dosylanie-pliki" name="pliki" multiple>
+<label for="dosylanie-grupa">Nazwa grupy tematycznej (opcjonalna)</label>
+<input type="text" id="dosylanie-grupa" name="grupa" value="{escapuj(dane.grupa)}">
+<p class="pomoc">Źródła z tą samą nazwą grupy są łączone w jak najmniej plików wynikowych.</p>
+<button type="submit">Dodaj źródła i uruchom kolejny przebieg</button>
+</form>"""
 
 
 def _sekcja_postepu(sciezka: str, informacja: InformacjaOZadaniu | None) -> str:
     if informacja is None:
         return (
-            '<div class="blok">\n<h2>Stan</h2>\n'
+            '<div class="blok">\n<h2 id="naglowek-stanu">Stan</h2>\n'
             "<p>Ten projekt nie ma bieżącego przetwarzania w tej sesji serwera. "
             'Możesz je <a href="/">rozpocząć od nowa albo wznowić ze strony głównej</a>.</p>\n'
             "</div>"
@@ -331,7 +464,7 @@ def _sekcja_postepu(sciezka: str, informacja: InformacjaOZadaniu | None) -> str:
         f'<p id="postep-tresc" role="status" aria-live="polite" data-koniec="{koniec}">{tresc}</p>'
     )
     return (
-        f'<div class="blok">\n<h2>Stan przetwarzania: {stan_slowny}</h2>\n'
+        f'<div class="blok">\n<h2 id="naglowek-stanu">Stan przetwarzania: {stan_slowny}</h2>\n'
         f"{akapit_postepu}\n"
         f"{blad}\n</div>"
     )
@@ -459,6 +592,8 @@ def strona_bledu(*, kod: int, tytul: str, komunikat: str) -> str:
 _SKRYPT_POSTEPU = """
 (function () {
   var region = document.getElementById('postep-tresc');
+  var naglowek = document.getElementById('naglowek-stanu');
+  var wynik = document.getElementById('wynik-po-zakonczeniu');
   if (!region || region.getAttribute('data-koniec') === 'tak') { return; }
   function odswiez() {
     fetch('SCIEZKA_POSTEPU', { headers: { 'Accept': 'application/json' } })
@@ -472,12 +607,13 @@ _SKRYPT_POSTEPU = """
         }
         if (dane.stan && dane.stan !== 'trwa') {
           region.setAttribute('data-koniec', 'tak');
-          region.textContent =
-            'Przetwarzanie zakończone. Aktywuj odnośnik „Odśwież stan”, aby zobaczyć raport.';
+          if (naglowek && dane.naglowek) { naglowek.textContent = dane.naglowek; }
+          if (wynik && dane.fragment) { wynik.innerHTML = dane.fragment; }
         }
       })
       .catch(function () {});
   }
+  odswiez();
   setInterval(odswiez, 4000);
 })();
 """.strip()

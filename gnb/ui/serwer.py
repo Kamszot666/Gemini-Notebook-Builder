@@ -37,7 +37,7 @@ from gnb.ingestion.wejscie import (
 from gnb.persistence import pola_notatnika
 from gnb.persistence.checkpoint import wczytaj
 from gnb.persistence.pola_notatnika import PolaNotatnika, PrzekroczonoLimitZnakow
-from gnb.persistence.projekt import ustal_uklad, utworz_katalogi
+from gnb.persistence.projekt import UkladProjektu, ustal_uklad, utworz_katalogi
 from gnb.potok import WynikPrzetwarzania, odtworz_wejscia, przetworz_projekt
 from gnb.ui import csrf, formularze, widoki
 from gnb.ui.projekty import niedokonczone
@@ -222,6 +222,10 @@ class _Handler(BaseHTTPRequestHandler):
             self._ustaw_aktywny_projekt_skrotu(
                 self._nazwa_z_url(sciezka[len("/projekt/") : -len("/aktywny-skrot")])
             )
+        elif sciezka.startswith("/projekt/") and sciezka.endswith("/dosylanie"):
+            self._dosylanie_zrodel(
+                self._nazwa_z_url(sciezka[len("/projekt/") : -len("/dosylanie")])
+            )
         else:
             self._blad(404, "Nie znaleziono", "Pod tym adresem nie ma żadnej operacji.")
 
@@ -251,6 +255,8 @@ class _Handler(BaseHTTPRequestHandler):
         *,
         kod: int = 200,
         bledy: list[BladPola] | None = None,
+        dane_dosylania: DaneFormularzaProjektu | None = None,
+        bledy_dosylania: list[BladPola] | None = None,
     ) -> None:
         uklad = ustal_uklad(self._konfiguracja.katalog_wynikow, nazwa)
         if not uklad.katalog_projektu.is_dir():
@@ -289,8 +295,25 @@ class _Handler(BaseHTTPRequestHandler):
             bledy=bledy,
             aktywny_projekt_skrotu=self._serwer.aktywny_projekt_skrotu.aktualny(),
             ostatni_komunikat_skrotu=self._serwer.ostatni_komunikat_skrotu.aktualny(),
+            grupa_ostatniego_wyslania=self._grupa_ostatniego_wyslania(uklad),
+            dane_dosylania=dane_dosylania,
+            bledy_dosylania=bledy_dosylania,
         )
         self._wyslij_html(kod, html, token=token)
+
+    def _grupa_ostatniego_wyslania(self, uklad: UkladProjektu) -> str:
+        """Nazwa grupy tematycznej ostatniego wejścia zapisanego w checkpoincie.
+
+        Wypełnia nią domyślnie pole formularza dosyłania kolejnych źródeł, żeby
+        trafiały do tego samego pliku grupy bez przepisywania nazwy — pozycja
+        czwarta listy zmian etapu czternastego.
+        """
+        if not uklad.checkpoint.is_file():
+            return ""
+        checkpoint = wczytaj(uklad.checkpoint)
+        if checkpoint is None or not checkpoint.wejscia:
+            return ""
+        return checkpoint.wejscia[-1].grupa or ""
 
     def _pokaz_prompt(self, nazwa: str) -> None:
         uklad = ustal_uklad(self._konfiguracja.katalog_wynikow, nazwa)
@@ -303,11 +326,47 @@ class _Handler(BaseHTTPRequestHandler):
         )
 
     def _pokaz_postep(self) -> None:
+        """Zwraca stan bieżącego zadania jako JSON, odpytywane przez skrypt strony projektu.
+
+        Gdy zadanie właśnie się zakończyło, odpowiedź niesie dodatkowo gotowy
+        fragment HTML z podsumowaniem, raportem i formularzem dosyłania —
+        pozycja pierwsza listy zmian etapu czternastego: strona wstawia go pod
+        regionem stanu bez przeładowania i bez przenoszenia fokusu.
+        """
         informacja = self._serwer.rejestr.informacja()
         if informacja is None:
-            dane = {"komunikat": "", "stan": "brak"}
-        else:
-            dane = {"komunikat": informacja.komunikat_postepu, "stan": informacja.stan.value}
+            dane: dict[str, str] = {"komunikat": "", "stan": "brak"}
+            self._wyslij(200, json.dumps(dane, ensure_ascii=False).encode("utf-8"), _TYP_JSON)
+            return
+
+        dane = {"komunikat": informacja.komunikat_postepu, "stan": informacja.stan.value}
+        if informacja.stan is StanZadania.ZAKONCZONE and informacja.wynik is not None:
+            uklad = ustal_uklad(self._konfiguracja.katalog_wynikow, informacja.nazwa_projektu)
+            raport = _odczytaj_tekst(uklad.raport)
+            if raport is not None:
+                podsumowanie = PodsumowanieWyniku(
+                    liczba_przetworzonych=informacja.wynik.liczba_przetworzonych,
+                    liczba_pominietych=informacja.wynik.liczba_pominietych,
+                    liczba_bledow=informacja.wynik.liczba_bledow,
+                    katalog_projektu=str(informacja.wynik.katalog_projektu),
+                    wznowiono=informacja.wynik.wznowiono,
+                )
+                dane["naglowek"] = "Stan przetwarzania: zakończone"
+                dane["komunikat"] = (
+                    "Przetwarzanie zakończone. Raport jest poniżej, pod nagłówkiem Raport końcowy."
+                )
+                dane["fragment"] = widoki.fragment_po_zakonczeniu(
+                    podsumowanie,
+                    raport,
+                    sciezka_projektu(informacja.nazwa_projektu),
+                    self._grupa_ostatniego_wyslania(uklad),
+                    self._token_sesji(),
+                )
+        elif informacja.stan is StanZadania.BLAD:
+            dane["naglowek"] = "Stan przetwarzania: zakończone błędem"
+            powod = informacja.komunikat_bledu or "Powód nie został zapisany."
+            dane["komunikat"] = f"Przetwarzanie zakończone błędem. Powód: {powod}"
+
         self._wyslij(200, json.dumps(dane, ensure_ascii=False).encode("utf-8"), _TYP_JSON)
 
     # --- operacje ------------------------------------------------------
@@ -384,7 +443,62 @@ class _Handler(BaseHTTPRequestHandler):
         def praca(postep: WywolanieZwrotnePostepu) -> WynikPrzetwarzania:
             return przetworz_projekt(pozycje, konfiguracja, nazwa_projektu=nazwa, postep=postep)
 
-        self._serwer.rejestr.uruchom(nazwa, praca)
+        self._serwer.rejestr.uruchom(nazwa, praca, liczba_pozycji=len(pozycje))
+
+    def _dosylanie_zrodel(self, nazwa: str) -> None:
+        """Dodaje kolejne źródła do już istniejącego projektu, z formularza pod raportem.
+
+        Idzie tą samą ścieżką przetwarzania co formularz nowego projektu
+        z nazwą już istniejącego projektu — `_uruchom_nowy_projekt` wznawia
+        checkpoint zamiast zaczynać od zera, dokładnie tak samo jak przy
+        wysłaniu formularza strony głównej z istniejącą nazwą. Różni się tylko
+        tym, gdzie wracają błędy walidacji: tu na stronę projektu, z której
+        przyszło żądanie, nie na stronę główną — pozycja czwarta listy zmian
+        etapu czternastego.
+        """
+        wynik_formularza = self._parsuj_formularz()
+        if wynik_formularza is None:
+            return
+        if not self._csrf_ok(wynik_formularza.pole(csrf.NAZWA_POLA_FORMULARZA)):
+            return
+
+        uklad = ustal_uklad(self._konfiguracja.katalog_wynikow, nazwa)
+        if not uklad.katalog_projektu.is_dir():
+            self._blad(404, "Nie znaleziono projektu", f"Nie ma projektu o nazwie „{nazwa}”.")
+            return
+
+        dane = DaneFormularzaProjektu(
+            tekst=wynik_formularza.pole("tekst"),
+            adresy=wynik_formularza.pole("adresy"),
+            grupa=wynik_formularza.pole("grupa").strip(),
+        )
+        adresy = [wiersz.strip() for wiersz in dane.adresy.splitlines() if wiersz.strip()]
+        pliki = [plik for plik in wynik_formularza.pliki if plik.zawartosc]
+        bledy: list[BladPola] = []
+        if not dane.tekst.strip() and not adresy and not pliki:
+            bledy.append(
+                BladPola(
+                    "dosylanie-tekst", "Podaj przynajmniej jedno źródło: tekst, adres albo plik."
+                )
+            )
+        if bledy:
+            self._pokaz_projekt(
+                uklad.nazwa_projektu, kod=400, dane_dosylania=dane, bledy_dosylania=bledy
+            )
+            return
+
+        grupa = dane.grupa or None
+        try:
+            self._uruchom_nowy_projekt(uklad.nazwa_projektu, dane, adresy, pliki, grupa)
+        except ZadanieJuzTrwa as blad:
+            self._pokaz_projekt(
+                uklad.nazwa_projektu,
+                kod=409,
+                dane_dosylania=dane,
+                bledy_dosylania=[BladPola("dosylanie-tekst", str(blad))],
+            )
+            return
+        self._przekieruj(sciezka_projektu(uklad.nazwa_projektu))
 
     def _wznow_projekt(self, nazwa: str) -> None:
         wynik_formularza = self._parsuj_formularz()
@@ -413,7 +527,7 @@ class _Handler(BaseHTTPRequestHandler):
             )
 
         try:
-            self._serwer.rejestr.uruchom(nazwa_projektu, praca)
+            self._serwer.rejestr.uruchom(nazwa_projektu, praca, liczba_pozycji=len(pozycje))
         except ZadanieJuzTrwa as blad:
             self._blad(409, "Inne przetwarzanie w toku", str(blad))
             return

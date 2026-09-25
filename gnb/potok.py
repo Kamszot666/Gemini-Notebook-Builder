@@ -33,7 +33,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -123,6 +123,7 @@ from gnb.logging_pl.dziennik import (
     NAZWA_LOGU_WAZNEGO,
     ZDARZENIE_CHECKPOINT_ZAPISANY,
     ZDARZENIE_DEDUPLIKACJA_ZAKONCZONA,
+    ZDARZENIE_GRUPA_PRZEPAKOWANA,
     ZDARZENIE_GRUPA_SPAKOWANA,
     ZDARZENIE_JAKOSC_PODEJRZANA,
     ZDARZENIE_MANIFEST_ZAPISANY,
@@ -131,10 +132,15 @@ from gnb.logging_pl.dziennik import (
     ZDARZENIE_NAPISY_WYBRANE,
     ZDARZENIE_OSTRZEZENIE_EKSTRAKCJI,
     ZDARZENIE_OSTRZEZENIE_PODZIALU,
+    ZDARZENIE_PLIK_GRUPY_ZASTAPIONY,
+    ZDARZENIE_PLIK_MD_BRAKUJE,
+    ZDARZENIE_PLIK_WYNIKOWY_USUNIETY,
     ZDARZENIE_PLIK_WYNIKOWY_ZAPISANY,
     ZDARZENIE_PROJEKT_UTWORZONY,
     ZDARZENIE_PROJEKT_WZNOWIONY,
     ZDARZENIE_PROJEKT_ZAKONCZONY,
+    ZDARZENIE_TRESC_ZASTAPIONA,
+    ZDARZENIE_ZASTAPIENIE_NIEUDANE,
     ZDARZENIE_ZRODLO_BLAD,
     ZDARZENIE_ZRODLO_DUPLIKAT,
     ZDARZENIE_ZRODLO_JUZ_W_PROJEKCIE,
@@ -154,6 +160,7 @@ from gnb.output.manifest import (
     WpisDeduplikacji,
     WpisPobrania,
     WpisWyniku,
+    WpisZastapionegoPlikuGrupy,
     WpisZrodla,
     zapisz_manifest,
 )
@@ -171,6 +178,7 @@ from gnb.output.naglowek_metadanych import (
     ETYKIETA_RODZAJ_NAPISOW,
     ETYKIETA_TYP,
     ETYKIETA_TYTUL,
+    ETYKIETA_UWAGA_O_TRESCI,
     opis_dlugosci,
     opis_typu_zrodla,
     z_oznaczeniem_czesci,
@@ -180,8 +188,11 @@ from gnb.output.ocena_jakosci import OCENA_PODEJRZANA, OcenaJakosci, ocen_jakosc
 from gnb.output.raport import (
     MaterialDoSprawdzenia,
     PodsumowanieProjektu,
+    ZastapienieNieudane,
+    ZastapionyPlik,
     ZrodloJuzWProjekcie,
     ZrodloNieprzetworzone,
+    ZrodloZweryfikowane,
     zapisz_raport,
     zbuduj_raport,
 )
@@ -207,6 +218,15 @@ from gnb.persistence.checkpoint import (
     wczytaj,
     zapisz,
 )
+from gnb.persistence.pliki_wynikowe import (
+    POWOD_PLIK_USUNIETY_RECZNIE,
+    czlonkowie_grupy,
+    domknij_zastapione_pliki,
+    pozostale_pliki_zrodla,
+    usun_plik_wynikowy,
+    wycofaj_grupe,
+    znajdz_brakujace_pliki,
+)
 from gnb.persistence.projekt import UkladProjektu, ustal_uklad, utworz_katalogi
 
 _STATUSY_KONCOWE = frozenset(
@@ -220,6 +240,7 @@ _STATUSY_KONCOWE = frozenset(
 _STATUSY_BEZ_PLIKU_WYNIKOWEGO = frozenset(
     {StatusZrodla.BLAD.value, StatusZrodla.POMINIETE.value, StatusZrodla.DUPLIKAT.value}
 )
+_FORMATY_HTML = frozenset({"html", "htm", "xhtml"})
 _ROZSZERZENIE_ORYGINALU_TEKSTU = "txt"
 _ROZSZERZENIE_ORYGINALU_NAPISOW = "json"
 
@@ -269,6 +290,28 @@ KOMUNIKAT_BRAK_TEKSTU_POSREDNIEGO = (
 _FORMATY_DOKUMENTOW_OCENIANE = frozenset({"pdf", "docx", "epub", "html", "htm", "xhtml"})
 
 
+def _czy_status_koncowy(stan: StanZrodla, ponownie_usuniete: bool = True) -> bool:
+    """Rozstrzyga, czy źródło jest już rozstrzygnięte i nie wymaga przetwarzania.
+
+    Źródło pominięte z powodu ręcznie usuniętego pliku wynikowego jest wyjątkiem:
+    pominięcie jest odwracalne, więc ponowne podanie tego samego adresu albo pliku
+    przetwarza je od nowa, zamiast traktować jako już obecne w projekcie.
+    Wznowienie projektu odtwarza jednak wszystkie zapisane wejścia i nie jest
+    ponownym podaniem źródła przez użytkownika, więc przy `ponownie_usuniete`
+    równym fałsz takie źródło pozostaje pominięte, a decyzja z początku
+    przebiegu nie jest po cichu cofana.
+    """
+    if ponownie_usuniete and stan.status == StatusZrodla.POMINIETE.value:
+        if stan.plik_wynikowy_usuniety:
+            return False
+    return stan.status in _STATUSY_KONCOWE
+
+
+def _wpis_wazny(zdarzenie: str, opis: str) -> str:
+    """Buduje wiersz zdarzenia dla log_wazne.txt, bez znaku rozdzielającego godzinę."""
+    return f"{zdarzenie}: {opis}".replace("|", "/")
+
+
 def _czy_ocenic_jakosc(typ_zrodla: TypZrodla, format_zrodla: str) -> bool:
     """Rozstrzyga, czy źródło podlega ocenie jakości ekstrakcji.
 
@@ -294,6 +337,16 @@ KOMUNIKAT_STRONA_BLOKADY = (
     "żeby szkielet strony nie zajmował miejsca w limicie źródeł notatnika. Jeśli to "
     "strona za logowaniem, zapisz ją w przeglądarce do pliku i zastąp nim treść tego "
     "źródła na stronie projektu."
+)
+
+KOMUNIKAT_PLIK_USUNIETY = (
+    POWOD_PLIK_USUNIETY_RECZNIE + ": {nazwa}. Źródło zostało pominięte, bo jego treści nie ma "
+    "już w plikach wynikowych. Dodaj ponownie ten sam adres albo plik, żeby przetworzyć "
+    "źródło od nowa."
+)
+KOMUNIKAT_POZOSTALE_PLIKI = (
+    " Na dysku zostały jeszcze pliki tego źródła: {pliki}. Zawierają one tylko część "
+    "jego treści, więc nie wgrywaj ich do notatnika."
 )
 
 KOMUNIKAT_PLIK_BEZ_TRESCI = (
@@ -322,6 +375,7 @@ class _PrzygotowanyDokument:
     metadane: dict[str, str]
     tekst_zrodla: str | None = None
     tresc_porownawcza: str | None = None
+    zastapiona_plikiem: str | None = None
 
 
 @dataclass(slots=True)
@@ -505,6 +559,8 @@ def przetworz_projekt(
     pobieracz_youtube: PobieraczYouTube | None = None,
     postep: WywolanieZwrotnePostepu | None = None,
     wymus_transkrypcje: bool = False,
+    zastepcze_tresci: Mapping[str, Path] | None = None,
+    ponownie_przetwarzaj_usuniete: bool = True,
 ) -> WynikPrzetwarzania:
     """Przetwarza listę wejść w ramach jednego projektu i zwraca podsumowanie.
 
@@ -523,6 +579,18 @@ def przetworz_projekt(
     niemowne: audio jest wtedy przepisywane nawet przy niskim udziale mowy.
     Sekcja piętnasta CLAUDE.md wymaga, żeby użytkownik mógł nadpisać tę decyzję
     dla konkretnego pliku — w wierszu poleceń robi to opcja ``--wymus-transkrypcje``.
+
+    Argument `zastepcze_tresci` to odwzorowanie identyfikatora źródła na plik,
+    którego treść użytkownik podstawia za wynik ekstrakcji tego źródła. Źródło
+    zachowuje identyfikator i pochodzenie, a jego nagłówek metadanych oraz
+    manifest niosą informację o pliku zapisanym ręcznie. Takie źródło nie jest
+    pobierane ponownie z sieci.
+
+    Argument `ponownie_przetwarzaj_usuniete` rozstrzyga, co dzieje się ze źródłem
+    pominiętym z powodu ręcznie usuniętego pliku wynikowego, gdy jego wejście jest
+    wśród podanych. Prawda, domyślnie, oznacza ponowne podanie źródła przez
+    użytkownika i przetwarza je od nowa. Fałsz, używany przy wznowieniu
+    projektu z zapisanych wejść, zostawia je pominięte.
 
     Argumenty `transport_http` oraz `pobieracz_youtube` służą wyłącznie testom.
     Pozwalają podstawić sztuczny transport oraz przygotowane napisy i sprawdzić
@@ -567,9 +635,30 @@ def przetworz_projekt(
             "tak" if wznowiono else "nie",
         )
 
-        pobrane = _pobierz_strony(pozycje, konfiguracja, checkpoint, log, transport_http, postep)
+        _odnotuj_brakujace_pliki(uklad, checkpoint, dziennik_wazny, log)
+
+        zastepcze = dict(zastepcze_tresci or {})
+        bez_pobierania = frozenset(zastepcze)
+        pobrane = _pobierz_strony(
+            pozycje,
+            konfiguracja,
+            checkpoint,
+            log,
+            transport_http,
+            postep,
+            bez_pobierania,
+            ponownie_przetwarzaj_usuniete,
+        )
         filmy = _pobierz_filmy(
-            pozycje, konfiguracja, checkpoint, log, transport_http, pobieracz_youtube, postep
+            pozycje,
+            konfiguracja,
+            checkpoint,
+            log,
+            transport_http,
+            pobieracz_youtube,
+            postep,
+            bez_pobierania,
+            ponownie_przetwarzaj_usuniete,
         )
         wykonanie = _Wykonanie(
             uklad,
@@ -584,6 +673,8 @@ def przetworz_projekt(
             pobrane,
             filmy,
             postep,
+            zastepcze,
+            ponownie_przetwarzaj_usuniete,
         )
         liczba_pozycji = len(pozycje)
         for numer, pozycja in enumerate(pozycje, start=1):
@@ -618,6 +709,7 @@ def przetworz_projekt(
             limit_zrodel=konfiguracja.limit_zrodel,
             czas_pracy_sekundy=(zegar() - czas_startu).total_seconds(),
             zrodla_juz_w_projekcie=tuple(wykonanie.zrodla_juz_w_projekcie),
+            nieudane_zastapienia=tuple(wykonanie.nieudane_zastapienia),
         )
         zapisz_raport(uklad.raport, zbuduj_raport(uklad.nazwa_projektu, podsumowanie))
         dziennik_wazny.zapisz(ZDARZENIE_PROJEKT_ZAKONCZONY)
@@ -654,6 +746,8 @@ class _Wykonanie:
         pobrane: dict[str, WynikFazyPobrania] | None = None,
         filmy: dict[str, WynikFazyFilmu] | None = None,
         postep: WywolanieZwrotnePostepu | None = None,
+        zastepcze_tresci: Mapping[str, Path] | None = None,
+        ponownie_przetwarzaj_usuniete: bool = True,
     ) -> None:
         self._uklad = uklad
         self._konfiguracja = konfiguracja
@@ -665,6 +759,8 @@ class _Wykonanie:
         self._zegar = zegar
         self._zegar_lokalny = zegar_lokalny
         self._postep = postep
+        self._zastepcze_tresci: Mapping[str, Path] = zastepcze_tresci or {}
+        self._ponownie_usuniete = ponownie_przetwarzaj_usuniete
         self._pobrane: dict[str, WynikFazyPobrania] = pobrane if pobrane is not None else {}
         self._filmy: dict[str, WynikFazyFilmu] = filmy if filmy is not None else {}
         # Liczba slotów notatnika rzeczywiście zajętych plikami TXT i PDF, licząca
@@ -682,6 +778,11 @@ class _Wykonanie:
         # wygląda, jak gdyby nic się nie stało: trafia tylko do logu
         # szczegółowego, nigdy do raportu ani do log_wazne.txt.
         self.zrodla_juz_w_projekcie: list[ZrodloJuzWProjekcie] = []
+        # Zastąpienia treści plikiem, które się nie udały w bieżącym przebiegu.
+        # Nieudane zastąpienie nie rusza dotychczasowego stanu źródła, więc bez
+        # tego wykazu użytkownik nie dowiedziałby się z raportu, że nic się nie
+        # zmieniło.
+        self.nieudane_zastapienia: list[ZastapienieNieudane] = []
 
     def przetworz(self, pozycja: PozycjaWejsciowa) -> None:
         """Przetwarza jedno wejście, aktualizując checkpoint i logi."""
@@ -692,8 +793,13 @@ class _Wykonanie:
             return
 
         identyfikator = zrodlo.identyfikator_zrodla
+        plik_zastepczy = self._zastepcze_tresci.get(identyfikator)
+        if plik_zastepczy is not None:
+            self._zastap_tresc(pozycja, zrodlo, plik_zastepczy)
+            return
+
         istniejacy = self._checkpoint.zrodla.get(identyfikator)
-        if istniejacy is not None and istniejacy.status in _STATUSY_KONCOWE:
+        if istniejacy is not None and _czy_status_koncowy(istniejacy, self._ponownie_usuniete):
             self._odnotuj_zrodlo_juz_w_projekcie(istniejacy)
             self._loguj(
                 logging.INFO, identyfikator, f"Pomijam już przetworzone źródło {identyfikator}."
@@ -721,7 +827,7 @@ class _Wykonanie:
             return
 
         if (
-            istniejacy is None
+            (istniejacy is None or (istniejacy.plik_wynikowy_usuniety and self._ponownie_usuniete))
             and not self._grupa_ma_juz_slot(zrodlo, pozycja.grupa)
             and self._liczba_aktywnych() >= self._konfiguracja.limit_zrodel
         ):
@@ -778,6 +884,99 @@ class _Wykonanie:
             )
         )
         self._dziennik_wazny.zapisz(f"{ZDARZENIE_ZRODLO_JUZ_W_PROJEKCIE}: {stan.pochodzenie}")
+
+    def _zastap_tresc(self, pozycja: PozycjaWejsciowa, zrodlo: Zrodlo, plik: Path) -> None:
+        """Podstawia treść z pliku zapisanego ręcznie za wynik ekstrakcji źródła.
+
+        Źródło zachowuje identyfikator, typ i pochodzenie, a jego nagłówek
+        metadanych oraz manifest dostają informację o pliku. Treść przechodzi
+        te same etapy co każde inne źródło: ekstrakcję odpowiednim adapterem,
+        normalizację i ocenę jakości. Zapisany ręcznie plik HTML źródła będącego
+        stroną internetową jest ekstrahowany jak strona, żeby dane strukturalne
+        i wybór treści artykułu działały tak samo jak przy pobraniu z sieci.
+
+        Zastąpienie jest bezpieczne: dotychczasowy stan źródła jest zamieniany
+        dopiero po tym, jak nowa treść przejdzie ekstrakcję i normalizację, a nie
+        okaże się pusta ani szkieletem strony logowania. Przy niepowodzeniu stan
+        źródła zostaje bez zmian, a powód trafia do logów i do raportu. Stare
+        pliki wynikowe są usuwane dopiero po udanej zmianie; plik grupy jest
+        zastępowany przez przepakowanie całej grupy.
+        """
+        identyfikator = zrodlo.identyfikator_zrodla
+        stary = self._checkpoint.zrodla.get(identyfikator)
+        if stary is None or stary.status == StatusZrodla.DUPLIKAT.value:
+            self._zglos_nieudane_zastapienie(
+                zrodlo,
+                "Źródła nie ma w projekcie albo jest duplikatem innego źródła, "
+                "więc nie ma czego zastępować.",
+            )
+            return
+
+        try:
+            pozycja_pliku = przyjmij_plik(plik, self._zegar())
+            zrodlo_pliku = waliduj_i_utworz_zrodlo(pozycja_pliku, self._konfiguracja, self._zegar())
+            typ_ekstrakcji = zrodlo_pliku.typ_zrodla
+            if (
+                zrodlo.typ_zrodla is TypZrodla.STRONA_WWW
+                and pozycja_pliku.format_zrodla in _FORMATY_HTML
+            ):
+                typ_ekstrakcji = TypZrodla.STRONA_WWW
+            przygotowane = self._przygotuj_tresc(
+                pozycja_pliku, replace(zrodlo_pliku, typ_zrodla=typ_ekstrakcji)
+            )
+        except BladGnb as blad:
+            self._zglos_nieudane_zastapienie(zrodlo, blad.komunikat)
+            return
+        if przygotowane is None:
+            # `_przygotuj_tresc` zapisało już w checkpoincie pominięcie dla
+            # tymczasowego identyfikatora pliku. Ten wpis nie należy do projektu.
+            widmo = self._checkpoint.zrodla.pop(zrodlo_pliku.identyfikator_zrodla, None)
+            powod = (widmo.komunikat_bledu if widmo is not None else None) or (
+                "Treść pliku nie nadaje się do odczytu."
+            )
+            self._zglos_nieudane_zastapienie(zrodlo, powod)
+            return
+
+        przygotowane = replace(przygotowane, zastapiona_plikiem=plik.name)
+        stare_sciezki = [wynik.sciezka_wzgledna for wynik in stary.wyniki]
+        self._znormalizuj_i_odloz(pozycja, zrodlo, przygotowane)
+        nowy = self._checkpoint.zrodla[identyfikator]
+        if nowy.status != StatusZrodla.ZNORMALIZOWANE.value:
+            self._checkpoint.zrodla[identyfikator] = stary
+            self._zapisz_checkpoint()
+            self._zglos_nieudane_zastapienie(
+                zrodlo, nowy.komunikat_bledu or "Nowa treść została pominięta."
+            )
+            return
+
+        if nowy.grupa_pakowania and nowy.typ != TypZrodla.PLIK_NUTY.value:
+            wycofaj_grupe(self._checkpoint, nowy.grupa_pakowania, dodatkowe_sciezki=stare_sciezki)
+        else:
+            for sciezka in stare_sciezki:
+                usun_plik_wynikowy(self._uklad, sciezka)
+        self._zapisz_checkpoint()
+        self._dziennik_wazny.zapisz(_wpis_wazny(ZDARZENIE_TRESC_ZASTAPIONA, zrodlo.pochodzenie))
+        self._loguj(
+            logging.INFO,
+            identyfikator,
+            f"Treść źródła {identyfikator} zastąpiona plikiem {plik.name}.",
+        )
+
+    def _zglos_nieudane_zastapienie(self, zrodlo: Zrodlo, powod: str) -> None:
+        """Zapisuje niepowodzenie zastąpienia treści w obu logach i w wykazie raportu."""
+        self.nieudane_zastapienia.append(
+            ZastapienieNieudane(
+                identyfikator=zrodlo.identyfikator_zrodla,
+                pochodzenie=zrodlo.pochodzenie,
+                powod=powod,
+            )
+        )
+        self._dziennik_wazny.zapisz(_wpis_wazny(ZDARZENIE_ZASTAPIENIE_NIEUDANE, zrodlo.pochodzenie))
+        self._loguj(
+            logging.WARNING,
+            zrodlo.identyfikator_zrodla,
+            f"Zastąpienie treści źródła nie powiodło się: {powod}",
+        )
 
     def _przetworz_zrodlo(self, pozycja: PozycjaWejsciowa, zrodlo: Zrodlo) -> None:
         """Doprowadza jedno źródło od treści do zapisanych plików wynikowych."""
@@ -859,6 +1058,7 @@ class _Wykonanie:
         zrodlo: Zrodlo,
         dokument: DokumentWyekstrahowany,
         metadane: dict[str, str],
+        zastapiona_plikiem: str | None = None,
     ) -> str:
         """Buduje nagłówek metadanych dopisywany na początku plików wynikowych.
 
@@ -880,6 +1080,9 @@ class _Wykonanie:
             ETYKIETA_JEZYK: metadane.get("jezyk", ""),
             ETYKIETA_DATA_IMPORTU: self._zegar_lokalny().strftime("%Y-%m-%d"),
             ETYKIETA_IDENTYFIKATOR: zrodlo.identyfikator_zrodla,
+            ETYKIETA_UWAGA_O_TRESCI: (
+                f"treść zapisana ręcznie w pliku {zastapiona_plikiem}" if zastapiona_plikiem else ""
+            ),
         }
 
         if pozycja.wejscie.typ_wejscia is TypWejscia.URL:
@@ -1045,7 +1248,11 @@ class _Wykonanie:
 
         ocena = self._ocen_jakosc(zrodlo, pozycja, dokument, znormalizowany.tekst, przygotowane)
 
-        if ocena is not None and ocena.czy_strona_blokady:
+        if (
+            ocena is not None
+            and ocena.czy_strona_blokady
+            and przygotowane.zastapiona_plikiem is None
+        ):
             # Wąski wyjątek od zasady „podejrzane źródło jest zapisywane”: krótka
             # treść pasująca jednocześnie do zwrotu typowego dla osłony logowania
             # albo strony błędu to niemal na pewno nie jest treść merytoryczna.
@@ -1073,7 +1280,9 @@ class _Wykonanie:
         ostrzezenia = self._zbierz_ostrzezenia(zrodlo, dokument)
         decyzja = regula_md.ocen(dokument)
         nazwa_bazowa = nazwa_pliku_wynikowego(dokument.tytul, identyfikator)
-        naglowek = self._naglowek(pozycja, zrodlo, dokument, przygotowane.metadane)
+        naglowek = self._naglowek(
+            pozycja, zrodlo, dokument, przygotowane.metadane, przygotowane.zastapiona_plikiem
+        )
 
         self._zapisz_tekst_posredni(
             identyfikator, _SUFIKS_TEKST_ZNORMALIZOWANY, znormalizowany.tekst
@@ -1103,6 +1312,7 @@ class _Wykonanie:
             ostrzezenia=ostrzezenia,
             naglowek_metadanych=naglowek,
             grupa_pakowania=pozycja.grupa,
+            tresc_zastapiona_plikiem=przygotowane.zastapiona_plikiem,
         )
         self._zapisz_checkpoint()
         self._loguj(
@@ -1240,7 +1450,13 @@ class _Wykonanie:
         osobny plik wynikowy TXT, także wtedy, gdy użytkownik podał opcję
         `--grupa`. Zignorowanie tej opcji dla plików nutowych jest odnotowywane
         w raporcie końcowym, żeby nie było cichym pominięciem.
+
+        Gdy do grupy, która ma już spakowane źródła, dochodzi nowe źródło, cała
+        grupa jest pakowana od nowa: dawniej nowe źródło dostawało osobny plik
+        obok pliku grupy, co przeczyło sensowi grupy tematycznej. Stary plik
+        grupy jest usuwany po zapisaniu nowych, a raport wymienia zastąpienie.
         """
+        self._wycofaj_grupy_z_nowymi_zrodlami()
         self._sloty_pakowania_zajete = len(
             {
                 wynik.sciezka_wzgledna
@@ -1284,6 +1500,68 @@ class _Wykonanie:
             grupy_obrazow.setdefault(nazwa, []).append(stan)
         for nazwa_grupy, stany in grupy_obrazow.items():
             self._spakuj_grupe_obrazow(nazwa_grupy, stany)
+
+        self._zamknij_zastapione_pliki()
+
+    def _wycofaj_grupy_z_nowymi_zrodlami(self) -> None:
+        """Cofa do przepakowania grupy, w których obok spakowanych są nowe źródła.
+
+        Przepakowanie wymaga tekstu pośredniego każdego wcześniejszego źródła.
+        Gdy któregoś brakuje, grupa nie jest ruszana: nowe źródła dostają wtedy
+        osobny plik jak dawniej, a powód trafia do logów, zamiast utracić
+        wcześniejszy plik grupy bez możliwości zbudowania go na nowo.
+        """
+        nowe_grupy = sorted(
+            {
+                stan.grupa_pakowania
+                for stan in self._checkpoint.zrodla.values()
+                if stan.status == StatusZrodla.ZNORMALIZOWANE.value
+                and stan.grupa_pakowania
+                and stan.typ != TypZrodla.PLIK_NUTY.value
+            }
+        )
+        for nazwa_grupy in nowe_grupy:
+            wczesniejsze = czlonkowie_grupy(self._checkpoint, nazwa_grupy)
+            if not wczesniejsze:
+                continue
+            bez_tekstu = [
+                stan.identyfikator
+                for stan in wczesniejsze
+                if not self._ma_tekst_posredni(stan.identyfikator)
+            ]
+            if bez_tekstu:
+                self._loguj(
+                    logging.WARNING,
+                    "-",
+                    f"Grupa „{nazwa_grupy}” nie może być przepakowana: brak wyniku "
+                    f"pośredniego źródeł {', '.join(bez_tekstu)}. Nowe źródła dostaną osobny plik.",
+                )
+                continue
+            identyfikatory = wycofaj_grupe(self._checkpoint, nazwa_grupy)
+            self._zapisz_checkpoint()
+            self._dziennik_wazny.zapisz(
+                _wpis_wazny(
+                    ZDARZENIE_GRUPA_PRZEPAKOWANA,
+                    f"{nazwa_grupy}, wcześniejszych źródeł: {len(identyfikatory)}",
+                )
+            )
+            self._loguj(
+                logging.INFO,
+                "-",
+                f"Grupa „{nazwa_grupy}” jest pakowana od nowa razem z "
+                f"{len(identyfikatory)} wcześniej spakowanymi źródłami.",
+            )
+
+    def _zamknij_zastapione_pliki(self) -> None:
+        """Usuwa stare pliki grup po przepakowaniu i zapisuje, czym zostały zastąpione."""
+        domkniete = domknij_zastapione_pliki(self._uklad, self._checkpoint)
+        if not domkniete:
+            return
+        self._zapisz_checkpoint()
+        for wpis in domkniete:
+            opis = f"{Path(wpis.stara_nazwa).name} → {wpis.nowa_nazwa}"
+            self._dziennik_wazny.zapisz(_wpis_wazny(ZDARZENIE_PLIK_GRUPY_ZASTAPIONY, opis))
+            self._loguj(logging.INFO, "-", f"Plik grupy zastąpiony: {opis}")
 
     def _spakuj_grupe_obrazow(self, nazwa_grupy: str, stany: list[StanZrodla]) -> None:
         """Pakuje jedną grupę obrazów w jeden lub kilka tematycznych plików PDF.
@@ -2124,6 +2402,8 @@ def _pobierz_strony(
     log: logging.Logger,
     transport: httpx.AsyncBaseTransport | None = None,
     postep: WywolanieZwrotnePostepu | None = None,
+    bez_pobierania: frozenset[str] = frozenset(),
+    ponownie_usuniete: bool = True,
 ) -> dict[str, WynikFazyPobrania]:
     """Pobiera wszystkie adresy z listy wejść i zwraca wyniki po identyfikatorze źródła.
 
@@ -2136,7 +2416,7 @@ def _pobierz_strony(
     otwierające mówi użytkownikowi, że praca trwa, mimo braku zapisu do
     checkpointu w tym czasie.
     """
-    zadania = _zadania_do_pobrania(pozycje, checkpoint)
+    zadania = _zadania_do_pobrania(pozycje, checkpoint, bez_pobierania, ponownie_usuniete)
     if not zadania:
         return {}
 
@@ -2169,6 +2449,8 @@ def _pobierz_filmy(
     transport: httpx.AsyncBaseTransport | None = None,
     pobieracz_youtube: PobieraczYouTube | None = None,
     postep: WywolanieZwrotnePostepu | None = None,
+    bez_pobierania: frozenset[str] = frozenset(),
+    ponownie_usuniete: bool = True,
 ) -> dict[str, WynikFazyFilmu]:
     """Pobiera napisy wszystkich filmów z listy wejść i zwraca wyniki po identyfikatorze.
 
@@ -2192,7 +2474,9 @@ def _pobierz_filmy(
         if identyfikator in widziane:
             continue
         stan = checkpoint.zrodla.get(identyfikator)
-        if stan is not None and stan.status in _STATUSY_KONCOWE:
+        if identyfikator in bez_pobierania or (
+            stan is not None and _czy_status_koncowy(stan, ponownie_usuniete)
+        ):
             continue
         widziane.add(identyfikator)
 
@@ -2349,7 +2633,10 @@ def _preferencje_napisow(konfiguracja: Konfiguracja) -> PreferencjeNapisow:
 
 
 def _zadania_do_pobrania(
-    pozycje: Sequence[PozycjaWejsciowa], checkpoint: Checkpoint
+    pozycje: Sequence[PozycjaWejsciowa],
+    checkpoint: Checkpoint,
+    bez_pobierania: frozenset[str] = frozenset(),
+    ponownie_usuniete: bool = True,
 ) -> list[tuple[str, Zadanie]]:
     """Buduje listę adresów do pobrania wraz z identyfikatorami ich źródeł."""
     zadania: list[tuple[str, Zadanie]] = []
@@ -2366,7 +2653,9 @@ def _zadania_do_pobrania(
         if identyfikator in widziane:
             continue
         stan = checkpoint.zrodla.get(identyfikator)
-        if stan is not None and stan.status in _STATUSY_KONCOWE:
+        if identyfikator in bez_pobierania or (
+            stan is not None and _czy_status_koncowy(stan, ponownie_usuniete)
+        ):
             continue
         widziane.add(identyfikator)
         zadania.append(
@@ -2437,6 +2726,60 @@ def _zdekoduj_odpowiedz(odpowiedz: OdpowiedzPobrania) -> tuple[str, str]:
         except (LookupError, UnicodeDecodeError):
             pass
     return zdekoduj(odpowiedz.tresc)
+
+
+def _odnotuj_brakujace_pliki(
+    uklad: UkladProjektu,
+    checkpoint: Checkpoint,
+    dziennik_wazny: DziennikWazny,
+    log: logging.Logger,
+) -> None:
+    """Na początku przebiegu zamienia ręcznie usunięte pliki wynikowe na jawne pominięcia.
+
+    Sprawdzenie i zmiana statusu zachodzą wyłącznie tutaj, na początku
+    przebiegu przetwarzania, nigdy przy wyświetlaniu strony projektu albo
+    raportu — samo oglądanie projektu nie może zmieniać jego stanu. Źródło,
+    którego plik TXT albo PDF zniknął z dysku, dostaje status „pominiete”
+    z powodem, a przy pliku grupy dotyczy to wszystkich jego źródeł. Decyzja
+    jest odwracalna: ponowne podanie tego samego adresu albo pliku przetwarza
+    źródło od nowa, patrz `_czy_status_koncowy`.
+
+    Brak pliku wersji MD nie zmienia niczego poza wpisem w logach, bo treść
+    źródła jest nadal w pliku TXT, a plik MD jest tylko dodatkiem.
+    """
+    zmieniono = False
+    for brak in znajdz_brakujace_pliki(uklad, checkpoint):
+        if not brak.czy_zajmuje_slot:
+            dziennik_wazny.zapisz(_wpis_wazny(ZDARZENIE_PLIK_MD_BRAKUJE, brak.nazwa))
+            log.warning(
+                "Brak pliku wersji MD %s na dysku. Źródła zachowują status, bo ich "
+                "treść jest w pliku TXT.",
+                brak.nazwa,
+                extra={"identyfikator_zrodla": "-"},
+            )
+            continue
+        for identyfikator in brak.identyfikatory_zrodel:
+            stan = checkpoint.zrodla.get(identyfikator)
+            if stan is None or stan.status != StatusZrodla.SPAKOWANE.value:
+                continue
+            pozostale = pozostale_pliki_zrodla(uklad, stan, [brak.sciezka_wzgledna])
+            komunikat = KOMUNIKAT_PLIK_USUNIETY.format(nazwa=brak.nazwa)
+            if pozostale:
+                komunikat += KOMUNIKAT_POZOSTALE_PLIKI.format(pliki=", ".join(pozostale))
+            stan.status = StatusZrodla.POMINIETE.value
+            stan.komunikat_bledu = komunikat
+            stan.plik_wynikowy_usuniety = True
+            stan.wyniki = []
+            dziennik_wazny.zapisz(_wpis_wazny(ZDARZENIE_PLIK_WYNIKOWY_USUNIETY, stan.pochodzenie))
+            log.warning(
+                "Pominięto źródło %s: %s",
+                identyfikator,
+                komunikat,
+                extra={"identyfikator_zrodla": identyfikator},
+            )
+            zmieniono = True
+    if zmieniono:
+        zapisz(uklad.checkpoint, checkpoint)
 
 
 def _wygeneruj_nazwe_projektu(pozycje: Sequence[PozycjaWejsciowa]) -> str:
@@ -2601,6 +2944,8 @@ def _zbuduj_manifest(uklad: UkladProjektu, checkpoint: Checkpoint) -> Manifest:
                 ostrzezenia=tuple(stan.ostrzezenia),
                 grupa_pakowania=stan.grupa_pakowania,
                 ostrzezenia_pakowania=tuple(stan.ostrzezenia_pakowania),
+                zweryfikowane_recznie=stan.zweryfikowane_recznie,
+                tresc_zastapiona_plikiem=stan.tresc_zastapiona_plikiem,
             )
         )
     return Manifest(
@@ -2620,6 +2965,13 @@ def _zbuduj_manifest(uklad: UkladProjektu, checkpoint: Checkpoint) -> Manifest:
                 zachowane_fragmenty_unikalne=tuple(decyzja.zachowane_fragmenty_unikalne),
             )
             for decyzja in checkpoint.deduplikacja.decyzje
+        ),
+        zastapione_pliki_grup=tuple(
+            WpisZastapionegoPlikuGrupy(
+                stara_nazwa=wpis.stara_nazwa, nowa_nazwa=wpis.nowa_nazwa, grupa=wpis.grupa
+            )
+            for wpis in checkpoint.zastapione_pliki_grup
+            if wpis.nowa_nazwa
         ),
     )
 
@@ -2674,6 +3026,7 @@ def _zbuduj_podsumowanie(
     limit_zrodel: int,
     czas_pracy_sekundy: float,
     zrodla_juz_w_projekcie: tuple[ZrodloJuzWProjekcie, ...] = (),
+    nieudane_zastapienia: tuple[ZastapienieNieudane, ...] = (),
 ) -> PodsumowanieProjektu:
     poprawne = _policz_status(checkpoint, StatusZrodla.SPAKOWANE)
     pominiete = _policz_status(checkpoint, StatusZrodla.POMINIETE)
@@ -2725,6 +3078,36 @@ def _zbuduj_podsumowanie(
         materialy_do_sprawdzenia=_materialy_do_sprawdzenia(checkpoint),
         zrodla_juz_w_projekcie=zrodla_juz_w_projekcie,
         liczba_nut_poza_grupami=nut_poza_grupami,
+        zrodla_zweryfikowane=_zrodla_zweryfikowane(checkpoint),
+        zastapione_pliki=tuple(
+            ZastapionyPlik(
+                stara_nazwa=Path(wpis.stara_nazwa).name,
+                nowa_nazwa=wpis.nowa_nazwa,
+                grupa=wpis.grupa,
+            )
+            for wpis in checkpoint.zastapione_pliki_grup
+            if wpis.nowa_nazwa
+        ),
+        nieudane_zastapienia=nieudane_zastapienia,
+    )
+
+
+def _zrodla_zweryfikowane(checkpoint: Checkpoint) -> tuple[ZrodloZweryfikowane, ...]:
+    """Zbiera źródła, które użytkownik oznaczył jako sprawdzone ręcznie.
+
+    Źródło zweryfikowane znika z materiałów do sprawdzenia, ale nie znika
+    z raportu: pozostaje tu wraz z powodami, które je tam pierwotnie umieściły,
+    żeby ręczna decyzja była widoczna i audytowalna.
+    """
+    return tuple(
+        ZrodloZweryfikowane(
+            identyfikator=stan.identyfikator,
+            pochodzenie=stan.pochodzenie,
+            powody=tuple(stan.powody_oceny),
+            ostrzezenia=tuple(stan.ostrzezenia),
+        )
+        for stan in checkpoint.zrodla.values()
+        if stan.zweryfikowane_recznie
     )
 
 
@@ -2773,10 +3156,13 @@ def _materialy_do_sprawdzenia(checkpoint: Checkpoint) -> tuple[MaterialDoSprawdz
             pliki_wynikowe=_nazwy_plikow_wynikowych(stan),
         )
         for stan in checkpoint.zrodla.values()
-        if stan.ocena_jakosci == OCENA_PODEJRZANA
-        or stan.ostrzezenia
-        or stan.ostrzezenia_pakowania
-        or stan.identyfikator in mozliwe_duplikaty
+        if not stan.zweryfikowane_recznie
+        and (
+            stan.ocena_jakosci == OCENA_PODEJRZANA
+            or stan.ostrzezenia
+            or stan.ostrzezenia_pakowania
+            or stan.identyfikator in mozliwe_duplikaty
+        )
     )
 
 

@@ -46,6 +46,7 @@ ETYKIETA_JEZYK = "Język"
 ETYKIETA_DATA_IMPORTU = "Data importu"
 ETYKIETA_IDENTYFIKATOR = "Identyfikator źródła"
 ETYKIETA_CZESC = "Część"
+ETYKIETA_UWAGA_O_TRESCI = "Uwaga o treści"
 
 # Stała kolejność pól nagłówka. Pole spoza tej listy nie trafia do wyniku, żeby
 # układ nagłówka był przewidywalny przy odsłuchu czytnikiem ekranu.
@@ -63,6 +64,7 @@ KOLEJNOSC_POL: tuple[str, ...] = (
     ETYKIETA_JEZYK,
     ETYKIETA_DATA_IMPORTU,
     ETYKIETA_IDENTYFIKATOR,
+    ETYKIETA_UWAGA_O_TRESCI,
     ETYKIETA_CZESC,
 )
 

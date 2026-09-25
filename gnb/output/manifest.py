@@ -56,6 +56,17 @@ class WpisZrodla:
     ostrzezenia: tuple[str, ...] = ()
     grupa_pakowania: str | None = None
     ostrzezenia_pakowania: tuple[str, ...] = ()
+    zweryfikowane_recznie: bool = False
+    tresc_zastapiona_plikiem: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class WpisZastapionegoPlikuGrupy:
+    """Wiersz manifestu o pliku grupy zastąpionym przy pełnym przepakowaniu grupy."""
+
+    stara_nazwa: str
+    nowa_nazwa: str
+    grupa: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +124,7 @@ class Manifest:
     zrodla: tuple[WpisZrodla, ...]
     wyniki: tuple[WpisWyniku, ...]
     deduplikacja: tuple[WpisDeduplikacji, ...] = ()
+    zastapione_pliki_grup: tuple[WpisZastapionegoPlikuGrupy, ...] = ()
 
 
 def zapisz_manifest(sciezka_json: Path, sciezka_txt: Path, manifest: Manifest) -> None:
@@ -149,6 +161,8 @@ def _do_slownika(manifest: Manifest) -> dict[str, Any]:
                 "ostrzezenia": list(wpis.ostrzezenia),
                 "grupa_pakowania": wpis.grupa_pakowania,
                 "ostrzezenia_pakowania": list(wpis.ostrzezenia_pakowania),
+                "zweryfikowane_recznie": wpis.zweryfikowane_recznie,
+                "tresc_zastapiona_plikiem": wpis.tresc_zastapiona_plikiem,
             }
             for wpis in manifest.zrodla
         ],
@@ -179,6 +193,10 @@ def _do_slownika(manifest: Manifest) -> dict[str, Any]:
                 "zachowane_fragmenty_unikalne": list(wpis.zachowane_fragmenty_unikalne),
             }
             for wpis in manifest.deduplikacja
+        ],
+        "zastapione_pliki_grup": [
+            {"stara_nazwa": wpis.stara_nazwa, "nowa_nazwa": wpis.nowa_nazwa, "grupa": wpis.grupa}
+            for wpis in manifest.zastapione_pliki_grup
         ],
     }
 
@@ -221,6 +239,13 @@ def zbuduj_widok_tekstowy(manifest: Manifest) -> str:
             wiersze.extend(f"    - {warunek}" for warunek in wpis_zrodla.uzasadnienie_md)
         if wpis_zrodla.grupa_pakowania:
             wiersze.append(f"  Grupa pakowania: {wpis_zrodla.grupa_pakowania}")
+        if wpis_zrodla.zweryfikowane_recznie:
+            wiersze.append("  Zweryfikowane ręcznie przez użytkownika: tak")
+        if wpis_zrodla.tresc_zastapiona_plikiem:
+            wiersze.append(
+                "  Treść zastąpiona plikiem zapisanym ręcznie: "
+                f"{wpis_zrodla.tresc_zastapiona_plikiem}"
+            )
         if wpis_zrodla.pliki_wynikowe:
             wiersze.append("  Pliki wynikowe:")
             wiersze.extend(f"    - {plik}" for plik in wpis_zrodla.pliki_wynikowe)
@@ -282,6 +307,17 @@ def zbuduj_widok_tekstowy(manifest: Manifest) -> str:
             wiersze.extend(
                 f"    - {fragment}" for fragment in wpis_dedup.zachowane_fragmenty_unikalne
             )
+        wiersze.append("")
+
+    if manifest.zastapione_pliki_grup:
+        wiersze.append(f"Pliki grup zastąpione, liczba: {len(manifest.zastapione_pliki_grup)}")
+        wiersze.append("")
+        for zastapiony in manifest.zastapione_pliki_grup:
+            wiersze.append(
+                f"Plik grupy zastąpiony: {zastapiony.stara_nazwa} → {zastapiony.nowa_nazwa}"
+            )
+            if zastapiony.grupa:
+                wiersze.append(f"  Grupa: {zastapiony.grupa}")
         wiersze.append("")
 
     return "\n".join(wiersze).rstrip("\n") + "\n"

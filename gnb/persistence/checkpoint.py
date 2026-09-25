@@ -102,6 +102,17 @@ class StanZrodla:
     `ostrzezenia_pakowania` zbiera ostrzeżenia z podziału źródła zbyt dużego,
     na przykład informację o cięciu wewnątrz zdania. Oba pola są dodane
     z bezpieczną wartością domyślną i nie zmieniają wersji schematu.
+
+    Trzy pola dodane w etapie czternastym, również z bezpieczną wartością
+    domyślną, opisują ręczne działania użytkownika na źródle. Pole
+    `zweryfikowane_recznie` mówi, że użytkownik obejrzał źródło z materiałów do
+    sprawdzenia i uznał je za dobre; nie zmienia ono oceny jakości, tylko
+    wyłącza źródło z sekcji „Materiały do sprawdzenia”. Pole
+    `tresc_zastapiona_plikiem` niesie nazwę pliku, którego treść użytkownik
+    podstawił za wynik ekstrakcji, przy zachowaniu identyfikatora i pochodzenia
+    źródła. Pole `plik_wynikowy_usuniety` odróżnia pominięcie z powodu ręcznie
+    usuniętego pliku wynikowego od każdego innego pominięcia: tylko takie źródło
+    jest przetwarzane od nowa, gdy użytkownik poda je ponownie.
     """
 
     identyfikator: str
@@ -126,6 +137,24 @@ class StanZrodla:
     duplikat_glowny: str | None = None
     grupa_pakowania: str | None = None
     ostrzezenia_pakowania: list[str] = field(default_factory=list)
+    zweryfikowane_recznie: bool = False
+    tresc_zastapiona_plikiem: str | None = None
+    plik_wynikowy_usuniety: bool = False
+
+
+@dataclass
+class ZastapionyPlikGrupy:
+    """Zapis o pliku grupy zastąpionym przy pełnym przepakowaniu grupy.
+
+    Gdy do istniejącej grupy dochodzi nowe źródło albo źródło z niej znika,
+    grupa jest pakowana od nowa, a stary plik wynikowy przestaje istnieć. Wpis
+    zachowuje starą i nową nazwę, żeby raport i manifest mogły o tym powiedzieć
+    wprost, zamiast pozwolić plikowi po cichu zniknąć.
+    """
+
+    stara_nazwa: str
+    nowa_nazwa: str
+    grupa: str | None = None
 
 
 @dataclass
@@ -207,6 +236,7 @@ class Checkpoint:
     zakonczony: bool = False
     deduplikacja: StanDeduplikacji = field(default_factory=StanDeduplikacji)
     wejscia: list[WejscieZapis] = field(default_factory=list)
+    zastapione_pliki_grup: list[ZastapionyPlikGrupy] = field(default_factory=list)
 
 
 def zapisz(sciezka: Path, checkpoint: Checkpoint) -> None:
@@ -402,6 +432,10 @@ def _checkpoint_do_slownika(checkpoint: Checkpoint) -> dict[str, Any]:
         "zakonczony": checkpoint.zakonczony,
         "deduplikacja": _deduplikacja_do_slownika(checkpoint.deduplikacja),
         "wejscia": [_wejscie_do_slownika(wejscie) for wejscie in checkpoint.wejscia],
+        "zastapione_pliki_grup": [
+            {"stara_nazwa": wpis.stara_nazwa, "nowa_nazwa": wpis.nowa_nazwa, "grupa": wpis.grupa}
+            for wpis in checkpoint.zastapione_pliki_grup
+        ],
         "zrodla": {klucz: _stan_do_slownika(stan) for klucz, stan in checkpoint.zrodla.items()},
     }
 
@@ -459,6 +493,9 @@ def _stan_do_slownika(stan: StanZrodla) -> dict[str, Any]:
         "duplikat_glowny": stan.duplikat_glowny,
         "grupa_pakowania": stan.grupa_pakowania,
         "ostrzezenia_pakowania": list(stan.ostrzezenia_pakowania),
+        "zweryfikowane_recznie": stan.zweryfikowane_recznie,
+        "tresc_zastapiona_plikiem": stan.tresc_zastapiona_plikiem,
+        "plik_wynikowy_usuniety": stan.plik_wynikowy_usuniety,
     }
 
 
@@ -511,7 +548,23 @@ def _checkpoint_ze_slownika(dane: dict[str, Any]) -> Checkpoint:
         zakonczony=bool(dane.get("zakonczony", False)),
         deduplikacja=_deduplikacja_ze_slownika(dane.get("deduplikacja")),
         wejscia=_wejscia_ze_slownika(dane.get("wejscia")),
+        zastapione_pliki_grup=_zastapione_pliki_ze_slownika(dane.get("zastapione_pliki_grup")),
     )
+
+
+def _zastapione_pliki_ze_slownika(dane: Any) -> list[ZastapionyPlikGrupy]:
+    """Odczytuje wykaz zastąpionych plików grup. Jego brak jest poprawny dla starszych plików."""
+    if not isinstance(dane, list):
+        return []
+    return [
+        ZastapionyPlikGrupy(
+            stara_nazwa=str(element["stara_nazwa"]),
+            nowa_nazwa=str(element["nowa_nazwa"]),
+            grupa=_opcjonalny_tekst(element.get("grupa")),
+        )
+        for element in dane
+        if isinstance(element, dict) and "stara_nazwa" in element and "nowa_nazwa" in element
+    ]
 
 
 def _wejscia_ze_slownika(dane: Any) -> list[WejscieZapis]:
@@ -602,6 +655,9 @@ def _stan_ze_slownika(dane: Any) -> StanZrodla:
         duplikat_glowny=_opcjonalny_tekst(dane.get("duplikat_glowny")),
         grupa_pakowania=_opcjonalny_tekst(dane.get("grupa_pakowania")),
         ostrzezenia_pakowania=[str(element) for element in dane.get("ostrzezenia_pakowania", [])],
+        zweryfikowane_recznie=bool(dane.get("zweryfikowane_recznie", False)),
+        tresc_zastapiona_plikiem=_opcjonalny_tekst(dane.get("tresc_zastapiona_plikiem")),
+        plik_wynikowy_usuniety=bool(dane.get("plik_wynikowy_usuniety", False)),
     )
 
 

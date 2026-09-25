@@ -11,6 +11,7 @@ from gnb.output.manifest import (
     Manifest,
     WpisDeduplikacji,
     WpisWyniku,
+    WpisZastapionegoPlikuGrupy,
     WpisZrodla,
     zapisz_manifest,
     zbuduj_widok_tekstowy,
@@ -217,3 +218,43 @@ def test_manifest_json_zapisuje_pola_pakowania(tmp_path: Path) -> None:
     assert dane["zrodla"][0]["ostrzezenia_pakowania"] == []
     assert dane["wyniki"][0]["identyfikatory_zrodel"] == ["plik_tekstowy-1", "plik_tekstowy-2"]
     assert dane["wyniki"][0]["numer_czesci"] is None
+
+
+def test_manifest_zapisuje_zmiany_reczne_w_json_i_w_widoku_tekstowym(tmp_path: Path) -> None:
+    manifest = replace(
+        _MANIFEST,
+        zrodla=(
+            replace(
+                _MANIFEST.zrodla[0],
+                zweryfikowane_recznie=True,
+                tresc_zastapiona_plikiem="zapisana.html",
+            ),
+        ),
+        zastapione_pliki_grup=(
+            WpisZastapionegoPlikuGrupy("pliki_wynikowe/stary.txt", "nowy.txt", "Grupa"),
+        ),
+    )
+    zapisz_manifest(tmp_path / "manifest.json", tmp_path / "manifest.txt", manifest)
+    dane = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    widok = (tmp_path / "manifest.txt").read_text(encoding="utf-8")
+
+    assert dane["zrodla"][0]["zweryfikowane_recznie"] is True
+    assert dane["zrodla"][0]["tresc_zastapiona_plikiem"] == "zapisana.html"
+    assert dane["zastapione_pliki_grup"] == [
+        {"stara_nazwa": "pliki_wynikowe/stary.txt", "nowa_nazwa": "nowy.txt", "grupa": "Grupa"}
+    ]
+    assert "Zweryfikowane ręcznie przez użytkownika: tak" in widok
+    assert "Treść zastąpiona plikiem zapisanym ręcznie: zapisana.html" in widok
+    assert "Plik grupy zastąpiony: pliki_wynikowe/stary.txt → nowy.txt" in widok
+
+
+def test_manifest_bez_zmian_recznych_ma_wartosci_domyslne(tmp_path: Path) -> None:
+    zapisz_manifest(tmp_path / "manifest.json", tmp_path / "manifest.txt", _MANIFEST)
+    dane = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    widok = (tmp_path / "manifest.txt").read_text(encoding="utf-8")
+
+    assert dane["zrodla"][0]["zweryfikowane_recznie"] is False
+    assert dane["zrodla"][0]["tresc_zastapiona_plikiem"] is None
+    assert dane["zastapione_pliki_grup"] == []
+    assert "Zweryfikowane ręcznie" not in widok
+    assert "Plik grupy zastąpiony" not in widok

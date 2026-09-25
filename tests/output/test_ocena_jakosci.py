@@ -85,6 +85,32 @@ def test_zwykly_artykul_z_pojedynczym_odnosnikiem_logowania_nie_jest_podejrzany(
     assert not ocena.czy_podejrzana
 
 
+def test_krotka_tresc_ze_zwrotem_logowania_jest_strona_blokady() -> None:
+    """Oba warunki naraz — poniżej progu słów i zwrot z listy — dają znacznik blokady."""
+    ocena = ocen_jakosc("Zaloguj się, aby przeczytać dalszą część.", tytul="Artykuł premium")
+
+    assert ocena.czy_podejrzana
+    assert ocena.czy_strona_blokady
+    assert ocena.zwrot_blokady == "zaloguj się, aby przeczytać"
+
+
+def test_dluga_tresc_ze_zwrotem_logowania_nie_jest_strona_blokady() -> None:
+    """Sam zwrot w treści ponad progiem słów zostaje zwykłym podejrzeniem."""
+    ocena = ocen_jakosc(_tekst_poprawny() + "\n\nSign in to continue reading.", tytul="Title")
+
+    assert ocena.czy_podejrzana
+    assert not ocena.czy_strona_blokady
+    assert ocena.zwrot_blokady is None
+
+
+def test_krotka_tresc_bez_zwrotu_nie_jest_strona_blokady() -> None:
+    """Sama krótka treść, bez zwrotu z listy, zostaje zapisana do sprawdzenia."""
+    ocena = ocen_jakosc("Trzy słowa tutaj.", tytul="Tytuł")
+
+    assert ocena.czy_podejrzana
+    assert not ocena.czy_strona_blokady
+
+
 def test_powtorzony_akapit_jest_podejrzany() -> None:
     tekst = "\n\n".join([_AKAPIT, _AKAPIT, _AKAPIT, "Inny akapit z zupełnie inną treścią."])
     ocena = ocen_jakosc(tekst, tytul="Tytuł")

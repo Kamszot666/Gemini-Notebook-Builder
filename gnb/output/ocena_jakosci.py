@@ -14,6 +14,19 @@ wiedział, czego szukać.
 Źródło z oceną podejrzaną jest zapisywane normalnie i nigdy nie jest kasowane.
 Trafia dodatkowo do osobnej sekcji raportu końcowego.
 
+Jest jeden wąski wyjątek od tej zasady, uzgodniony z użytkownikiem przy etapie
+czternastym. Źródło, w którym jednocześnie treść ma mniej słów niż próg
+`MINIMALNA_LICZBA_SLOW` i pasuje do jednego ze zwrotów z `ZWROTY_PODEJRZANE`,
+to niemal na pewno sama osłona logowania, strona błędu albo żądanie skryptów,
+a nie treść merytoryczna. Taka ocena niesie znacznik `czy_strona_blokady`,
+a potok pomija to źródło ze statusem „pominiete” zamiast zapisywać jego
+szkielet, żeby dwadzieścia słów zachęty do zalogowania nie zajmowało miejsca
+w limicie źródeł notatnika i nie trafiało do bazy wiedzy. Oba warunki muszą
+zajść naraz: sam zwrot w długim artykule, na przykład w cytacie albo w stopce,
+oraz sama krótka treść bez zwrotu zostają podejrzane, ale zapisane. Pominiętego
+źródła nie trzeba porzucać: użytkownik może zapisać stronę z przeglądarki
+do pliku i zastąpić nim treść źródła z poziomu interfejsu.
+
 Heurystyki są celowo ostrożne. Fałszywe podejrzenie kosztuje jedno zajrzenie do
 pliku, a przeoczona utrata treści kosztuje wiarygodność całej bazy wiedzy.
 """
@@ -102,6 +115,8 @@ class OcenaJakosci:
 
     ocena: str
     powody: tuple[str, ...] = ()
+    czy_strona_blokady: bool = False
+    zwrot_blokady: str | None = None
 
     @property
     def czy_podejrzana(self) -> bool:
@@ -172,7 +187,13 @@ def ocen_jakosc(
 
     if not powody:
         return OcenaJakosci(ocena=OCENA_POPRAWNA)
-    return OcenaJakosci(ocena=OCENA_PODEJRZANA, powody=tuple(powody))
+    blokada = zwrot is not None and liczba_slow < MINIMALNA_LICZBA_SLOW
+    return OcenaJakosci(
+        ocena=OCENA_PODEJRZANA,
+        powody=tuple(powody),
+        czy_strona_blokady=blokada,
+        zwrot_blokady=zwrot if blokada else None,
+    )
 
 
 def _akapity(tekst: str) -> list[str]:

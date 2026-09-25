@@ -665,6 +665,48 @@ _STRONA_ZA_LOGOWANIEM = (
 )
 
 
+_KROTKA_STRONA_LOGOWANIA = (
+    '<html lang="pl"><head><title>Artykuł premium</title></head><body><article>'
+    "<h1>Artykuł premium</h1>"
+    "<p>Zaloguj się, aby przeczytać dalszą część tego artykułu.</p>"
+    "</article></body></html>"
+)
+
+
+def test_krotka_strona_logowania_jest_pomijana_a_nie_zapisywana(tmp_path: Path) -> None:
+    """Wąski wyjątek: krótka treść i zwrot logowania naraz dają pominięcie z powodem.
+
+    Bez wyjątku źródło trafiłoby do plików wynikowych jako podejrzane. Test
+    sprawdza całą drogę: status w manifeście, brak pliku wynikowego, powód w
+    raporcie i wpis w logu ważnym.
+    """
+    serwer = _Serwer({"/artykul": _odpowiedz(_KROTKA_STRONA_LOGOWANIA.encode("utf-8"))})
+
+    wynik = przetworz_projekt(
+        _pozycje(_ADRES_ARTYKULU),
+        _konfiguracja(tmp_path),
+        nazwa_projektu="Test krótkiej strony logowania",
+        zegar=_zegar_krokowy(),
+        transport_http=serwer.transport(),
+    )
+
+    assert wynik.liczba_przetworzonych == 0
+    assert wynik.liczba_pominietych == 1
+
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    (zrodlo,) = manifest["zrodla"]
+    assert zrodlo["status"] == "pominiete"
+    assert zrodlo["pliki_wynikowe"] == []
+    assert "osłonę logowania" in zrodlo["komunikat_bledu"]
+    assert "zaloguj się, aby przeczytać" in zrodlo["komunikat_bledu"]
+    assert not list((wynik.katalog_projektu / "pliki_wynikowe").glob("*.txt"))
+
+    raport = wynik.sciezka_raportu.read_text(encoding="utf-8")
+    assert "Źródła nieprzetworzone, liczba: 1" in raport
+    assert _ADRES_ARTYKULU in raport
+    assert "Materiały do sprawdzenia" not in raport
+
+
 def test_strona_z_fraza_logowania_trafia_do_materialow_do_sprawdzenia(tmp_path: Path) -> None:
     """Fraza logowania, nie tylko krótka treść, prowadzi do materiałów do sprawdzenia.
 

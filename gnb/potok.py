@@ -288,6 +288,14 @@ WynikFazyPobrania = OdpowiedzPobrania | PominietePobranie | BladGnb
 # Wynik fazy pobrania dla jednego filmu: napisy, świadome pominięcie albo błąd.
 WynikFazyFilmu = WynikYouTube | PominietyFilm | BladGnb
 
+KOMUNIKAT_STRONA_BLOKADY = (
+    "Strona wygląda na osłonę logowania albo stronę błędu, a nie na treść merytoryczną: "
+    "wynik ma {liczba_slow} słów i zawiera zwrot „{zwrot}”. Źródło zostało pominięte, "
+    "żeby szkielet strony nie zajmował miejsca w limicie źródeł notatnika. Jeśli to "
+    "strona za logowaniem, zapisz ją w przeglądarce do pliku i zastąp nim treść tego "
+    "źródła na stronie projektu."
+)
+
 KOMUNIKAT_PLIK_BEZ_TRESCI = (
     "Ekstrakcja niczego nie odczytała, więc wynik zawierałby wyłącznie nagłówek "
     "metadanych, bez treści źródła. Źródło zostało pominięte, żeby pusty plik nie "
@@ -1036,6 +1044,20 @@ class _Wykonanie:
         # etapu szóstego i jest tutaj rozstrzygnięte.
 
         ocena = self._ocen_jakosc(zrodlo, pozycja, dokument, znormalizowany.tekst, przygotowane)
+
+        if ocena is not None and ocena.czy_strona_blokady:
+            # Wąski wyjątek od zasady „podejrzane źródło jest zapisywane”: krótka
+            # treść pasująca jednocześnie do zwrotu typowego dla osłony logowania
+            # albo strony błędu to niemal na pewno nie jest treść merytoryczna.
+            # Szczegóły uzasadnienia są w docstringu `gnb.output.ocena_jakosci`.
+            self._pomin(
+                zrodlo,
+                pozycja,
+                KOMUNIKAT_STRONA_BLOKADY.format(
+                    liczba_slow=znormalizowany.liczba_slow, zwrot=ocena.zwrot_blokady
+                ),
+            )
+            return
 
         if ocena is None and not znormalizowany.tekst.strip():
             # Format celowo pominięty przez ocenę jakości, na przykład CSV albo

@@ -34,20 +34,42 @@ from gnb.ingestion.wejscie import (
     przyjmij_tekst,
     przyjmij_url,
 )
+from gnb.operacje_projektu import (
+    STATUSY_Z_ZASTAPIENIEM_TRESCI,
+    oznacz_jako_zweryfikowane,
+    sprawdz_mozliwosc_zastapienia,
+    usun_zrodlo_z_projektu,
+    wczytaj_checkpoint_projektu,
+    zapisz_plik_zastepczy,
+)
 from gnb.persistence import pola_notatnika
-from gnb.persistence.checkpoint import wczytaj
+from gnb.persistence.checkpoint import Checkpoint, wczytaj
+from gnb.persistence.pliki_wynikowe import znajdz_brakujace_pliki
 from gnb.persistence.pola_notatnika import PolaNotatnika, PrzekroczonoLimitZnakow
 from gnb.persistence.projekt import UkladProjektu, ustal_uklad, utworz_katalogi
-from gnb.potok import WynikPrzetwarzania, odtworz_wejscia, przetworz_projekt
+from gnb.potok import (
+    WynikPrzetwarzania,
+    identyfikatory_materialow_do_sprawdzenia,
+    odtworz_wejscia,
+    przetworz_projekt,
+)
 from gnb.ui import csrf, formularze, widoki
 from gnb.ui.projekty import niedokonczone
 from gnb.ui.stan_skrotu import AktywnyProjektSkrotu, OstatniKomunikatSkrotu
 from gnb.ui.widoki import BladPola, DaneFormularzaProjektu, PodsumowanieWyniku, sciezka_projektu
+from gnb.ui.widoki_zrodel import (
+    BrakujacyPlikDoWidoku,
+    ZrodloDoWidoku,
+    czy_potwierdzenie_poprawne,
+    sekcje_zrodel,
+    strona_potwierdzenia_usuniecia,
+)
 from gnb.ui.zadania import RejestrZadan, StanZadania, ZadanieJuzTrwa
 
 _LOG = logging.getLogger("gnb.ui")
 _TYP_HTML = "text/html; charset=utf-8"
 _TYP_JSON = "application/json; charset=utf-8"
+_KATALOG_PLIKOW_ZASTEPCZYCH = "zastepcze"
 _NADWYZKA_LIMITU_BAJTOW = 1_048_576
 _BAJTOW_W_MEGABAJCIE = 1024 * 1024
 
@@ -203,6 +225,12 @@ class _Handler(BaseHTTPRequestHandler):
             self._pokaz_strone_glowna()
         elif sciezka == widoki.SCIEZKA_POSTEPU:
             self._pokaz_postep()
+        elif (adres_zrodla := self._rozbij_adres_zrodla(sciezka)) is not None:
+            nazwa, identyfikator, akcja = adres_zrodla
+            if akcja == "usun":
+                self._pokaz_potwierdzenie_usuniecia(nazwa, identyfikator)
+            else:
+                self._blad(404, "Nie znaleziono", "Pod tym adresem nie ma żadnej strony.")
         elif sciezka.startswith("/projekt/") and sciezka.endswith("/prompt"):
             self._pokaz_prompt(self._nazwa_z_url(sciezka[len("/projekt/") : -len("/prompt")]))
         elif sciezka.startswith("/projekt/"):
@@ -214,6 +242,8 @@ class _Handler(BaseHTTPRequestHandler):
         sciezka = urlsplit(self.path).path
         if sciezka == "/projekt/nowy":
             self._utworz_projekt()
+        elif (adres_zrodla := self._rozbij_adres_zrodla(sciezka)) is not None:
+            self._obsluz_dzialanie_na_zrodle(*adres_zrodla)
         elif sciezka.startswith("/projekt/") and sciezka.endswith("/wznow"):
             self._wznow_projekt(self._nazwa_z_url(sciezka[len("/projekt/") : -len("/wznow")]))
         elif sciezka.startswith("/projekt/") and sciezka.endswith("/pola"):
@@ -298,6 +328,7 @@ class _Handler(BaseHTTPRequestHandler):
             grupa_ostatniego_wyslania=self._grupa_ostatniego_wyslania(uklad),
             dane_dosylania=dane_dosylania,
             bledy_dosylania=bledy_dosylania,
+            zrodla_html=self._zrodla_html(uklad, token),
         )
         self._wyslij_html(kod, html, token=token)
 
@@ -361,6 +392,7 @@ class _Handler(BaseHTTPRequestHandler):
                     sciezka_projektu(informacja.nazwa_projektu),
                     self._grupa_ostatniego_wyslania(uklad),
                     self._token_sesji(),
+                    self._zrodla_html(uklad, self._token_sesji()),
                 )
         elif informacja.stan is StanZadania.BLAD:
             dane["naglowek"] = "Stan przetwarzania: zakończone błędem"
@@ -523,7 +555,11 @@ class _Handler(BaseHTTPRequestHandler):
 
         def praca(postep: WywolanieZwrotnePostepu) -> WynikPrzetwarzania:
             return przetworz_projekt(
-                pozycje, konfiguracja, nazwa_projektu=nazwa_projektu, postep=postep
+                pozycje,
+                konfiguracja,
+                nazwa_projektu=nazwa_projektu,
+                postep=postep,
+                ponownie_przetwarzaj_usuniete=False,
             )
 
         try:
@@ -583,6 +619,252 @@ class _Handler(BaseHTTPRequestHandler):
 
         self._serwer.aktywny_projekt_skrotu.ustaw(uklad.nazwa_projektu)
         self._przekieruj(sciezka_projektu(uklad.nazwa_projektu))
+
+    # --- ręczne działania na źródłach ---------------------------------
+
+    def _rozbij_adres_zrodla(self, sciezka: str) -> tuple[str, str, str] | None:
+        """Rozpoznaje adres ``/projekt/NAZWA/zrodlo/IDENTYFIKATOR/DZIALANIE``.
+
+        Zwraca nazwę projektu, identyfikator źródła i nazwę działania albo nic,
+        gdy ścieżka ma inny kształt.
+        """
+        czesci = sciezka.split("/")
+        if len(czesci) == 6 and czesci[1] == "projekt" and czesci[3] == "zrodlo":
+            return self._nazwa_z_url(czesci[2]), unquote(czesci[4]), czesci[5]
+        return None
+
+    def _obsluz_dzialanie_na_zrodle(self, nazwa: str, identyfikator: str, akcja: str) -> None:
+        if akcja == "zweryfikowane":
+            self._oznacz_zrodlo_jako_zweryfikowane(nazwa, identyfikator)
+        elif akcja == "usun":
+            self._usun_zrodlo(nazwa, identyfikator)
+        elif akcja == "zastap":
+            self._zastap_tresc_zrodla(nazwa, identyfikator)
+        else:
+            self._blad(404, "Nie znaleziono", "Pod tym adresem nie ma żadnej operacji.")
+
+    def _uklad_istniejacego_projektu(self, nazwa: str) -> UkladProjektu | None:
+        uklad = ustal_uklad(self._konfiguracja.katalog_wynikow, nazwa)
+        if not uklad.katalog_projektu.is_dir():
+            self._blad(404, "Nie znaleziono projektu", f"Nie ma projektu o nazwie „{nazwa}”.")
+            return None
+        return uklad
+
+    def _zrodlo_do_widoku_lub_blad(
+        self, uklad: UkladProjektu, identyfikator: str
+    ) -> ZrodloDoWidoku | None:
+        checkpoint = self._wczytaj_checkpoint_do_widoku(uklad)
+        zrodla = self._zrodla_do_widoku(checkpoint) if checkpoint is not None else []
+        for zrodlo in zrodla:
+            if zrodlo.identyfikator == identyfikator:
+                return zrodlo
+        self._blad(404, "Nie znaleziono źródła", "Nie ma w projekcie źródła o tym identyfikatorze.")
+        return None
+
+    def _oznacz_zrodlo_jako_zweryfikowane(self, nazwa: str, identyfikator: str) -> None:
+        wynik_formularza = self._parsuj_formularz()
+        if wynik_formularza is None:
+            return
+        if not self._csrf_ok(wynik_formularza.pole(csrf.NAZWA_POLA_FORMULARZA)):
+            return
+        uklad = self._uklad_istniejacego_projektu(nazwa)
+        if uklad is None:
+            return
+        try:
+            with self._serwer.rejestr.wylacznie():
+                oznacz_jako_zweryfikowane(uklad, self._konfiguracja, identyfikator)
+        except ZadanieJuzTrwa as blad:
+            self._blad(409, "Inne przetwarzanie w toku", str(blad))
+            return
+        except BladGnb as blad:
+            self._blad(400, "Nie można oznaczyć źródła", blad.komunikat)
+            return
+        self._przekieruj(sciezka_projektu(uklad.nazwa_projektu))
+
+    def _pokaz_potwierdzenie_usuniecia(
+        self,
+        nazwa: str,
+        identyfikator: str,
+        *,
+        kod: int = 200,
+        bledy: list[BladPola] | None = None,
+    ) -> None:
+        uklad = self._uklad_istniejacego_projektu(nazwa)
+        if uklad is None:
+            return
+        zrodlo = self._zrodlo_do_widoku_lub_blad(uklad, identyfikator)
+        if zrodlo is None:
+            return
+        token = self._token_sesji()
+        html = strona_potwierdzenia_usuniecia(
+            nazwa_projektu=uklad.nazwa_projektu, zrodlo=zrodlo, token_csrf=token, bledy=bledy
+        )
+        self._wyslij_html(kod, html, token=token)
+
+    def _usun_zrodlo(self, nazwa: str, identyfikator: str) -> None:
+        wynik_formularza = self._parsuj_formularz()
+        if wynik_formularza is None:
+            return
+        if not self._csrf_ok(wynik_formularza.pole(csrf.NAZWA_POLA_FORMULARZA)):
+            return
+        uklad = self._uklad_istniejacego_projektu(nazwa)
+        if uklad is None:
+            return
+        if not czy_potwierdzenie_poprawne(wynik_formularza.pole("potwierdzenie")):
+            self._pokaz_potwierdzenie_usuniecia(
+                nazwa,
+                identyfikator,
+                kod=400,
+                bledy=[
+                    BladPola(
+                        "potwierdzenie",
+                        "Źródło nie zostało usunięte. Wpisz słowo USUŃ w polu potwierdzenia.",
+                    )
+                ],
+            )
+            return
+        try:
+            with self._serwer.rejestr.wylacznie():
+                wynik = usun_zrodlo_z_projektu(uklad, self._konfiguracja, identyfikator)
+        except ZadanieJuzTrwa as blad:
+            self._blad(409, "Inne przetwarzanie w toku", str(blad))
+            return
+        except BladGnb as blad:
+            self._blad(400, "Nie można usunąć źródła", blad.komunikat)
+            return
+        if wynik.wymaga_przepakowania and not self._uruchom_zapisane_wejscia(uklad, {}):
+            return
+        self._przekieruj(sciezka_projektu(uklad.nazwa_projektu))
+
+    def _zastap_tresc_zrodla(self, nazwa: str, identyfikator: str) -> None:
+        wynik_formularza = self._parsuj_formularz()
+        if wynik_formularza is None:
+            return
+        if not self._csrf_ok(wynik_formularza.pole(csrf.NAZWA_POLA_FORMULARZA)):
+            return
+        uklad = self._uklad_istniejacego_projektu(nazwa)
+        if uklad is None:
+            return
+        pliki = [plik for plik in wynik_formularza.pliki if plik.zawartosc]
+        if not pliki:
+            self._blad(
+                400,
+                "Nie wybrano pliku",
+                "Wybierz plik z ręcznie zapisaną treścią źródła i spróbuj ponownie.",
+            )
+            return
+        try:
+            sprawdz_mozliwosc_zastapienia(wczytaj_checkpoint_projektu(uklad), identyfikator)
+        except BladGnb as blad:
+            self._blad(400, "Nie można zastąpić treści", blad.komunikat)
+            return
+        sciezka = zapisz_plik_zastepczy(
+            uklad.pliki_wejsciowe / _KATALOG_PLIKOW_ZASTEPCZYCH,
+            formularze.bezpieczna_nazwa_wysylki(pliki[0].nazwa_pliku),
+            pliki[0].zawartosc,
+        )
+        if not self._uruchom_zapisane_wejscia(uklad, {identyfikator: sciezka}):
+            return
+        self._przekieruj(sciezka_projektu(uklad.nazwa_projektu))
+
+    def _uruchom_zapisane_wejscia(
+        self, uklad: UkladProjektu, zastepcze_tresci: dict[str, Path]
+    ) -> bool:
+        """Uruchamia przebieg z zapisanych wejść projektu; zwraca fałsz po wysłaniu strony błędu.
+
+        Służy przepakowaniu po usunięciu źródła z grupy oraz zastąpieniu treści
+        źródła plikiem. Zapisane wejścia nie są ponownym podaniem źródeł przez
+        użytkownika, więc źródła pominięte z powodu ręcznie usuniętego pliku
+        wynikowego zostają pominięte.
+        """
+        konfiguracja = self._konfiguracja
+        pozycje = odtworz_wejscia(wczytaj_checkpoint_projektu(uklad), konfiguracja)
+        nazwa_projektu = uklad.nazwa_projektu
+
+        def praca(postep: WywolanieZwrotnePostepu) -> WynikPrzetwarzania:
+            return przetworz_projekt(
+                pozycje,
+                konfiguracja,
+                nazwa_projektu=nazwa_projektu,
+                postep=postep,
+                zastepcze_tresci=zastepcze_tresci,
+                ponownie_przetwarzaj_usuniete=False,
+            )
+
+        try:
+            self._serwer.rejestr.uruchom(nazwa_projektu, praca, liczba_pozycji=len(pozycje))
+        except ZadanieJuzTrwa as blad:
+            self._blad(
+                409,
+                "Inne przetwarzanie w toku",
+                f"{blad} Zmiana została zapisana, a przetwarzanie dokończysz przyciskiem "
+                "wznowienia projektu na stronie głównej, gdy poprzednie się skończy.",
+            )
+            return False
+        return True
+
+    def _wczytaj_checkpoint_do_widoku(self, uklad: UkladProjektu) -> Checkpoint | None:
+        """Wczytuje checkpoint do wyświetlenia. Uszkodzony albo brakujący daje ``None``."""
+        if not uklad.checkpoint.is_file():
+            return None
+        try:
+            return wczytaj(uklad.checkpoint)
+        except BladGnb:
+            return None
+
+    def _zrodla_do_widoku(self, checkpoint: Checkpoint) -> list[ZrodloDoWidoku]:
+        materialy = identyfikatory_materialow_do_sprawdzenia(checkpoint)
+        zrodla: list[ZrodloDoWidoku] = []
+        for stan in checkpoint.zrodla.values():
+            nazwy_plikow = tuple(
+                dict.fromkeys(Path(wynik.sciezka_wzgledna).name for wynik in stan.wyniki)
+            )
+            zrodla.append(
+                ZrodloDoWidoku(
+                    identyfikator=stan.identyfikator,
+                    pochodzenie=stan.pochodzenie,
+                    status=stan.status,
+                    grupa=stan.grupa_pakowania,
+                    pliki_wynikowe=nazwy_plikow,
+                    komunikat=stan.komunikat_bledu,
+                    powody_do_sprawdzenia=(
+                        *stan.powody_oceny,
+                        *stan.ostrzezenia,
+                        *stan.ostrzezenia_pakowania,
+                    ),
+                    czy_material_do_sprawdzenia=stan.identyfikator in materialy,
+                    zweryfikowane_recznie=stan.zweryfikowane_recznie,
+                    tresc_zastapiona_plikiem=stan.tresc_zastapiona_plikiem,
+                    czy_mozna_zastapic_tresc=stan.status in STATUSY_Z_ZASTAPIENIEM_TRESCI,
+                )
+            )
+        return zrodla
+
+    def _zrodla_html(self, uklad: UkladProjektu, token_csrf: str) -> str:
+        """Buduje fragment strony projektu z wykazem źródeł i brakującymi plikami.
+
+        Sprawdzenie brakujących plików jest tu wyłącznie odczytem: wyświetlenie
+        strony nigdy nie zmienia stanu projektu, status źródeł zmienia dopiero
+        początek następnego przebiegu przetwarzania.
+        """
+        checkpoint = self._wczytaj_checkpoint_do_widoku(uklad)
+        if checkpoint is None:
+            return ""
+        brakujace = [
+            BrakujacyPlikDoWidoku(
+                nazwa=brak.nazwa,
+                pochodzenie_zrodel=tuple(
+                    checkpoint.zrodla[identyfikator].pochodzenie
+                    for identyfikator in brak.identyfikatory_zrodel
+                    if identyfikator in checkpoint.zrodla
+                ),
+                czy_zajmuje_slot=brak.czy_zajmuje_slot,
+            )
+            for brak in znajdz_brakujace_pliki(uklad, checkpoint)
+        ]
+        return sekcje_zrodel(
+            uklad.nazwa_projektu, self._zrodla_do_widoku(checkpoint), brakujace, token_csrf
+        )
 
     # --- pomocnicze ---------------------------------------------------
 

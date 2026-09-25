@@ -306,8 +306,14 @@ def strona_projektu(
     grupa_ostatniego_wyslania: str = "",
     dane_dosylania: DaneFormularzaProjektu | None = None,
     bledy_dosylania: list[BladPola] | None = None,
+    zrodla_html: str = "",
 ) -> str:
-    """Strona projektu: region postępu, dwa pola tekstowe oraz raport po zakończeniu."""
+    """Strona projektu: region postępu, dwa pola tekstowe oraz raport po zakończeniu.
+
+    Argument `zrodla_html` to gotowy fragment z wykazem źródeł i ich działaniami,
+    zbudowany przez `gnb.ui.widoki_zrodel`. Jest przekazywany jako napis, żeby
+    ten moduł nie zależał od modułu, który sam z niego korzysta.
+    """
     bledy = bledy or []
     sciezka = sciezka_projektu(nazwa)
     czesci = [f"<h1>Projekt: {escapuj(nazwa)}</h1>", _sekcja_postepu(sciezka, informacja)]
@@ -320,6 +326,7 @@ def strona_projektu(
         token_csrf,
         dane_dosylania,
         bledy_dosylania,
+        zrodla_html,
     )
     czesci.append(f'<div id="wynik-po-zakonczeniu">{fragment_wyniku}</div>')
 
@@ -351,8 +358,9 @@ def _fragment_wyniku(
     token_csrf: str,
     dane_dosylania: DaneFormularzaProjektu | None,
     bledy_dosylania: list[BladPola] | None,
+    zrodla_html: str = "",
 ) -> str:
-    """Buduje blok pokazywany po zakończeniu przebiegu: podsumowanie, raport i formularz dosyłania.
+    """Buduje blok pokazywany po zakończeniu przebiegu: podsumowanie, raport, źródła i dosyłanie.
 
     Ten sam blok budują dwie ścieżki: pełne wyrenderowanie strony projektu przy
     wejściu na nią po zakończeniu, oraz odpytywanie postępu, które wstawia go do
@@ -361,13 +369,16 @@ def _fragment_wyniku(
     pojawia się tylko wtedy, gdy jest już co najmniej jeden raport, bo dosyła się
     źródła do istniejącego projektu, a nie tworzy nowy.
     """
-    if podsumowanie is None and raport is None:
+    if podsumowanie is None and raport is None and not zrodla_html:
         return ""
     czesci = []
     if podsumowanie is not None:
         czesci.append(_sekcja_podsumowania(podsumowanie))
     if raport is not None:
         czesci.append(_sekcja_raportu(raport))
+    if zrodla_html:
+        czesci.append(zrodla_html)
+    if raport is not None:
         czesci.append(
             _formularz_dosylania(
                 sciezka, grupa_ostatniego_wyslania, token_csrf, dane_dosylania, bledy_dosylania
@@ -382,6 +393,7 @@ def fragment_po_zakonczeniu(
     sciezka: str,
     grupa_ostatniego_wyslania: str,
     token_csrf: str,
+    zrodla_html: str = "",
 ) -> str:
     """Buduje fragment HTML wstawiany bez przeładowania strony po zakończeniu przebiegu.
 
@@ -390,7 +402,14 @@ def fragment_po_zakonczeniu(
     od razu pod nim, zamiast wymagać aktywowania odnośnika „Odśwież stan”.
     """
     return _fragment_wyniku(
-        podsumowanie, raport, sciezka, grupa_ostatniego_wyslania, token_csrf, None, None
+        podsumowanie,
+        raport,
+        sciezka,
+        grupa_ostatniego_wyslania,
+        token_csrf,
+        None,
+        None,
+        zrodla_html,
     )
 
 

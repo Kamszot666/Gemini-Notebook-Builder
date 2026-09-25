@@ -262,6 +262,23 @@ opisane niżej jako pierwsze — reszta odczytu nie ma żadnych ustawień.
    statusem „pominiete” pojedynczego źródła DOC albo PPT. Limit czasu jednej
    konwersji (trzy minuty) jest stałą w kodzie, a nie polem konfiguracji.
 
+## Pola archiwów ZIP
+
+Wszystkie cztery limity dotyczą całego archiwum, a ich przekroczenie pomija całe
+archiwum z komunikatem, nigdy jego część. Opis mechanizmu jest w `docs/FORMATS.md`,
+w sekcji „Archiwa ZIP”. Wszystkie wartości są liczbami całkowitymi dodatnimi.
+
+1. `zip_maks_plikow`, zmienna `GNB_ZIP_MAKS_PLIKOW`. Największa liczba plików
+   w archiwum, wraz z plikami w archiwach zagnieżdżonych. Domyślnie 200.
+2. `zip_maks_rozmiar_mb`, zmienna `GNB_ZIP_MAKS_ROZMIAR_MB`. Największy łączny rozmiar
+   zawartości po rozpakowaniu, w megabajtach. Domyślnie 500.
+3. `zip_maks_stosunek_kompresji`, zmienna `GNB_ZIP_MAKS_STOSUNEK_KOMPRESJI`. Największy
+   dopuszczalny stosunek rozmiaru po rozpakowaniu do rozmiaru skompresowanego
+   jednego pliku. Domyślnie 200.
+4. `zip_maks_zaglebienie`, zmienna `GNB_ZIP_MAKS_ZAGLEBIENIE`. Największa liczba
+   poziomów archiwów, z archiwum głównym jako pierwszym. Domyślnie 2, czyli
+   archiwum w archiwum jest rozwijane, a głębsze nie.
+
 ## Pola transkrypcji nagrań mowy
 
 Transkrypcję wykonuje biblioteka faster-whisper na modelu Whisper. Rozkodowanie
@@ -446,6 +463,11 @@ sciezka_musescore = ""
 sciezka_audiveris = ""
 sciezka_libreoffice = ""
 nuty_zapis_dzwiekow_wlaczony = true
+
+zip_maks_plikow = 200
+zip_maks_rozmiar_mb = 500
+zip_maks_stosunek_kompresji = 200
+zip_maks_zaglebienie = 2
 
 transkrypcja_wlaczona = true
 transkrypcja_model = "medium"

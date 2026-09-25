@@ -161,6 +161,13 @@ filmu, czyli tytułu, kanału, długości i daty publikacji, nie udostępnia
 serwisu YouTube i nie da się go po prostu wyłączyć. Bez niego film nadal dostanie
 transkrypcję, ale bez tytułu, kanału i długości, a więc i bez sensownej nazwy
 pliku wynikowego.
+- `gnb/ingestion/archiwum.py` — rozwijanie archiwów ZIP na zwykłe wejścia plikowe.
+  Nic nie jest zapisywane pod nazwą z archiwum, wpisy niebezpieczne są pomijane,
+  a limity liczby plików, rozmiaru i stosunku kompresji pomijają całe archiwum.
+  Wynik niesie listę wpisów z powodami pominięć, którą potok zapisuje
+  w checkpoincie, manifeście i raporcie. Potok rozwija archiwa zaraz po otwarciu
+  logów, przed zapamiętaniem wejść, więc wznowienie odtwarza pliki z archiwum,
+  a nie samo archiwum.
 - `gnb/ingestion/robots.py` — odczyt pliku `robots.txt` i decyzja o zgodzie na
   pobranie adresu, zgodnie z RFC 9309: 2xx oznacza reguły, 4xx zgodę, a 5xx
   i błąd sieci zakaz po wyczerpaniu ponowień.
@@ -358,7 +365,9 @@ jest zadaniem etapu siódmego.
   polami addytywnymi z bezpieczną wartością domyślną, więc plik starszej wersji
   wczytuje się bez zmiany numeru schematu. Tak samo dodane w etapie czternastym:
   `zweryfikowane_recznie`, `tresc_zastapiona_plikiem` i `plik_wynikowy_usuniety`
-  przy źródle oraz wykaz `zastapione_pliki_grup` przy projekcie.
+  przy źródle oraz wykaz `zastapione_pliki_grup` przy projekcie, a także pole
+  `archiwum` przy źródle i przy wejściu, pole `sciezka_w_archiwum` przy wejściu
+  i wykaz `archiwa` przy projekcie.
 - `gnb/persistence/pliki_wynikowe.py` — zgodność checkpointu z plikami na
   dysku: wykrywanie plików wynikowych, których nie ma, cofanie grupy do
   przepakowania oraz usuwanie starych plików grup po zapisaniu nowych. Moduł

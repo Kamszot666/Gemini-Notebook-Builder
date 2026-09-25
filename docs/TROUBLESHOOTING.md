@@ -45,6 +45,9 @@ ozdobników, a polecenia do wpisania są w osobnych blokach.
 29. Plik DOC albo PPT dostał status „pominiete”: brak LibreOffice.
 30. Arkusz XLSX ma puste komórki tam, gdzie w programie były wyniki.
 31. W arkuszu liczby są bez waluty albo RTF ma uproszczoną tabelę.
+32. Całe archiwum ZIP zostało pominięte.
+33. Z archiwum ZIP przyjęto mniej plików, niż w nim jest.
+34. Pliki z archiwum ZIP zajęły wiele slotów notatnika.
 
 ## 1. Windows blokuje plik wykonywalny narzędzia deweloperskiego
 
@@ -674,3 +677,52 @@ Co zrobić. Jeżeli jednostka ma znaczenie, dopisz ją do nagłówka kolumny w p
 źródłowym albo zapisz arkusz w formacie ODS, który zachowuje widoczną postać
 komórki. Tabelę z RTF zapisz w formacie DOCX albo ODT, jeżeli jej struktura jest
 ważna.
+
+## 32. Całe archiwum ZIP zostało pominięte
+
+Objaw. W raporcie, w sekcji „Archiwa ZIP”, jest wiersz „Całe archiwum zostało
+pominięte” z powodem, a w projekcie nie ma żadnego pliku z tego archiwum.
+
+Przyczyna. Archiwum przekroczyło jeden z limitów całego archiwum: liczbę plików,
+łączny rozmiar po rozpakowaniu albo stosunek kompresji, albo nie jest poprawnym
+archiwum ZIP. Przekroczenie limitu pomija całe archiwum, a nie jego część, bo
+niekompletny zbiór dokumentów w notatniku, bez informacji, że czegoś brakuje,
+byłby cichą utratą treści. Bardzo wysoki stosunek kompresji jest cechą bomby
+kompresji, więc taki plik jest odrzucany zawsze w całości.
+
+Co zrobić. Przeczytaj powód w raporcie. Jeżeli to limit liczby plików albo
+rozmiaru, podziel archiwum na mniejsze albo podnieś odpowiedni limit kluczem
+`zip_maks_plikow` albo `zip_maks_rozmiar_mb`, opisanym w `CONFIGURATION.md`.
+Jeżeli to stosunek kompresji, a plik jest Twój i wiarygodny, podnieś
+`zip_maks_stosunek_kompresji`, ale zachowaj ostrożność z archiwami od obcych.
+Jeżeli archiwum jest uszkodzone, spakuj je ponownie.
+
+## 33. Z archiwum ZIP przyjęto mniej plików, niż w nim jest
+
+Objaw. W sekcji „Archiwa ZIP” raportu liczba przyjętych plików jest mniejsza niż
+liczba plików w archiwum, a pod nią są wiersze „Pominięto: …” z powodami.
+
+Przyczyna. Pojedyncze wpisy bywają pomijane z powodu, który dotyczy tylko ich:
+nieobsługiwany format pliku, plik pusty, plik metadanych systemu, wpis
+zaszyfrowany hasłem, dowiązanie symboliczne, ścieżka wychodząca poza katalog
+albo archiwum zagnieżdżone głębiej, niż pozwala limit. Reszta archiwum jest
+przetwarzana normalnie. Każdy pominięty wpis jest w raporcie, w manifeście
+i w logu szczegółowym.
+
+Co zrobić. Przeczytaj powody. Plik w nieobsługiwanym formacie zamień na obsługiwany
+i dodaj osobno. Wpis zaszyfrowany zapisz bez hasła. Głębsze archiwum rozpakuj
+sam i dodaj zawarte w nim pliki albo podnieś `zip_maks_zaglebienie`.
+
+## 34. Pliki z archiwum ZIP zajęły wiele slotów notatnika
+
+Objaw. Po dodaniu archiwum liczba plików do wgrania gwałtownie rośnie, a raport
+ostrzega, że archiwum potrzebuje więcej slotów, niż jest wolnych.
+
+Przyczyna. Pliki z archiwum nie są łączone w grupę automatycznie: zasada każe
+łączyć wyłącznie tematycznie, a zawartość archiwum nie musi być jednym tematem.
+Każdy plik ma więc własne źródło i zajmuje jeden slot notatnika.
+
+Co zrobić. Jeżeli zawartość archiwum jest jednym tematem, dodaj je ponownie,
+podając nazwę grupy opcją `--grupa` albo polem grupy w interfejsie: wszystkie pliki
+utworzą wtedy wspólny plik wynikowy w jednym slocie. Albo podnieś limit źródeł
+w konfiguracji, jeśli Twój plan notatnika na to pozwala.

@@ -3,8 +3,8 @@
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
 Etap czternasty dodał formaty biurowe ODT, ODS, ODP, PPTX, XLSX, XLS, RTF, DOC
 i PPT, plik TSV oraz pliki tekstu prostego: JSON, XML, YAML, TOML, INI, CFG
-i LOG. Archiwa ZIP nie są jeszcze obsługiwane: zaplanowano je w kolejnym pull
-requeście tego etapu.
+i LOG oraz archiwa ZIP, których pliki przechodzą te same adaptery co pliki podane
+wprost.
 
 ## Wejście
 
@@ -12,25 +12,27 @@ Obsługiwane są następujące rodzaje wejścia:
 
 1. Tekst wklejony bezpośrednio przez użytkownika, traktowany jako tekst płaski.
 2. Tekst wklejony zadeklarowany przez użytkownika jako Markdown.
-3. Plik lokalny w jednym z formatów tekstowych i dokumentowych: TXT, MD, HTML,
+3. Archiwum ZIP z plikami w dowolnym z obsługiwanych formatów — opisuje je sekcja
+   „Archiwa ZIP”.
+4. Plik lokalny w jednym z formatów tekstowych i dokumentowych: TXT, MD, HTML,
    CSV, TSV, SRT, VTT, PDF, DOCX, EPUB, ODT, ODS, ODP, PPTX, XLSX, XLS, RTF, DOC
    albo PPT, a także plik tekstu prostego: JSON, XML, YAML, YML, TOML, INI, CFG
    albo LOG. TXT, MD i pliki tekstu prostego są plikiem tekstowym, pozostałe
    plikiem dokumentem — rozróżnienie opisuje sekcja „Pliki dokumentowe”.
-4. Plik obrazu: JPG, PNG, WebP, TIFF, BMP oraz statyczna klatka GIF, a przy
+5. Plik obrazu: JPG, PNG, WebP, TIFF, BMP oraz statyczna klatka GIF, a przy
    zainstalowanej bibliotece opcjonalnej pillow-heif także HEIC i HEIF.
    Obsługę obrazów opisuje sekcja „Obrazy”.
-5. Nagranie audio: MP3, WAV, M4A, FLAC, OGG, OPUS albo AAC. Obsługiwane są
+6. Nagranie audio: MP3, WAV, M4A, FLAC, OGG, OPUS albo AAC. Obsługiwane są
    wyłącznie nagrania mowy — obsługę opisuje sekcja „Nagrania audio
    i transkrypcja mowy”.
-6. Materiał nutowy w formacie natywnym: MIDI (`mid`, `midi`), MusicXML
+7. Materiał nutowy w formacie natywnym: MIDI (`mid`, `midi`), MusicXML
    (`musicxml`), skompresowany kontener MusicXML (`mxl`) albo Guitar Pro
    w wersjach `gp3`, `gp4` i `gp5`. Obsługę opisuje sekcja „Materiały nutowe”.
-7. Zapis nutowy jako obraz albo plik PDF, wskazany opcją `--nuty`, rozpoznawany
+8. Zapis nutowy jako obraz albo plik PDF, wskazany opcją `--nuty`, rozpoznawany
    optycznie programem Audiveris. Obsługę opisuje ta sama sekcja „Materiały
    nutowe”.
-8. Adres strony internetowej, podany pojedynczo albo listą.
-9. Adres filmu z serwisu YouTube, dla którego pobierane są napisy.
+9. Adres strony internetowej, podany pojedynczo albo listą.
+10. Adres filmu z serwisu YouTube, dla którego pobierane są napisy.
 
 Opcja `--nuty` polecenia `przetworz` kieruje pliki PDF i obrazy danego wywołania
 do ścieżki materiałów nutowych, gdzie zapis nutowy jest rozpoznawany optycznie
@@ -656,6 +658,81 @@ Plik TSV to ta sama tabela co CSV, z ogranicznikiem tabulatora zadanym przez
 format. Ogranicznik nie jest zgadywany: plik TSV z przecinkami w komórkach nie
 może zostać rozbity po przecinku tylko dlatego, że rozpoznawanie ogranicznika
 uznałoby je za częstsze.
+
+## Archiwa ZIP
+
+Archiwum ZIP nie jest źródłem, tylko pojemnikiem na źródła. Aplikacja rozpakowuje
+je do katalogu projektu i przetwarza znalezione pliki tymi samymi adapterami co
+pliki podane wprost: dokument DOCX z archiwum jest czytany jak dokument DOCX
+podany bezpośrednio. Archiwum jest rozpoznawane po rozszerzeniu `.zip`, a jego
+zawartość jest wykazana w manifeście, w raporcie i w logach.
+
+Pochodzenie każdego pliku jest zapisane w postaci „materialy.zip » folder/plik.pdf”,
+a przy archiwum zagnieżdżonym cała droga, na przykład
+„materialy.zip » paczka.zip » plik.pdf”. Nagłówek metadanych pliku wynikowego ma
+wiersz „Plik” z drogą wewnątrz archiwum i wiersz „Archiwum” z nazwą głównego
+archiwum, a wpis źródła w manifeście ma pole `archiwum`.
+
+Pliki z archiwum nie są łączone w grupę automatycznie: zasada z sekcji dziesiątej
+`CLAUDE.md` każe łączyć wyłącznie tematycznie, a zawartość archiwum nie musi być
+jednym tematem. Każdy plik dostaje więc własne źródło i własny plik wynikowy,
+a zajmuje przy tym slot notatnika. Jeżeli podasz nazwę grupy dla archiwum, opcją
+`--grupa` albo polem grupy w interfejsie, wszystkie jego pliki dziedziczą tę grupę
+i tworzą wspólny plik wynikowy. Obrazy z archiwum dostają, jak każdy obraz podany
+bez grupy, wspólną numerowaną grupę tego uruchomienia i trafiają do tematycznego
+pliku PDF.
+
+Przed przetwarzaniem aplikacja sprawdza, czy pliki z archiwum zmieszczą się
+w wolnych slotach notatnika. Jeżeli nie, zapisuje ostrzeżenie w logu ważnym,
+w logu szczegółowym, we wpisie archiwum w manifeście i w raporcie, wraz z liczbą
+potrzebnych i wolnych slotów oraz wskazówką, żeby podać nazwę grupy albo podnieść
+limit. Przetwarzanie trwa dalej, a pliki ponad limit dostają zwykły status
+pominięcia z powodem.
+
+### Limity i ochrona
+
+Wszystkie limity są polami konfiguracji, opisanymi w `CONFIGURATION.md`. Trzy z nich
+dotyczą całego archiwum, a ich przekroczenie pomija całe archiwum, nigdy jego część:
+niekompletny zbiór dokumentów w notatniku, bez informacji, że czegoś brakuje, byłby
+cichą utratą treści. Powód pominięcia jest w manifeście, w raporcie i w logach.
+
+1. Liczba plików: domyślnie 200 na archiwum, wraz z plikami w archiwach zagnieżdżonych.
+2. Rozmiar po rozpakowaniu: domyślnie 500 megabajtów łącznie. Liczony jest zarówno
+   według rozmiaru zadeklarowanego w archiwum, jak i według faktycznie odczytanych
+   bajtów, bo deklaracja może kłamać.
+3. Stosunek kompresji: domyślnie 200 do 1 na plik. Wyższy jest cechą bomby
+   kompresji, więc pomijane jest całe archiwum.
+4. Zagłębienie: domyślnie dwa poziomy. Archiwum w archiwum jest rozwijane, ale
+   archiwum w archiwum w archiwum nie: taki wpis jest pominięty z komunikatem.
+
+Ochrona przed ścieżkami wychodzącymi jest zasadnicza. Żaden plik nie jest zapisywany
+pod nazwą z archiwum: trafia do katalogu projektu pod nazwą własną, z numerem
+i oczyszczoną nazwą końcową, bez katalogów. Nazwa z archiwum służy wyłącznie do
+opisu pochodzenia. Wpis ze ścieżką bezwzględną, literą dysku, składnikiem „..”,
+dowiązaniem symbolicznym albo znakiem zerowym jest pominięty z komunikatem, a
+reszta archiwum jest przetwarzana dalej. Wpis zaszyfrowany hasłem jest pominięty:
+aplikacja nie próbuje haseł.
+
+Pominięte są też, z powodem, wpisy w nieobsługiwanym formacie, wpisy puste oraz
+pliki metadanych systemu, takie jak `.DS_Store`, `Thumbs.db` i katalog `__MACOSX`.
+Każdy pominięty wpis jest wymieniony w raporcie i w manifeście, a ich liczba jest
+w podsumowaniu polecenia `przetworz` w wierszu „Pominięte pliki i archiwa ZIP”:
+pominięcie po cichu byłoby gorsze niż błąd. Nazwy wpisów w starszych archiwach, zapisanych bez
+znacznika UTF-8, są poprawiane ze strony kodowej DOS dla polskiego systemu, ale
+dotyczy to wyłącznie opisu pochodzenia, nigdy treści pliku.
+
+### Wpis archiwum w manifeście
+
+`manifest.json` ma listę `archiwa`. Każde archiwum ma nazwę, sumę kontrolną, status,
+komunikat, ostrzeżenia i listę plików. Status archiwum to „rozwiniete” albo
+„pominiete”, a status pliku to „przyjety” albo „pominiety”. Przy przyjętym pliku jest
+identyfikator źródła, który łączy wpis archiwum ze źródłem, oraz suma kontrolna
+pliku. Ponowne dodanie tego samego archiwum, rozpoznawanego po sumie kontrolnej,
+zastępuje jego dotychczasowy wpis, a pliki z niego, znane już projektowi, są
+raportowane jako źródła już obecne.
+
+Wznowienie projektu odtwarza z checkpointu pliki z archiwum, a nie samo archiwum,
+więc niczego nie rozpakowuje drugi raz.
 
 ## Pliki tekstu prostego
 

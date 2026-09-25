@@ -1,8 +1,10 @@
 # Obsługiwane formaty — stan po etapie czternastym
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
-Formaty ODT i PPTX nie są obsługiwane i nie są zaplanowane w żadnym etapie
-z sekcji osiemnastej pliku `CLAUDE.md`.
+Etap czternasty dodał formaty biurowe ODT, ODS, ODP, PPTX, XLSX, XLS, RTF, DOC
+i PPT, plik TSV oraz pliki tekstu prostego: JSON, XML, YAML, TOML, INI, CFG
+i LOG. Archiwa ZIP nie są jeszcze obsługiwane: zaplanowano je w kolejnym pull
+requeście tego etapu.
 
 ## Wejście
 
@@ -11,8 +13,10 @@ Obsługiwane są następujące rodzaje wejścia:
 1. Tekst wklejony bezpośrednio przez użytkownika, traktowany jako tekst płaski.
 2. Tekst wklejony zadeklarowany przez użytkownika jako Markdown.
 3. Plik lokalny w jednym z formatów tekstowych i dokumentowych: TXT, MD, HTML,
-   CSV, SRT, VTT, PDF, DOCX albo EPUB. Pierwsze dwa są plikiem tekstowym,
-   pozostałe plikiem dokumentem — rozróżnienie opisuje sekcja „Pliki dokumentowe”.
+   CSV, TSV, SRT, VTT, PDF, DOCX, EPUB, ODT, ODS, ODP, PPTX, XLSX, XLS, RTF, DOC
+   albo PPT, a także plik tekstu prostego: JSON, XML, YAML, YML, TOML, INI, CFG
+   albo LOG. TXT, MD i pliki tekstu prostego są plikiem tekstowym, pozostałe
+   plikiem dokumentem — rozróżnienie opisuje sekcja „Pliki dokumentowe”.
 4. Plik obrazu: JPG, PNG, WebP, TIFF, BMP oraz statyczna klatka GIF, a przy
    zainstalowanej bibliotece opcjonalnej pillow-heif także HEIC i HEIF.
    Obsługę obrazów opisuje sekcja „Obrazy”.
@@ -537,6 +541,134 @@ czy list, bo jego jedyna struktura — tabela — jest odczytywana wprost, bez
 zgadywania. Nagranie audio dostaje poziom niski, bo transkrypcja mowy nie ma
 nagłówków, list ani tabel.
 
+### Dokumenty OpenDocument: ODT, ODS i ODP
+
+Pliki OpenDocument są archiwami ZIP z treścią w pliku `content.xml`. Aplikacja
+czyta je wyłącznie biblioteką standardową Pythona, bez żadnej zależności
+zewnętrznej i bez programu LibreOffice. Format niesie prawdziwą strukturę:
+nagłówek ma zapisany poziom, lista ma styl wypunktowany albo numerowany, a
+tabela jest osobnym elementem, więc poziom pewności struktury jest wysoki.
+
+ODT, dokument tekstowy: nagłówki, akapity, listy, tabele. Numeracja listy
+wynika ze stylu zapisanego w dokumencie. Zagnieżdżone listy są spłaszczane,
+bo wewnętrzny format bloku listy jest płaski. Treść przypisów dolnych trafia do
+osobnych akapitów „Przypis: …” zaraz po akapicie, w którym przypis stoi, żeby
+nie przepadła. Automatycznie generowane spisy treści i skorowidze są pomijane,
+bo powtarzają nagłówki, a tekst usunięty w śledzonych zmianach nie należy do
+dokumentu. Sekcje i ramki tekstowe są rozwijane. Tytuł pochodzi z metadanych,
+a przy ich braku z pierwszego nagłówka.
+
+ODS, arkusz: każdy arkusz jest nagłówkiem „Arkusz: nazwa” i jedną tabelą.
+Komórka jest zapisana tak, jak widzi ją użytkownik, czyli sformatowana, na
+przykład „1 234,50 zł” albo data w wybranym formacie, a nie surową liczbą.
+Pierwszy wiersz arkusza jest nagłówkiem kolumn z założenia, tak jak w pliku CSV.
+Puste komórki i wiersze zapisane jednym elementem z liczbą powtórzeń rzędu
+tysięcy są rozwijane z ograniczeniem: bez niego jeden wiersz rozrósłby się do
+tysięcy pustych komórek.
+
+ODP, prezentacja: każdy slajd jest nagłówkiem „Slajd N: tytuł”, po którym idzie
+jego treść, a na końcu notatki mówcy. Tytuł jest brany z ramki oznaczonej jako
+tytuł, jeżeli program ją tak zapisał. Numer slajdu, data i stopka nie są treścią.
+
+Obrazy, wykresy i obiekty osadzone nie są odczytywane. Ich liczba trafia do
+ostrzeżeń ekstraktora, żeby utrata treści nie była cicha. Dokument zaszyfrowany
+hasłem jest odrzucany z komunikatem, jak go zapisać bez szyfrowania.
+
+Bezpieczeństwo odczytu archiwum jest wspólne dla ODF i PPTX. Rozmiar rozpakowanej
+treści każdego wpisu jest ograniczony do dwustu megabajtów, przy czym sprawdzany
+jest zarówno rozmiar zadeklarowany w archiwum, jak i faktycznie odczytany. Wpis
+zawierający deklarację typu dokumentu albo definicję encji jest odrzucany,
+bo dokumenty tych formatów ich nie używają, a to one umożliwiają atak przez
+rozszerzanie encji. Żaden wpis archiwum nie jest zapisywany na dysku, więc nazwy
+wpisów nie mają jak wyprowadzić zapisu poza katalog projektu.
+
+### Prezentacje PPTX
+
+PPTX też jest archiwum ZIP, czytanym biblioteką standardową. Kolejność slajdów
+wynika z listy w `ppt/presentation.xml`, a nie z numerów w nazwach plików:
+użytkownik potrafi przestawić slajdy, a pliki zostają pod starymi nazwami.
+Slajd jest nagłówkiem „Slajd N: tytuł”, ukryty slajd jest odczytany i oznaczony.
+Akapit w kształcie zastępczym treści slajdu jest elementem listy, jeżeli nie ma
+jawnie wyłączonego wypunktowania, bo takie kształty dziedziczą wypunktowanie
+z wzorca slajdów, którego aplikacja nie odczytuje. Akapit w zwykłym polu
+tekstowym jest akapitem, chyba że ma jawne wypunktowanie. Tabele są odczytywane,
+grupy kształtów rozwijane, notatki mówcy dopisywane na końcu slajdu. Obrazy,
+wykresy i diagramy nie są odczytywane, a ich liczba trafia do ostrzeżeń.
+
+### Arkusze XLSX i XLS
+
+XLSX jest czytany biblioteką `openpyxl` w trybie strumieniowym, a stary XLS
+biblioteką `xlrd`. Obie są w czystym Pythonie. Każdy arkusz jest nagłówkiem
+„Arkusz: nazwa” i jedną tabelą, z pierwszym wierszem jako nagłówkiem kolumn.
+Arkusz ukryty jest odczytany i oznaczony. Zasady zapisu wartości są wspólne:
+
+1. Data jest zapisana jako RRRR-MM-DD, a data z godziną jako RRRR-MM-DD
+   GG:MM:SS. Data w arkuszu jest liczbą zależną od stylu komórki, więc odczytana
+   bez uwzględnienia stylu wyglądałaby jak przypadkowa liczba.
+2. Liczba ma piętnaście cyfr znaczących, jak w arkuszu, więc 0,1 dodane do 0,2
+   nie daje zapisu 0,30000000000000004. Liczba całkowita nie ma części dziesiętnej.
+3. Komórka o formacie procentowym jest zapisana jako procent.
+4. Wartość logiczna to „prawda” albo „fałsz”, a błąd komórki jest zapisany jego nazwą.
+
+Wartości pochodzą z zapisanych w pliku wyników formuł. Formuła, której wyniku
+nie zapisano, na przykład w arkuszu wygenerowanym programem bez silnika obliczeń,
+dałaby pustą komórkę, więc ich liczba trafia do ostrzeżeń, wraz ze wskazówką, żeby
+otworzyć plik w programie arkusza i zapisać go ponownie.
+
+Komórki z formatem walutowym są zapisane jako same liczby, bez symbolu waluty:
+format waluty nie jest odtwarzany, a liczba bez jednostki mogłaby zostać
+odebrana jako liczba bez jednostki, więc liczba takich komórek trafia do ostrzeżeń.
+To różnica wobec ODS, gdzie komórka jest zapisana tak, jak widzi ją użytkownik.
+Wykresy i obrazy nie są odczytywane i są zgłaszane w ostrzeżeniach. Makra w pliku
+XLSM nie są uruchamiane ani odczytywane. Skoroszyt zaszyfrowany hasłem jest
+odrzucany z komunikatem.
+
+### RTF
+
+Plik RTF jest czytany biblioteką `striprtf`. Polskie znaki są dekodowane według
+strony kodowej zapisanej w samym pliku, więc „ą” i „ż” się nie zamieniają.
+Biblioteka zwraca sam tekst, bez struktury, więc poziom pewności struktury jest
+niski i nie powstają bloki. Tabela jest spłaszczona do wierszy z komórkami
+rozdzielonymi kreską pionową: struktura tabeli jest uproszczona, a nie zgubiona,
+i plik z tabelą dostaje o tym ostrzeżenie. Obrazy i obiekty osadzone nie są
+odczytywane i są zgłaszane w ostrzeżeniach.
+
+### Pliki DOC i PPT przez LibreOffice
+
+Dla starych formatów binarnych Worda i PowerPointa nie ma dobrej biblioteki
+w czystym Pythonie, więc LibreOffice zamienia DOC na DOCX, a PPT na PPTX,
+i dalej pracują zwykłe ekstraktory. Wynik niesie ostrzeżenie, że treść przeszła
+przez konwersję, bo jest ona przybliżeniem: tekst zostaje, ale układ złożonego
+dokumentu mógł się zmienić. Aplikacja używa pliku konsolowego `soffice.com`,
+a nie `soffice.exe`, który otwiera okno i blokuje proces. Konwersja odbywa się
+w osobnym, tymczasowym profilu, więc nie koliduje z otwartym LibreOffice, a plik
+jest zapisywany wyłącznie w katalogu tymczasowym systemu. Limit czasu jednej
+konwersji to trzy minuty.
+
+Brak LibreOffice nie zatrzymuje aplikacji: plik DOC albo PPT dostaje status
+„pominiete” z komunikatem, że brakuje programu i że można zapisać plik w nowszym
+formacie, a pozostałe źródła i formaty działają normalnie. Ścieżkę programu można
+wskazać kluczem konfiguracji `sciezka_libreoffice`.
+
+### TSV
+
+Plik TSV to ta sama tabela co CSV, z ogranicznikiem tabulatora zadanym przez
+format. Ogranicznik nie jest zgadywany: plik TSV z przecinkami w komórkach nie
+może zostać rozbity po przecinku tylko dlatego, że rozpoznawanie ogranicznika
+uznałoby je za częstsze.
+
+## Pliki tekstu prostego
+
+JSON, XML, YAML, YML, TOML, INI, CFG i LOG są zapisywane jako zwykły tekst, z
+wykrytym kodowaniem i bez interpretowania struktury. Struktura tych plików jest
+informacją, więc nie jest przepisywana na prozę, a plik dostaje typ „plik
+tekstowy” i niski poziom pewności struktury, jak plik TXT. Plik nie dostaje
+tytułu z pierwszego wiersza, bo pierwszy wiersz pliku JSON to zwykle sam nawias,
+a pliku XML deklaracja; nazwa pliku jest w nagłówku metadanych jako „Plik”.
+Bardzo duży plik podlega normalnym limitom słów i rozmiaru, a podział na części
+idzie tą samą drogą co przy każdym innym źródle. Plik `.env` nie jest obsługiwany,
+bo takie pliki zawierają sekrety.
+
 ## Nagrania audio i transkrypcja mowy
 
 Obsługiwane formaty nagrań to MP3, WAV, M4A, FLAC, OGG, OPUS i AAC. Plik audio
@@ -963,7 +1095,9 @@ przechodzące przez rozpoznawanie treści dostaje ocenę jakości: „poprawna�
 
 Oceniane są strony internetowe i filmy, bo ich treść powstaje przez ekstrakcję
 albo przez napisy, a od etapu czwartego także pliki PDF, DOCX, EPUB i HTML
-lokalny, z tego samego powodu. Tekst wklejony oraz pliki TXT i MD nie są
+lokalny, a od etapu czternastego także ODT, RTF i DOC, z tego samego powodu.
+Arkusze i prezentacje nie są oceniane: z natury formatu są tabelami i slajdami,
+a nie prozą, więc nie mają tytułu ani akapitów. Tekst wklejony oraz pliki TXT i MD nie są
 oceniane, bo ich treść jest dokładnie tym, co podał użytkownik.
 
 Obrazy mają własną, osobną ocenę: jakość tekstu rozpoznanego przez OCR. Wynik

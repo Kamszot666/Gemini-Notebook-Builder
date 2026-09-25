@@ -221,6 +221,27 @@ pliku wynikowego.
 - `gnb/extractors/plik_epub.py` — rozdziały EPUB w kolejności `spine` przez
   `EbookLib`, z pominięciem dokumentu nawigacyjnego i rekurencyjnym wejściem
   w kontenery `div`, `section` i `article`. Wysoki poziom pewności struktury.
+- `gnb/extractors/pakiet_xml.py` — bezpieczny odczyt archiwów ZIP z plikami XML,
+  wspólny dla ODF i PPTX: ograniczenie rozmiaru rozpakowanego wpisu według
+  deklaracji i faktycznego odczytu, odrzucanie deklaracji typu dokumentu
+  i encji, odczyt wyłącznie do pamięci.
+- `gnb/extractors/blok_tabeli.py` — budowa bloku tabeli z wierszy komórek
+  z wyrównaniem szerokości, wspólna dla arkuszy, ODF i PPTX.
+- `gnb/extractors/plik_odf.py` — ODT, ODS i ODP wyłącznie biblioteką standardową,
+  wysoki poziom pewności struktury.
+- `gnb/extractors/plik_pptx.py` — PPTX wyłącznie biblioteką standardową, z kolejnością
+  slajdów z listy prezentacji.
+- `gnb/extractors/arkusze.py` — wspólne zasady zapisu wartości komórek arkusza;
+  `gnb/extractors/plik_xlsx.py` (biblioteka `openpyxl`, tryb strumieniowy)
+  i `gnb/extractors/plik_xls.py` (biblioteka `xlrd`).
+- `gnb/extractors/plik_rtf.py` — RTF biblioteką `striprtf`, niski poziom pewności
+  struktury.
+- `gnb/extractors/libreoffice.py` — wykrywanie pliku `soffice.com` i konwersja
+  w tymczasowym profilu; `gnb/extractors/plik_libreoffice.py` — ekstraktory DOC
+  i PPT, które konwertują plik na DOCX i PPTX i oddają go ekstraktorom tych formatów.
+- `gnb/extractors/plik_csv.py` obsługuje też TSV, z ogranicznikiem zadanym przez
+  format; `gnb/extractors/tekst.py` obsługuje też pliki tekstu prostego JSON, XML,
+  YAML, TOML, INI, CFG i LOG.
 - `gnb/extractors/dane_strukturalne.py` — odczyt metadanych artykułu z bloku
   JSON-LD strony oraz scalanie ich z metadanymi ekstraktora, z zachowaniem obu
   wartości przy rozbieżności.

@@ -1,4 +1,4 @@
-# Konfiguracja — stan po etapie trzynastym
+# Konfiguracja — stan po etapie czternastym
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
 obsługuje po etapie trzynastym. Z listy w sekcji jedenastej a pliku
@@ -251,6 +251,16 @@ opisane niżej jako pierwsze — reszta odczytu nie ma żadnych ustawień.
    źródła, tak samo jak brak FFmpega albo Tesseracta.
    Limit czasu rozpoznawania (trzydzieści minut na stronę) jest stałą w
    kodzie, wzorem limitów Tesseracta i FFmpega, a nie polem konfiguracji.
+4. `sciezka_libreoffice`, zmienna `GNB_SCIEZKA_LIBREOFFICE`. Pełna ścieżka
+   pliku `soffice.com` programu LibreOffice. Domyślnie pusta, co oznacza
+   odnalezienie go w zmiennej PATH oraz w znanych miejscach instalacji na
+   Windows. LibreOffice jest uruchamiany wyłącznie do odczytu starych plików DOC
+   i PPT — patrz `docs/FORMATS.md`, sekcja „Pliki DOC i PPT przez LibreOffice”.
+   Należy wskazywać plik konsolowy `soffice.com`, a nie `soffice.exe`, który
+   otwiera okno i blokuje proces. Wskazanie nieistniejącego pliku jest błędem
+   konfiguracji; brak LibreOffice w ogóle nie jest błędem konfiguracji, tylko
+   statusem „pominiete” pojedynczego źródła DOC albo PPT. Limit czasu jednej
+   konwersji (trzy minuty) jest stałą w kodzie, a nie polem konfiguracji.
 
 ## Pola transkrypcji nagrań mowy
 
@@ -434,6 +444,7 @@ sciezka_tessdata = ""
 
 sciezka_musescore = ""
 sciezka_audiveris = ""
+sciezka_libreoffice = ""
 nuty_zapis_dzwiekow_wlaczony = true
 
 transkrypcja_wlaczona = true

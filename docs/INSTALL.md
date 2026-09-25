@@ -1,4 +1,4 @@
-# Instalacja — stan po etapie dwunastym
+# Instalacja — stan po etapie czternastym
 
 Ten dokument opisuje przygotowanie środowiska do pracy z aplikacją: Pythona,
 środowiska wirtualnego, zależności oraz narzędzi zewnętrznych. Narzędzia
@@ -221,10 +221,35 @@ poleceniem `java -jar`. Bez Audiverisa pliki PDF i obrazy oznaczone opcją
 `--nuty` dostają status źródła „pominiete” z czytelnym komunikatem, a reszta
 aplikacji działa dalej bez zmian.
 
-### LibreOffice — pliki ODT
+### Etap czternasty: LibreOffice — pliki DOC i PPT
 
-LibreOffice w trybie bez okna jest potrzebny do importu plików ODT. Obsługa ODT
-nie jest jeszcze zrealizowana.
+LibreOffice jest potrzebny wyłącznie do starych formatów binarnych DOC i PPT:
+zamienia je w trybie bez okna na DOCX i PPTX, a dalej pracują zwykłe adaptery.
+Wszystkie pozostałe formaty biurowe, czyli ODT, ODS, ODP, PPTX, XLSX, XLS i RTF,
+aplikacja czyta sama, bez LibreOffice. Bez LibreOffice pliki DOC i PPT dostają
+status „pominiete” z czytelnym komunikatem, a reszta aplikacji działa bez zmian.
+
+Zainstaluj LibreOffice zwykłym instalatorem. Aplikacja używa pliku konsolowego
+`soffice.com` z katalogu `program`, który zwraca sterowanie natychmiast; plik
+`soffice.exe` otwiera okno i blokuje proces, więc go nie używa. Zwykle instalator
+nie dopisuje programu do zmiennej PATH, ale aplikacja szuka go w katalogu
+`Program Files`. Jeżeli zainstalowałeś go gdzie indziej, wskaż plik kluczem
+konfiguracji `sciezka_libreoffice`. Polecenie `python -m gnb.cli diagnostyka`
+pokazuje, czy LibreOffice został znaleziony, i w jakiej jest wersji.
+
+Aplikacja używa własnego, tymczasowego profilu LibreOffice, więc nie przeszkadza
+Ci, gdy masz program otwarty, i nie zmienia Twoich ustawień. Pierwsza konwersja
+w danym uruchomieniu trwa kilkanaście sekund, bo program tworzy ten profil.
+
+### Etap czternasty: biblioteki dla arkuszy i RTF
+
+Odczyt XLSX, XLS i RTF wymaga trzech bibliotek w czystym Pythonie: `openpyxl`
+(wraz z `et-xmlfile`), `xlrd` i `striprtf`. Są zależnościami podstawowymi, więc
+instalują się razem z aplikacją poleceniem z sekcji 4. Wszystkie mają wyłącznie
+koła `py3-none-any`, bez plików DLL ani PYD, więc nie budzą sprzeciwu kontroli
+aplikacji Windows. Licencje: `openpyxl` i `et-xmlfile` MIT, `xlrd` BSD,
+`striprtf` BSD-3-Clause. Jeżeli aktualizujesz istniejące środowisko, uruchom
+ponownie `pip install -e ".[dev]"`.
 
 ## 7. Dogranie polskich danych językowych Tesseracta
 

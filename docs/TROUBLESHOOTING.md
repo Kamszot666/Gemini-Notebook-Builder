@@ -42,6 +42,9 @@ ozdobników, a polecenia do wpisania są w osobnych blokach.
     z dysku”.
 27. Strona za logowaniem została pominięta zamiast zapisana.
 28. Plik grupy zmienił nazwę po dodaniu kolejnego źródła.
+29. Plik DOC albo PPT dostał status „pominiete”: brak LibreOffice.
+30. Arkusz XLSX ma puste komórki tam, gdzie w programie były wyniki.
+31. W arkuszu liczby są bez waluty albo RTF ma uproszczoną tabelę.
 
 ## 1. Windows blokuje plik wykonywalny narzędzia deweloperskiego
 
@@ -626,3 +629,48 @@ się razem z nim. Stary plik jest usuwany dopiero po zapisaniu nowego.
 Co zrobić. Niczego nie naprawiaj. Do notatnika wgraj nowy plik, a stary
 zastąp albo usuń w notatniku. Manifest ma pełny wykaz zastąpień w liście
 `zastapione_pliki_grup`.
+
+## 29. Plik DOC albo PPT dostał status „pominiete”: brak LibreOffice
+
+Objaw. W raporcie, w sekcji „Źródła nieprzetworzone”, jest stary plik DOC albo PPT
+z powodem, że nie znaleziono programu LibreOffice.
+
+Przyczyna. Stare formaty binarne Worda i PowerPointa nie mają dobrej biblioteki
+w czystym Pythonie, więc aplikacja zamienia je na DOCX i PPTX programem
+LibreOffice. Bez niego taki plik jest pomijany, a reszta aplikacji działa dalej.
+
+Co zrobić. Zainstaluj LibreOffice albo wskaż plik `soffice.com` kluczem
+konfiguracji `sciezka_libreoffice`, a potem dodaj plik jeszcze raz. Polecenie
+`python -m gnb.cli diagnostyka` pokazuje, czy program został znaleziony. Możesz też
+zapisać plik w nowszym formacie, DOCX albo PPTX, i dodać go zamiast starego.
+Uwaga: wskazuj `soffice.com`, a nie `soffice.exe`, który otwiera okno i blokuje
+proces.
+
+## 30. Arkusz XLSX ma puste komórki tam, gdzie w programie były wyniki
+
+Objaw. Źródło jest w materiałach do sprawdzenia z ostrzeżeniem o formułach bez
+zapisanego wyniku, a w tabeli są puste komórki.
+
+Przyczyna. Arkusz czyta się z wyników formuł zapisanych w pliku, a nie z samych
+formuł. Program, który wygenerował plik, na przykład skrypt, nie zapisał wyników,
+więc komórki z formułami są puste.
+
+Co zrobić. Otwórz plik w programie arkusza, zapisz go ponownie, żeby wyniki
+zostały zapisane, i dodaj plik jeszcze raz. Bez ponownego zapisu treść tych
+komórek nie jest dostępna.
+
+## 31. W arkuszu liczby są bez waluty albo RTF ma uproszczoną tabelę
+
+Objaw. W plikach wynikowych liczba z arkusza XLSX albo XLS nie ma symbolu waluty,
+a tabela z pliku RTF jest wierszami z komórkami rozdzielonymi kreską pionową.
+
+Przyczyna. To świadome ograniczenia odczytu. XLSX i XLS zapisują komórkę jako
+liczbę, bez formatu waluty, i zgłaszają to ostrzeżeniem z liczbą takich komórek.
+Biblioteka odczytu RTF nie zachowuje struktury tabeli, więc spłaszcza ją do
+wierszy, i zgłasza to ostrzeżeniem. W ODS komórka jest zapisana tak, jak widzi ją
+użytkownik, z walutą.
+
+Co zrobić. Jeżeli jednostka ma znaczenie, dopisz ją do nagłówka kolumny w pliku
+źródłowym albo zapisz arkusz w formacie ODS, który zachowuje widoczną postać
+komórki. Tabelę z RTF zapisz w formacie DOCX albo ODT, jeżeli jej struktura jest
+ważna.

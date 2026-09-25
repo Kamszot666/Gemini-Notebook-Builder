@@ -1,4 +1,4 @@
-# Dokumentacja Gemini Notebook Builder — stan po etapie dwunastym
+# Dokumentacja Gemini Notebook Builder — stan po etapie czternastym
 
 Ten katalog zawiera dokumentację użytkową projektu, po polsku. Pełne zasady
 projektu, kontrakty danych i kolejność etapów opisuje `CLAUDE.md` w katalogu
@@ -24,7 +24,7 @@ Po etapie dwunastym, obok tego pliku, istnieje sześć dokumentów:
    pobierania, napisów filmów, deduplikacji, OCR, transkrypcji nagrań mowy
    i grafiki, wspólnej pamięci podręcznej oraz interfejsu WWW.
 4. `FORMATS.md` — obsługiwane wejścia, w tym adresy stron internetowych i filmów
-   z serwisu YouTube, formaty dokumentowe, obrazy, OCR skanowanego PDF, nagrania
+   z serwisu YouTube, formaty dokumentowe i biurowe, obrazy, OCR skanowanego PDF, nagrania
    mowy i ich transkrypcja, materiały nutowe MIDI, MusicXML, MXL i Guitar Pro,
    kodowanie tekstu, obsługa błędów sieciowych, ocena jakości ekstrakcji,
    ostrzeżenia ekstraktorów, reguła wyboru między plikiem TXT a plikiem MD oraz

@@ -584,6 +584,11 @@ def uruchom_przetwarzanie(
     print(f"Źródła przetworzone: {wynik.liczba_przetworzonych}")
     print(f"Źródła pominięte: {wynik.liczba_pominietych}")
     print(f"Źródła z błędem: {wynik.liczba_bledow}")
+    if wynik.liczba_pominietych_z_archiwow:
+        print(
+            f"Pominięte pliki i archiwa ZIP: {wynik.liczba_pominietych_z_archiwow}. "
+            "Wykaz z powodami jest w raporcie końcowym."
+        )
     print(f"Manifest: {wynik.sciezka_manifestu}")
     print(f"Raport końcowy: {wynik.sciezka_raportu}")
     print("")

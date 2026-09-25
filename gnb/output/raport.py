@@ -123,6 +123,23 @@ class ZastapienieNieudane:
 
 
 @dataclass(frozen=True, slots=True)
+class ArchiwumWRaporcie:
+    """Archiwum ZIP dodane do projektu, z liczbą przyjętych plików i wykazem pominiętych.
+
+    Archiwum nie jest źródłem, ale każdy jego pominięty element trafia do raportu
+    z powodem, tą samą drogą co pominięte źródło: pominięcie po cichu jest gorsze
+    niż błąd. Status „pominiete” oznacza, że pominięto całe archiwum.
+    """
+
+    nazwa: str
+    status: str
+    komunikat: str | None = None
+    liczba_przyjetych: int = 0
+    pominiete: tuple[tuple[str, str], ...] = ()
+    ostrzezenia: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class PodsumowanieProjektu:
     """Zestaw liczb i wykaz źródeł nieprzetworzonych, potrzebne do raportu końcowego."""
 
@@ -151,6 +168,7 @@ class PodsumowanieProjektu:
     zrodla_zweryfikowane: tuple[ZrodloZweryfikowane, ...] = ()
     zastapione_pliki: tuple[ZastapionyPlik, ...] = ()
     nieudane_zastapienia: tuple[ZastapienieNieudane, ...] = ()
+    archiwa: tuple[ArchiwumWRaporcie, ...] = ()
 
 
 def zbuduj_raport(nazwa_projektu: str, podsumowanie: PodsumowanieProjektu) -> str:
@@ -193,6 +211,7 @@ def zbuduj_raport(nazwa_projektu: str, podsumowanie: PodsumowanieProjektu) -> st
         )
     wiersze.extend(_wiersze_zrodel_nieprzetworzonych(podsumowanie.zrodla_nieprzetworzone))
     wiersze.extend(_wiersze_zrodel_juz_w_projekcie(podsumowanie.zrodla_juz_w_projekcie))
+    wiersze.extend(_wiersze_archiwow(podsumowanie.archiwa))
     wiersze.extend(_wiersze_zastapionych_plikow(podsumowanie.zastapione_pliki))
     wiersze.extend(_wiersze_nieudanych_zastapien(podsumowanie.nieudane_zastapienia))
     wiersze.extend(_wiersze_zrodel_zweryfikowanych(podsumowanie.zrodla_zweryfikowane))
@@ -228,6 +247,28 @@ def _wiersze_zrodel_juz_w_projekcie(
         wiersze.append(f"  Identyfikator: {zrodlo.identyfikator}")
         wiersze.append(f"  Status: {zrodlo.status}")
         wiersze.append(f"  {_wiersz_plikow_wynikowych(zrodlo.pliki_wynikowe)}")
+        wiersze.append("")
+    return wiersze[:-1]
+
+
+def _wiersze_archiwow(archiwa: tuple[ArchiwumWRaporcie, ...]) -> list[str]:
+    """Buduje wykaz archiwów ZIP wraz z pominiętymi plikami i ostrzeżeniami."""
+    if not archiwa:
+        return []
+    wiersze = ["", "Archiwa ZIP, liczba: " + str(len(archiwa)), ""]
+    for archiwum in archiwa:
+        wiersze.append(f"Archiwum: {archiwum.nazwa}")
+        if archiwum.status == "pominiete":
+            wiersze.append("  Całe archiwum zostało pominięte.")
+            if archiwum.komunikat:
+                wiersze.append(f"  Powód: {archiwum.komunikat}")
+        else:
+            wiersze.append(f"  Przyjęte pliki: {archiwum.liczba_przyjetych}")
+            wiersze.append(f"  Pominięte pliki: {len(archiwum.pominiete)}")
+        for sciezka, powod in archiwum.pominiete:
+            wiersze.append(f"    Pominięto: {sciezka}. Powód: {powod}")
+        for ostrzezenie in archiwum.ostrzezenia:
+            wiersze.append(f"  Uwaga: {ostrzezenie}")
         wiersze.append("")
     return wiersze[:-1]
 

@@ -144,6 +144,10 @@ DOMYSLNA_SCIEZKA_MUSESCORE = ""
 # dziesiątego, patrz gnb/music/audiveris.py.
 DOMYSLNA_SCIEZKA_AUDIVERIS = ""
 DOMYSLNA_SCIEZKA_LIBREOFFICE = ""
+DOMYSLNY_ZIP_MAKSYMALNA_LICZBA_PLIKOW = 200
+DOMYSLNY_ZIP_MAKSYMALNY_ROZMIAR_MB = 500
+DOMYSLNY_ZIP_MAKSYMALNY_STOSUNEK_KOMPRESJI = 200
+DOMYSLNY_ZIP_MAKSYMALNE_ZAGLEBIENIE = 2
 
 # Włączenie zapisu dźwięków ścieżek strunowych w opisie materiału nutowego
 # Guitar Pro, dodane w etapie trzynastym. Domyślnie włączone, bo to jest cel,
@@ -269,6 +273,10 @@ _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
     PREFIKS_ZMIENNYCH + "SCIEZKA_MUSESCORE": "sciezka_musescore",
     PREFIKS_ZMIENNYCH + "SCIEZKA_AUDIVERIS": "sciezka_audiveris",
     PREFIKS_ZMIENNYCH + "SCIEZKA_LIBREOFFICE": "sciezka_libreoffice",
+    PREFIKS_ZMIENNYCH + "ZIP_MAKS_PLIKOW": "zip_maks_plikow",
+    PREFIKS_ZMIENNYCH + "ZIP_MAKS_ROZMIAR_MB": "zip_maks_rozmiar_mb",
+    PREFIKS_ZMIENNYCH + "ZIP_MAKS_STOSUNEK_KOMPRESJI": "zip_maks_stosunek_kompresji",
+    PREFIKS_ZMIENNYCH + "ZIP_MAKS_ZAGLEBIENIE": "zip_maks_zaglebienie",
     PREFIKS_ZMIENNYCH + "NUTY_ZAPIS_DZWIEKOW_WLACZONY": "nuty_zapis_dzwiekow_wlaczony",
     PREFIKS_ZMIENNYCH + "TRANSKRYPCJA_WLACZONA": "transkrypcja_wlaczona",
     PREFIKS_ZMIENNYCH + "TRANSKRYPCJA_MODEL": "transkrypcja_model",
@@ -359,6 +367,10 @@ class Konfiguracja:
     sciezka_musescore: str = DOMYSLNA_SCIEZKA_MUSESCORE
     sciezka_audiveris: str = DOMYSLNA_SCIEZKA_AUDIVERIS
     sciezka_libreoffice: str = DOMYSLNA_SCIEZKA_LIBREOFFICE
+    zip_maks_plikow: int = DOMYSLNY_ZIP_MAKSYMALNA_LICZBA_PLIKOW
+    zip_maks_rozmiar_mb: int = DOMYSLNY_ZIP_MAKSYMALNY_ROZMIAR_MB
+    zip_maks_stosunek_kompresji: int = DOMYSLNY_ZIP_MAKSYMALNY_STOSUNEK_KOMPRESJI
+    zip_maks_zaglebienie: int = DOMYSLNY_ZIP_MAKSYMALNE_ZAGLEBIENIE
     nuty_zapis_dzwiekow_wlaczony: bool = DOMYSLNY_NUTY_ZAPIS_DZWIEKOW_WLACZONY
     transkrypcja_wlaczona: bool = DOMYSLNA_TRANSKRYPCJA_WLACZONA
     transkrypcja_model: str = DOMYSLNY_TRANSKRYPCJA_MODEL
@@ -528,6 +540,16 @@ def wczytaj_konfiguracje(
         ),
         sciezka_libreoffice=_jako_sciezka_pliku(
             scalone, "sciezka_libreoffice", domyslna.sciezka_libreoffice
+        ),
+        zip_maks_plikow=_jako_liczba(scalone, "zip_maks_plikow", domyslna.zip_maks_plikow),
+        zip_maks_rozmiar_mb=_jako_liczba(
+            scalone, "zip_maks_rozmiar_mb", domyslna.zip_maks_rozmiar_mb
+        ),
+        zip_maks_stosunek_kompresji=_jako_liczba(
+            scalone, "zip_maks_stosunek_kompresji", domyslna.zip_maks_stosunek_kompresji
+        ),
+        zip_maks_zaglebienie=_jako_liczba(
+            scalone, "zip_maks_zaglebienie", domyslna.zip_maks_zaglebienie
         ),
         nuty_zapis_dzwiekow_wlaczony=_jako_prawda_falsz(
             scalone, "nuty_zapis_dzwiekow_wlaczony", domyslna.nuty_zapis_dzwiekow_wlaczony

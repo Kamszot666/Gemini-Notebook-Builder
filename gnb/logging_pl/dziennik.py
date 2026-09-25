@@ -60,6 +60,9 @@ ZDARZENIE_ZRODLO_ZWERYFIKOWANE = "Źródło zweryfikowane ręcznie"
 ZDARZENIE_ZRODLO_USUNIETE = "Źródło usunięte z projektu"
 ZDARZENIE_TRESC_ZASTAPIONA = "Treść źródła zastąpiona plikiem"
 ZDARZENIE_ZASTAPIENIE_NIEUDANE = "Uwaga, zastąpienie treści źródła nie powiodło się"
+ZDARZENIE_ARCHIWUM_ROZWINIETE = "Archiwum ZIP rozwinięte"
+ZDARZENIE_ARCHIWUM_POMINIETE = "Uwaga, archiwum ZIP pominięte"
+ZDARZENIE_ARCHIWUM_SLOTY = "Uwaga, archiwum ZIP może nie zmieścić się w limicie źródeł"
 
 _FORMAT_LOGU_SZCZEGOLOWEGO = (
     "%(asctime)s|%(levelname)s|%(name)s|%(identyfikator_zrodla)s|%(message)s"

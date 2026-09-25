@@ -58,6 +58,32 @@ class WpisZrodla:
     ostrzezenia_pakowania: tuple[str, ...] = ()
     zweryfikowane_recznie: bool = False
     tresc_zastapiona_plikiem: str | None = None
+    archiwum: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class WpisPlikuArchiwum:
+    """Wiersz manifestu o jednym pliku z archiwum ZIP: przyjętym albo pominiętym z powodem."""
+
+    sciezka: str
+    status: str
+    format: str = ""
+    rozmiar_bajtow: int = 0
+    komunikat: str | None = None
+    suma_kontrolna: str | None = None
+    identyfikator_zrodla: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class WpisArchiwumManifestu:
+    """Wiersz manifestu opisujący archiwum ZIP wraz z listą jego zawartości."""
+
+    nazwa: str
+    suma_kontrolna: str
+    status: str
+    komunikat: str | None = None
+    ostrzezenia: tuple[str, ...] = ()
+    pliki: tuple[WpisPlikuArchiwum, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +151,7 @@ class Manifest:
     wyniki: tuple[WpisWyniku, ...]
     deduplikacja: tuple[WpisDeduplikacji, ...] = ()
     zastapione_pliki_grup: tuple[WpisZastapionegoPlikuGrupy, ...] = ()
+    archiwa: tuple[WpisArchiwumManifestu, ...] = ()
 
 
 def zapisz_manifest(sciezka_json: Path, sciezka_txt: Path, manifest: Manifest) -> None:
@@ -163,6 +190,7 @@ def _do_slownika(manifest: Manifest) -> dict[str, Any]:
                 "ostrzezenia_pakowania": list(wpis.ostrzezenia_pakowania),
                 "zweryfikowane_recznie": wpis.zweryfikowane_recznie,
                 "tresc_zastapiona_plikiem": wpis.tresc_zastapiona_plikiem,
+                "archiwum": wpis.archiwum,
             }
             for wpis in manifest.zrodla
         ],
@@ -197,6 +225,28 @@ def _do_slownika(manifest: Manifest) -> dict[str, Any]:
         "zastapione_pliki_grup": [
             {"stara_nazwa": wpis.stara_nazwa, "nowa_nazwa": wpis.nowa_nazwa, "grupa": wpis.grupa}
             for wpis in manifest.zastapione_pliki_grup
+        ],
+        "archiwa": [
+            {
+                "nazwa": archiwum.nazwa,
+                "suma_kontrolna": archiwum.suma_kontrolna,
+                "status": archiwum.status,
+                "komunikat": archiwum.komunikat,
+                "ostrzezenia": list(archiwum.ostrzezenia),
+                "pliki": [
+                    {
+                        "sciezka": plik.sciezka,
+                        "status": plik.status,
+                        "format": plik.format,
+                        "rozmiar_bajtow": plik.rozmiar_bajtow,
+                        "komunikat": plik.komunikat,
+                        "suma_kontrolna": plik.suma_kontrolna,
+                        "identyfikator_zrodla": plik.identyfikator_zrodla,
+                    }
+                    for plik in archiwum.pliki
+                ],
+            }
+            for archiwum in manifest.archiwa
         ],
     }
 
@@ -239,6 +289,8 @@ def zbuduj_widok_tekstowy(manifest: Manifest) -> str:
             wiersze.extend(f"    - {warunek}" for warunek in wpis_zrodla.uzasadnienie_md)
         if wpis_zrodla.grupa_pakowania:
             wiersze.append(f"  Grupa pakowania: {wpis_zrodla.grupa_pakowania}")
+        if wpis_zrodla.archiwum:
+            wiersze.append(f"  Pochodzi z archiwum: {wpis_zrodla.archiwum}")
         if wpis_zrodla.zweryfikowane_recznie:
             wiersze.append("  Zweryfikowane ręcznie przez użytkownika: tak")
         if wpis_zrodla.tresc_zastapiona_plikiem:
@@ -308,6 +360,26 @@ def zbuduj_widok_tekstowy(manifest: Manifest) -> str:
                 f"    - {fragment}" for fragment in wpis_dedup.zachowane_fragmenty_unikalne
             )
         wiersze.append("")
+
+    if manifest.archiwa:
+        wiersze.append(f"Archiwa ZIP, liczba: {len(manifest.archiwa)}")
+        wiersze.append("")
+        for archiwum in manifest.archiwa:
+            wiersze.append(f"Archiwum: {archiwum.nazwa}")
+            wiersze.append(f"  Suma kontrolna, skrót: {_skrocona_suma(archiwum.suma_kontrolna)}")
+            wiersze.append(f"  Status: {archiwum.status}")
+            if archiwum.komunikat:
+                wiersze.append(f"  Komunikat: {archiwum.komunikat}")
+            for ostrzezenie in archiwum.ostrzezenia:
+                wiersze.append(f"  Ostrzeżenie: {ostrzezenie}")
+            for plik in archiwum.pliki:
+                wiersze.append(f"  Plik w archiwum: {plik.sciezka}")
+                wiersze.append(f"    Status: {plik.status}")
+                if plik.identyfikator_zrodla:
+                    wiersze.append(f"    Źródło: {plik.identyfikator_zrodla}")
+                if plik.komunikat:
+                    wiersze.append(f"    Komunikat: {plik.komunikat}")
+            wiersze.append("")
 
     if manifest.zastapione_pliki_grup:
         wiersze.append(f"Pliki grup zastąpione, liczba: {len(manifest.zastapione_pliki_grup)}")

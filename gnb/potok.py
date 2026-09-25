@@ -87,6 +87,16 @@ from gnb.extractors.youtube import KOMUNIKAT_NAPISY_BEZ_TRESCI
 from gnb.extractors.youtube import zbuduj_dokument as zbuduj_dokument_z_napisow
 from gnb.images.pdf_tematyczny import ObrazDoPdf, UstawieniaPdf, zbuduj_pdf
 from gnb.images.tesseract import UstawieniaOcr
+from gnb.ingestion.archiwum import (
+    STATUS_POMINIETE as STATUS_ARCHIWUM_POMINIETE,
+)
+from gnb.ingestion.archiwum import (
+    STATUS_WPISU_PRZYJETY,
+    LimityArchiwum,
+    WynikRozwiniecia,
+    czy_archiwum,
+    rozwin_archiwum,
+)
 from gnb.ingestion.pobieranie import (
     OdpowiedzPobrania,
     Pobieracz,
@@ -100,6 +110,7 @@ from gnb.ingestion.wejscie import (
     czy_format_binarny,
     identyfikator_adresu,
     identyfikator_awaryjny,
+    pochodzenie_pliku,
     przyjmij_plik,
     przyjmij_tekst,
     przyjmij_url,
@@ -121,6 +132,9 @@ from gnb.ingestion.youtube import (
 from gnb.logging_pl.dziennik import (
     NAZWA_LOGU_SZCZEGOLOWEGO,
     NAZWA_LOGU_WAZNEGO,
+    ZDARZENIE_ARCHIWUM_POMINIETE,
+    ZDARZENIE_ARCHIWUM_ROZWINIETE,
+    ZDARZENIE_ARCHIWUM_SLOTY,
     ZDARZENIE_CHECKPOINT_ZAPISANY,
     ZDARZENIE_DEDUPLIKACJA_ZAKONCZONA,
     ZDARZENIE_GRUPA_PRZEPAKOWANA,
@@ -157,7 +171,9 @@ from gnb.output import regula_md
 from gnb.output.manifest import WERSJA_SCHEMATU as WERSJA_SCHEMATU_MANIFESTU
 from gnb.output.manifest import (
     Manifest,
+    WpisArchiwumManifestu,
     WpisDeduplikacji,
+    WpisPlikuArchiwum,
     WpisPobrania,
     WpisWyniku,
     WpisZastapionegoPlikuGrupy,
@@ -166,6 +182,7 @@ from gnb.output.manifest import (
 )
 from gnb.output.naglowek_metadanych import (
     ETYKIETA_ADRES,
+    ETYKIETA_ARCHIWUM,
     ETYKIETA_AUTOR,
     ETYKIETA_DATA_IMPORTU,
     ETYKIETA_DATA_PUBLIKACJI,
@@ -186,6 +203,7 @@ from gnb.output.naglowek_metadanych import (
 )
 from gnb.output.ocena_jakosci import OCENA_PODEJRZANA, OcenaJakosci, ocen_jakosc
 from gnb.output.raport import (
+    ArchiwumWRaporcie,
     MaterialDoSprawdzenia,
     PodsumowanieProjektu,
     ZastapienieNieudane,
@@ -211,10 +229,12 @@ from gnb.persistence.checkpoint import WERSJA_SCHEMATU as WERSJA_SCHEMATU_CHECKP
 from gnb.persistence.checkpoint import (
     Checkpoint,
     DecyzjaDeduplikacjiZapis,
+    StanArchiwum,
     StanPobrania,
     StanWyniku,
     StanZrodla,
     WejscieZapis,
+    WpisArchiwumZapis,
     wczytaj,
     zapisz,
 )
@@ -438,6 +458,10 @@ class WynikPrzetwarzania:
     sciezka_manifestu: Path
     sciezka_raportu: Path
     wznowiono: bool
+    # Pliki z archiwów ZIP pominięte z powodem oraz całe archiwa pominięte.
+    # Nie są źródłami, więc nie wchodzą do liczby pominiętych źródeł, ale
+    # pominięcie po cichu jest gorsze niż błąd, więc podsumowanie je liczy.
+    liczba_pominietych_z_archiwow: int = 0
 
 
 def _teraz_utc() -> datetime:
@@ -622,8 +646,6 @@ def przetworz_projekt(
     istniejacy_checkpoint = wczytaj(uklad.checkpoint)
     wznowiono = istniejacy_checkpoint is not None
     checkpoint = istniejacy_checkpoint or _nowy_checkpoint(uklad, konfiguracja, zegar())
-    pozycje = _przypisz_domyslna_grupe_obrazow(pozycje, checkpoint)
-    _zapamietaj_wejscia(checkpoint, pozycje)
 
     dziennik_wazny = DziennikWazny(uklad.logi / NAZWA_LOGU_WAZNEGO, zegar_lokalny)
     with DziennikSzczegolowy(
@@ -638,6 +660,16 @@ def przetworz_projekt(
             uklad.katalog_projektu,
             "tak" if wznowiono else "nie",
         )
+
+        # Archiwa ZIP są rozwijane na osobne pliki zanim wejścia zostaną
+        # zapamiętane w checkpoincie, żeby wznowienie odtwarzało pliki z archiwum,
+        # a nie samo archiwum, i żeby domyślna grupa obrazów objęła je jak każdy
+        # inny obraz.
+        pozycje, rozwiniete_archiwa = _rozwin_archiwa(
+            pozycje, uklad, konfiguracja, checkpoint, zegar(), dziennik_wazny, log
+        )
+        pozycje = _przypisz_domyslna_grupe_obrazow(pozycje, checkpoint)
+        _zapamietaj_wejscia(checkpoint, pozycje)
 
         _odnotuj_brakujace_pliki(uklad, checkpoint, dziennik_wazny, log)
 
@@ -680,6 +712,7 @@ def przetworz_projekt(
             zastepcze,
             ponownie_przetwarzaj_usuniete,
         )
+        wykonanie.ostrzez_o_slotach_archiwow(rozwiniete_archiwa)
         liczba_pozycji = len(pozycje)
         for numer, pozycja in enumerate(pozycje, start=1):
             wykonanie.przetworz(pozycja)
@@ -730,6 +763,7 @@ def przetworz_projekt(
         sciezka_manifestu=uklad.manifest_json,
         sciezka_raportu=uklad.raport,
         wznowiono=wznowiono,
+        liczba_pominietych_z_archiwow=_policz_pominiete_z_archiwow(checkpoint),
     )
 
 
@@ -797,6 +831,7 @@ class _Wykonanie:
             return
 
         identyfikator = zrodlo.identyfikator_zrodla
+        self._powiaz_wpis_archiwum(pozycja, identyfikator)
         plik_zastepczy = self._zastepcze_tresci.get(identyfikator)
         if plik_zastepczy is not None:
             self._zastap_tresc(pozycja, zrodlo, plik_zastepczy)
@@ -871,6 +906,48 @@ class _Wykonanie:
             self._pomin(zrodlo, pozycja, blad.komunikat)
         except BladGnb as blad:
             self._zapisz_blad_zrodla(zrodlo, pozycja, blad)
+
+    def _powiaz_wpis_archiwum(self, pozycja: PozycjaWejsciowa, identyfikator: str) -> None:
+        """Zapisuje identyfikator źródła przy wpisie archiwum, z którego plik pochodzi."""
+        if not pozycja.archiwum:
+            return
+        for archiwum in self._checkpoint.archiwa:
+            if archiwum.nazwa != pozycja.archiwum:
+                continue
+            for wpis in archiwum.wpisy:
+                if wpis.sciezka == pozycja.sciezka_w_archiwum:
+                    wpis.identyfikator_zrodla = identyfikator
+
+    def ostrzez_o_slotach_archiwow(
+        self, rozwiniete: list[tuple[WynikRozwiniecia, StanArchiwum]]
+    ) -> None:
+        """Ostrzega przed przetwarzaniem, gdy plików z archiwum jest więcej niż wolnych slotów.
+
+        Pliki z archiwum nie są łączone w grupę, chyba że użytkownik podał jej
+        nazwę, więc każdy zajmuje własny slot notatnika. Ostrzeżenie idzie do obu
+        logów, do wpisu archiwum w manifeście i do raportu. Przetwarzanie trwa
+        dalej: pliki ponad limit dostają zwykły status pominięcia z powodem.
+        """
+        zmieniono = False
+        for wynik, stan in rozwiniete:
+            if not wynik.pozycje:
+                continue
+            potrzebne = 1 if any(pozycja.grupa for pozycja in wynik.pozycje) else len(wynik.pozycje)
+            wolne = self._konfiguracja.limit_zrodel - self._liczba_aktywnych()
+            if potrzebne <= wolne:
+                continue
+            ostrzezenie = (
+                f"Archiwum ma {len(wynik.pozycje)} plików do przyjęcia i potrzebuje "
+                f"{potrzebne} slotów notatnika, a wolnych jest {max(wolne, 0)}. Pliki ponad "
+                "limit zostaną pominięte. Podaj nazwę grupy, żeby połączyć pliki archiwum "
+                "w jeden plik wynikowy, albo podnieś limit źródeł w konfiguracji."
+            )
+            stan.ostrzezenia.append(ostrzezenie)
+            self._dziennik_wazny.zapisz(_wpis_wazny(ZDARZENIE_ARCHIWUM_SLOTY, wynik.nazwa))
+            self._loguj(logging.WARNING, "-", f"Archiwum „{wynik.nazwa}”: {ostrzezenie}")
+            zmieniono = True
+        if zmieniono:
+            self._zapisz_checkpoint()
 
     def _odnotuj_zrodlo_juz_w_projekcie(self, stan: StanZrodla) -> None:
         """Zapisuje w wykazie i w logu ważnym, że wejście jest źródłem już obecnym w projekcie.
@@ -1092,7 +1169,9 @@ class _Wykonanie:
         if pozycja.wejscie.typ_wejscia is TypWejscia.URL:
             pola[ETYKIETA_ADRES] = pozycja.wejscie.wartosc
         elif pozycja.wejscie.typ_wejscia is TypWejscia.PLIK:
-            pola[ETYKIETA_PLIK] = Path(pozycja.wejscie.wartosc).name
+            pola[ETYKIETA_PLIK] = pozycja.sciezka_w_archiwum or Path(pozycja.wejscie.wartosc).name
+            if pozycja.archiwum:
+                pola[ETYKIETA_ARCHIWUM] = pozycja.archiwum
 
         return zbuduj_naglowek(pola)
 
@@ -1317,6 +1396,7 @@ class _Wykonanie:
             naglowek_metadanych=naglowek,
             grupa_pakowania=pozycja.grupa,
             tresc_zastapiona_plikiem=przygotowane.zastapiona_plikiem,
+            archiwum=pozycja.archiwum,
         )
         self._zapisz_checkpoint()
         self._loguj(
@@ -2211,6 +2291,7 @@ class _Wykonanie:
             format_zrodla=pozycja.format_zrodla,
             status=StatusZrodla.POMINIETE.value,
             komunikat_bledu=komunikat,
+            archiwum=pozycja.archiwum,
         )
         self._zapisz_checkpoint()
         self._dziennik_wazny.zapisz(ZDARZENIE_ZRODLO_POMINIETE)
@@ -2229,6 +2310,7 @@ class _Wykonanie:
             format_zrodla=pozycja.format_zrodla,
             status=StatusZrodla.BLAD.value,
             komunikat_bledu=blad.komunikat,
+            archiwum=pozycja.archiwum,
         )
         self._zapisz_checkpoint()
         self._dziennik_wazny.zapisz(ZDARZENIE_ZRODLO_BLAD)
@@ -2247,7 +2329,7 @@ class _Wykonanie:
         """
         identyfikator = identyfikator_awaryjny(pozycja)
         pochodzenie = (
-            Path(pozycja.wejscie.wartosc).name
+            pochodzenie_pliku(pozycja)
             if pozycja.wejscie.typ_wejscia is TypWejscia.PLIK
             else "tekst wklejony"
         )
@@ -2260,6 +2342,7 @@ class _Wykonanie:
             format_zrodla=pozycja.format_zrodla,
             status=(StatusZrodla.POMINIETE if pominiecie else StatusZrodla.BLAD).value,
             komunikat_bledu=blad.komunikat,
+            archiwum=pozycja.archiwum,
         )
         self._zapisz_checkpoint()
         self._dziennik_wazny.zapisz(
@@ -2732,6 +2815,113 @@ def _zdekoduj_odpowiedz(odpowiedz: OdpowiedzPobrania) -> tuple[str, str]:
     return zdekoduj(odpowiedz.tresc)
 
 
+def _rozwin_archiwa(
+    pozycje: Sequence[PozycjaWejsciowa],
+    uklad: UkladProjektu,
+    konfiguracja: Konfiguracja,
+    checkpoint: Checkpoint,
+    moment: datetime,
+    dziennik_wazny: DziennikWazny,
+    log: logging.Logger,
+) -> tuple[list[PozycjaWejsciowa], list[tuple[WynikRozwiniecia, StanArchiwum]]]:
+    """Zamienia każde archiwum ZIP na listę zwykłych wejść plikowych.
+
+    Archiwum nie jest źródłem, tylko pojemnikiem, więc jego miejsce w liście wejść
+    zajmują pliki z niego, a jego opis, łącznie z pominiętymi plikami i powodem,
+    trafia do checkpointu, do obu logów, do manifestu i do raportu. Ponowne
+    dodanie tego samego archiwum, rozpoznawanego po sumie kontrolnej, zastępuje
+    jego dotychczasowy opis. W dzienniku ważnym jest po jednym wierszu na
+    archiwum, a każdy pominięty plik ma wiersz w logu szczegółowym.
+    """
+    limity = LimityArchiwum.z_konfiguracji(
+        konfiguracja.zip_maks_plikow,
+        konfiguracja.zip_maks_rozmiar_mb,
+        konfiguracja.zip_maks_stosunek_kompresji,
+        konfiguracja.zip_maks_zaglebienie,
+    )
+    wynik_pozycji: list[PozycjaWejsciowa] = []
+    rozwiniete: list[tuple[WynikRozwiniecia, StanArchiwum]] = []
+    for pozycja in pozycje:
+        if pozycja.wejscie.typ_wejscia is not TypWejscia.PLIK or not czy_archiwum(
+            pozycja.format_zrodla
+        ):
+            wynik_pozycji.append(pozycja)
+            continue
+        wynik = rozwin_archiwum(
+            Path(pozycja.wejscie.wartosc),
+            uklad.pliki_wejsciowe / "archiwa",
+            limity,
+            moment,
+            grupa=pozycja.grupa,
+        )
+        stan = StanArchiwum(
+            nazwa=wynik.nazwa,
+            suma_kontrolna=wynik.suma_kontrolna,
+            status=wynik.status,
+            komunikat=wynik.komunikat,
+            wpisy=[
+                WpisArchiwumZapis(
+                    sciezka=wpis.sciezka,
+                    status=wpis.status,
+                    format=wpis.format,
+                    rozmiar_bajtow=wpis.rozmiar_bajtow,
+                    komunikat=wpis.komunikat,
+                    suma_kontrolna=wpis.suma_kontrolna,
+                )
+                for wpis in wynik.wpisy
+            ],
+            ostrzezenia=list(wynik.ostrzezenia),
+        )
+        checkpoint.archiwa = [
+            archiwum
+            for archiwum in checkpoint.archiwa
+            if not (stan.suma_kontrolna and archiwum.suma_kontrolna == stan.suma_kontrolna)
+        ] + [stan]
+        zapisz(uklad.checkpoint, checkpoint)
+        _odnotuj_rozwiniecie_archiwum(wynik, dziennik_wazny, log)
+        wynik_pozycji.extend(wynik.pozycje)
+        rozwiniete.append((wynik, stan))
+    return wynik_pozycji, rozwiniete
+
+
+def _odnotuj_rozwiniecie_archiwum(
+    wynik: WynikRozwiniecia, dziennik_wazny: DziennikWazny, log: logging.Logger
+) -> None:
+    """Zapisuje wynik rozwinięcia archiwum w obu logach, tą samą drogą co pominięcie źródła."""
+    if wynik.status == STATUS_ARCHIWUM_POMINIETE:
+        dziennik_wazny.zapisz(_wpis_wazny(ZDARZENIE_ARCHIWUM_POMINIETE, wynik.nazwa))
+        log.warning(
+            "Archiwum „%s” pominięte: %s",
+            wynik.nazwa,
+            wynik.komunikat,
+            extra={"identyfikator_zrodla": "-"},
+        )
+        return
+    przyjete = sum(1 for wpis in wynik.wpisy if wpis.status == STATUS_WPISU_PRZYJETY)
+    pominiete = [wpis for wpis in wynik.wpisy if wpis.status != STATUS_WPISU_PRZYJETY]
+    dziennik_wazny.zapisz(
+        _wpis_wazny(
+            ZDARZENIE_ARCHIWUM_ROZWINIETE,
+            f"{wynik.nazwa}, przyjęto {przyjete}, pominięto {len(pominiete)}",
+        )
+    )
+    log.info(
+        "Archiwum „%s” rozwinięte: przyjęto %d, pominięto %d.",
+        wynik.nazwa,
+        przyjete,
+        len(pominiete),
+        extra={"identyfikator_zrodla": "-"},
+    )
+    for wpis in pominiete:
+        log.warning(
+            "Archiwum „%s”: pominięto plik %s. Powód: %s",
+            wynik.nazwa,
+            wpis.sciezka,
+            wpis.komunikat,
+            extra={"identyfikator_zrodla": "-"},
+        )
+
+
 def _odnotuj_brakujace_pliki(
     uklad: UkladProjektu,
     checkpoint: Checkpoint,
@@ -2875,6 +3065,8 @@ def _zapamietaj_wejscia(checkpoint: Checkpoint, pozycje: Sequence[PozycjaWejscio
                 moment_dodania=pozycja.wejscie.moment_dodania.isoformat(),
                 grupa=pozycja.grupa,
                 wymus_nuty=pozycja.wymus_nuty,
+                archiwum=pozycja.archiwum,
+                sciezka_w_archiwum=pozycja.sciezka_w_archiwum,
             )
         )
 
@@ -2915,8 +3107,12 @@ def pozycja_z_wejscia(
             grupa=wejscie.grupa,
         )
     if wejscie.typ_wejscia == TypWejscia.PLIK.value:
-        return przyjmij_plik(
-            Path(wejscie.wartosc), moment, grupa=wejscie.grupa, nuty=wejscie.wymus_nuty
+        return replace(
+            przyjmij_plik(
+                Path(wejscie.wartosc), moment, grupa=wejscie.grupa, nuty=wejscie.wymus_nuty
+            ),
+            archiwum=wejscie.archiwum,
+            sciezka_w_archiwum=wejscie.sciezka_w_archiwum,
         )
     if wejscie.typ_wejscia == TypWejscia.TEKST.value:
         return przyjmij_tekst(
@@ -2981,6 +3177,7 @@ def _zbuduj_manifest(uklad: UkladProjektu, checkpoint: Checkpoint) -> Manifest:
                 ostrzezenia_pakowania=tuple(stan.ostrzezenia_pakowania),
                 zweryfikowane_recznie=stan.zweryfikowane_recznie,
                 tresc_zastapiona_plikiem=stan.tresc_zastapiona_plikiem,
+                archiwum=stan.archiwum,
             )
         )
     return Manifest(
@@ -3007,6 +3204,28 @@ def _zbuduj_manifest(uklad: UkladProjektu, checkpoint: Checkpoint) -> Manifest:
             )
             for wpis in checkpoint.zastapione_pliki_grup
             if wpis.nowa_nazwa
+        ),
+        archiwa=tuple(
+            WpisArchiwumManifestu(
+                nazwa=archiwum.nazwa,
+                suma_kontrolna=archiwum.suma_kontrolna,
+                status=archiwum.status,
+                komunikat=archiwum.komunikat,
+                ostrzezenia=tuple(archiwum.ostrzezenia),
+                pliki=tuple(
+                    WpisPlikuArchiwum(
+                        sciezka=wpis.sciezka,
+                        status=wpis.status,
+                        format=wpis.format,
+                        rozmiar_bajtow=wpis.rozmiar_bajtow,
+                        komunikat=wpis.komunikat,
+                        suma_kontrolna=wpis.suma_kontrolna,
+                        identyfikator_zrodla=wpis.identyfikator_zrodla,
+                    )
+                    for wpis in archiwum.wpisy
+                ),
+            )
+            for archiwum in checkpoint.archiwa
         ),
     )
 
@@ -3124,6 +3343,23 @@ def _zbuduj_podsumowanie(
             if wpis.nowa_nazwa
         ),
         nieudane_zastapienia=nieudane_zastapienia,
+        archiwa=tuple(
+            ArchiwumWRaporcie(
+                nazwa=archiwum.nazwa,
+                status=archiwum.status,
+                komunikat=archiwum.komunikat,
+                liczba_przyjetych=sum(
+                    1 for wpis in archiwum.wpisy if wpis.status == STATUS_WPISU_PRZYJETY
+                ),
+                pominiete=tuple(
+                    (wpis.sciezka, wpis.komunikat or "Powód nie został zapisany.")
+                    for wpis in archiwum.wpisy
+                    if wpis.status != STATUS_WPISU_PRZYJETY
+                ),
+                ostrzezenia=tuple(archiwum.ostrzezenia),
+            )
+            for archiwum in checkpoint.archiwa
+        ),
     )
 
 
@@ -3229,6 +3465,16 @@ def _numery_czesci(plan: PlanPliku) -> tuple[int | None, int | None]:
     if not plan.czy_wieloczesciowy:
         return None, None
     return plan.numer_czesci, plan.liczba_czesci
+
+
+def _policz_pominiete_z_archiwow(checkpoint: Checkpoint) -> int:
+    """Liczy pominięte pliki z archiwów ZIP, a całe pominięte archiwum jako jedną pozycję."""
+    return sum(
+        1
+        if archiwum.status == STATUS_ARCHIWUM_POMINIETE
+        else sum(1 for wpis in archiwum.wpisy if wpis.status != STATUS_WPISU_PRZYJETY)
+        for archiwum in checkpoint.archiwa
+    )
 
 
 def _policz_status(checkpoint: Checkpoint, status: StatusZrodla) -> int:

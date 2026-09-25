@@ -136,8 +136,11 @@ FORMATY_PLIKOW_BINARNYCH = (
     | FORMATY_PLIKOW_NUTY
 )
 
+FORMATY_ARCHIWOW = frozenset({"zip"})
+
 FORMATY_PLIKOW = (
-    FORMATY_PLIKOW_TEKSTOWYCH
+    FORMATY_ARCHIWOW
+    | FORMATY_PLIKOW_TEKSTOWYCH
     | FORMATY_PLIKOW_TEKSTU_PROSTEGO
     | FORMATY_PLIKOW_DOKUMENTOW
     | FORMATY_PLIKOW_OBRAZOW
@@ -177,6 +180,13 @@ class PozycjaWejsciowa:
     prawdę sprawia, że plik PDF albo obraz jest traktowany jako materiał nutowy,
     czyli dostaje typ źródła PLIK_NUTY. Formaty jednoznacznie nutowe dostają ten
     typ niezależnie od tej flagi.
+
+    Pola `archiwum` i `sciezka_w_archiwum` są wypełnione wyłącznie dla pliku
+    rozpakowanego z archiwum ZIP: pierwsze niesie nazwę głównego archiwum,
+    drugie ścieżkę pliku wewnątrz niego, a przy archiwach zagnieżdżonych całą
+    drogę rozdzieloną znakiem „»”. Wartość w `wejscie.wartosc` jest wtedy ścieżką
+    rozpakowanego pliku w katalogu projektu, pod nazwą własną, więc nazwa
+    z archiwum służy wyłącznie do opisu pochodzenia.
     """
 
     wejscie: WejscieSurowe
@@ -185,6 +195,8 @@ class PozycjaWejsciowa:
     wskazane_jawnie: bool = True
     grupa: str | None = None
     wymus_nuty: bool = False
+    archiwum: str | None = None
+    sciezka_w_archiwum: str | None = None
 
 
 def przyjmij_tekst(
@@ -387,7 +399,7 @@ def _zrodlo_z_pliku(
     if pozycja.format_zrodla not in FORMATY_PLIKOW:
         raise FormatNieobslugiwany(
             f"Nieobsługiwany format pliku: „{pozycja.format_zrodla or 'brak rozszerzenia'}”. "
-            "Obsługiwane są: txt, md, json, xml, yaml, yml, toml, ini, cfg, log, "
+            "Obsługiwane są: zip, txt, md, json, xml, yaml, yml, toml, ini, cfg, log, "
             "html, htm, xhtml, csv, tsv, srt, vtt, pdf, docx, epub, odt, ods, odp, "
             "pptx, xlsx, xlsm, xls, rtf, doc, ppt, "
             "jpg, jpeg, png, webp, tif, tiff, bmp, gif, heic, heif, "
@@ -400,12 +412,24 @@ def _zrodlo_z_pliku(
     return Zrodlo(
         identyfikator_zrodla=identyfikator_zrodla(typ, suma),
         typ_zrodla=typ,
-        pochodzenie=sciezka.name,
+        pochodzenie=pochodzenie_pliku(pozycja),
         checksum=suma,
         status=StatusZrodla.OCZEKUJE,
         utworzono=moment,
         zaktualizowano=moment,
     )
+
+
+def pochodzenie_pliku(pozycja: PozycjaWejsciowa) -> str:
+    """Zwraca opis pochodzenia pliku: jego nazwę albo drogę wewnątrz archiwum.
+
+    Plik rozpakowany z archiwum leży w katalogu projektu pod nazwą własną, więc
+    jego nazwa nic nie mówi użytkownikowi. Pochodzenie ma postać
+    „archiwum.zip » folder/plik.pdf”.
+    """
+    if pozycja.archiwum and pozycja.sciezka_w_archiwum:
+        return f"{pozycja.archiwum} » {pozycja.sciezka_w_archiwum}"
+    return Path(pozycja.wejscie.wartosc).name
 
 
 def _sprawdz_rozmiar_pliku(sciezka: Path, format_zrodla: str, konfiguracja: Konfiguracja) -> None:

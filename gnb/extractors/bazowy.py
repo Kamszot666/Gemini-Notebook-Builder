@@ -136,6 +136,7 @@ def domyslny_rejestr_binarny(
     wymus_transkrypcje: bool = False,
     sciezka_audiveris: str = "",
     nuty_zapis_dzwiekow_wlaczony: bool = True,
+    sciezka_libreoffice: str = "",
 ) -> RejestrEkstraktorowBinarnych:
     """Buduje rejestr ekstraktorów formatów binarnych.
 
@@ -153,7 +154,10 @@ def domyslny_rejestr_binarny(
     w konfiguracji; pusta wartość oznacza szukanie w PATH i w znanych miejscach
     instalacji. Adapter Guitar Pro, od etapu trzynastego, potrzebuje informacji,
     czy zapis dźwięków ścieżek strunowych jest włączony. Pozostałe dwa adaptery
-    nutowe nie potrzebują żadnych ustawień. Wszystkie te wartości pochodzą
+    nutowe nie potrzebują żadnych ustawień. Adaptery formatów biurowych ODT, ODS,
+    ODP, PPTX, XLSX, XLS i RTF nie potrzebują ustawień, a pliki DOC i PPT
+    potrzebują ścieżki do programu LibreOffice; pusta wartość oznacza szukanie
+    w PATH i w znanych miejscach instalacji. Wszystkie te wartości pochodzą
     z konfiguracji projektu i z opcji wiersza poleceń. Gdy nie podano ustawień,
     OCR i transkrypcja są wyłączone.
     """
@@ -162,11 +166,17 @@ def domyslny_rejestr_binarny(
     from gnb.extractors.plik_docx import EkstraktorDocx
     from gnb.extractors.plik_epub import EkstraktorEpub
     from gnb.extractors.plik_guitarpro import EkstraktorGuitarPro
+    from gnb.extractors.plik_libreoffice import EkstraktorDoc, EkstraktorPpt
     from gnb.extractors.plik_midi import EkstraktorMidi
     from gnb.extractors.plik_musicxml import EkstraktorMusicXml
     from gnb.extractors.plik_nuty_skanowane import EkstraktorNutSkanowanych
     from gnb.extractors.plik_obraz import EkstraktorObrazu
+    from gnb.extractors.plik_odf import EkstraktorOdp, EkstraktorOds, EkstraktorOdt
     from gnb.extractors.plik_pdf import EkstraktorPdf
+    from gnb.extractors.plik_pptx import EkstraktorPptx
+    from gnb.extractors.plik_rtf import EkstraktorRtf
+    from gnb.extractors.plik_xls import EkstraktorXls
+    from gnb.extractors.plik_xlsx import EkstraktorXlsx
     from gnb.images.tesseract import UstawieniaOcr
 
     ustawienia = ustawienia_ocr if isinstance(ustawienia_ocr, UstawieniaOcr) else UstawieniaOcr()
@@ -180,6 +190,15 @@ def domyslny_rejestr_binarny(
             EkstraktorPdf(ustawienia, ocr_wlaczony=ocr_wlaczony),
             EkstraktorDocx(),
             EkstraktorEpub(),
+            EkstraktorOdt(),
+            EkstraktorOds(),
+            EkstraktorOdp(),
+            EkstraktorPptx(),
+            EkstraktorXlsx(),
+            EkstraktorXls(),
+            EkstraktorRtf(),
+            EkstraktorDoc(sciezka_libreoffice),
+            EkstraktorPpt(sciezka_libreoffice),
             EkstraktorObrazu(ustawienia, ocr_wlaczony=ocr_wlaczony),
             EkstraktorAudio(
                 ustawienia_audio,
@@ -210,7 +229,7 @@ def domyslny_rejestr(zachowuj_odnosniki: bool = True) -> RejestrEkstraktorow:
     """
     from gnb.extractors.markdown import EkstraktorMarkdown
     from gnb.extractors.napisy import EkstraktorNapisow
-    from gnb.extractors.plik_csv import EkstraktorCsv
+    from gnb.extractors.plik_csv import EkstraktorCsv, EkstraktorTsv
     from gnb.extractors.strona_www import EkstraktorStronyWww
     from gnb.extractors.tekst import EkstraktorTekstu
 
@@ -219,6 +238,7 @@ def domyslny_rejestr(zachowuj_odnosniki: bool = True) -> RejestrEkstraktorow:
             EkstraktorStronyWww(zachowuj_odnosniki=zachowuj_odnosniki),
             EkstraktorMarkdown(),
             EkstraktorCsv(),
+            EkstraktorTsv(),
             EkstraktorNapisow(),
             EkstraktorTekstu(),
         )

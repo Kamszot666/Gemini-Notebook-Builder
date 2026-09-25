@@ -33,6 +33,7 @@ from gnb.extractors.bloki_markdown import zapisz_bloki_jako_markdown
 
 METODA_EKSTRAKCJI = "csv"
 FORMATY_CSV = frozenset({"csv"})
+FORMATY_TSV = frozenset({"tsv"})
 
 KOMUNIKAT_BRAK_DANYCH = "Plik CSV nie zawiera żadnego wiersza z danymi."
 
@@ -45,13 +46,15 @@ class EkstraktorCsv:
 
     metoda = METODA_EKSTRAKCJI
     tekst_zawiera_znaczniki = True
+    _formaty = FORMATY_CSV
+    _ogranicznik: str | None = None
 
     def obsluguje(self, typ_zrodla: TypZrodla, format_zrodla: str) -> bool:
-        return typ_zrodla is TypZrodla.PLIK_DOKUMENT and format_zrodla in FORMATY_CSV
+        return typ_zrodla is TypZrodla.PLIK_DOKUMENT and format_zrodla in self._formaty
 
     def wyekstrahuj(self, identyfikator_zrodla: str, tekst: str) -> DokumentWyekstrahowany:
         """Wczytuje wiersze CSV i zamienia je na jeden blok tabeli."""
-        wiersze = _wczytaj_wiersze(tekst)
+        wiersze = _wczytaj_wiersze(tekst, self._ogranicznik)
         if not wiersze:
             return DokumentWyekstrahowany(
                 identyfikator_zrodla=identyfikator_zrodla,
@@ -79,7 +82,19 @@ class EkstraktorCsv:
         )
 
 
-def _wczytaj_wiersze(tekst: str) -> list[list[str]]:
+class EkstraktorTsv(EkstraktorCsv):
+    """Ekstraktor plików TSV: ta sama tabela co CSV, z ogranicznikiem tabulatora.
+
+    Ogranicznik jest dany przez format, a nie zgadywany: plik TSV z przecinkami
+    w komórkach nie może być rozbity po przecinku tylko dlatego, że rozpoznawanie
+    ogranicznika uznało je za częstsze.
+    """
+
+    _formaty = FORMATY_TSV
+    _ogranicznik = "\t"
+
+
+def _wczytaj_wiersze(tekst: str, ogranicznik: str | None = None) -> list[list[str]]:
     """Parsuje tekst CSV na wiersze komórek, pomijając wiersze całkiem puste.
 
     Tabulator i znak nowej linii wewnątrz komórki są zamieniane na spację,
@@ -88,8 +103,11 @@ def _wczytaj_wiersze(tekst: str) -> list[list[str]]:
     """
     if not tekst.strip():
         return []
-    dialekt = _rozpoznaj_dialekt(tekst)
-    czytnik = csv.reader(io.StringIO(tekst), dialekt)
+    czytnik = (
+        csv.reader(io.StringIO(tekst), csv.excel, delimiter=ogranicznik)
+        if ogranicznik is not None
+        else csv.reader(io.StringIO(tekst), _rozpoznaj_dialekt(tekst))
+    )
     wiersze: list[list[str]] = []
     for surowy_wiersz in czytnik:
         wiersz = [_oczysc_komorke(komorka) for komorka in surowy_wiersz]

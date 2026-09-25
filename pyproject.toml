@@ -23,6 +23,14 @@ dependencies = [
     "EbookLib>=0.18",
     "httpx>=0.27",
     "markdown-it-py>=3.0",
+    # Odczyt arkuszy XLSX i XLS oraz plików RTF. Wszystkie trzy biblioteki są
+    # w czystym Pythonie i mają wyłącznie koła „py3-none-any”, sprawdzone w PyPI
+    # 25 września 2026 — bez plików DLL ani PYD, więc są zgodne z regułą kontroli
+    # aplikacji Windows z sekcji 18d CLAUDE.md, a ich import sprawdzono zaraz po
+    # instalacji. Licencje: openpyxl i et-xmlfile MIT, xlrd BSD, striprtf BSD-3.
+    "openpyxl>=3.1",
+    "xlrd>=2.0",
+    "striprtf>=0.0.29",
     # Fala dźwiękowa nagrania jest tablicą NumPy: tak przyjmuje ją zarówno filtr
     # wykrywania mowy, jak i transkrypcja. NumPy jest zależnością podstawową, bo
     # dekodowanie audio FFmpegiem działa bez faster-whisper, a fala musi wtedy
@@ -115,6 +123,9 @@ module = [
     "mido.*",
     "guitarpro.*",
     "comtypes.*",
+    "openpyxl.*",
+    "xlrd.*",
+    "striprtf.*",
 ]
 ignore_missing_imports = true
 

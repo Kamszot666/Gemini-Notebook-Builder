@@ -49,12 +49,41 @@ from gnb.normalization.kodowanie import zdekoduj
 # wprost jako tekst, bez dalszego rozpoznawania struktury dokumentu.
 FORMATY_PLIKOW_TEKSTOWYCH = frozenset({"txt", "md"})
 
+# Pliki zapisane zwykłym tekstem, których struktura jest informacją, więc nie jest
+# przepisywana na prozę: dane, konfiguracje i dzienniki. Dostają typ pliku
+# tekstowego i idą przez ekstraktor tekstu płaskiego jak plik TXT. Plik `.env`
+# celowo nie jest tu wymieniony, bo takie pliki zawierają sekrety.
+FORMATY_PLIKOW_TEKSTU_PROSTEGO = frozenset(
+    {"json", "xml", "yaml", "yml", "toml", "ini", "cfg", "log"}
+)
+
 # Formaty plików dokumentowych z etapu czwartego. HTML, CSV, SRT i VTT są
 # tekstowe i rozkodowywane tak samo jak pliki tekstowe, tylko z innym typem
 # źródła. PDF, DOCX i EPUB są kontenerami binarnymi i wymagają odczytu bajtów
 # z pominięciem rozkodowania tekstu, patrz `FORMATY_PLIKOW_BINARNYCH`.
 FORMATY_PLIKOW_DOKUMENTOW = frozenset(
-    {"html", "htm", "xhtml", "csv", "srt", "vtt", "pdf", "docx", "epub"}
+    {
+        "html",
+        "htm",
+        "xhtml",
+        "csv",
+        "tsv",
+        "srt",
+        "vtt",
+        "pdf",
+        "docx",
+        "epub",
+        "odt",
+        "ods",
+        "odp",
+        "pptx",
+        "xlsx",
+        "xlsm",
+        "xls",
+        "rtf",
+        "doc",
+        "ppt",
+    }
 )
 
 # Formaty obrazów z etapu ósmego. HEIC i HEIF wymagają biblioteki opcjonalnej
@@ -85,7 +114,23 @@ FORMATY_NUTY_GUITAR_PRO_NIEOBSLUGIWANE = frozenset({"gp", "gpx"})
 # audio. Rozmiar pliku binarnego jest ograniczony bezpiecznym limitem megabajtów,
 # bo taki plik trzeba wczytać do pamięci w całości.
 FORMATY_PLIKOW_BINARNYCH = (
-    frozenset({"pdf", "docx", "epub"})
+    frozenset(
+        {
+            "pdf",
+            "docx",
+            "epub",
+            "odt",
+            "ods",
+            "odp",
+            "pptx",
+            "xlsx",
+            "xlsm",
+            "xls",
+            "rtf",
+            "doc",
+            "ppt",
+        }
+    )
     | FORMATY_PLIKOW_OBRAZOW
     | FORMATY_PLIKOW_AUDIO
     | FORMATY_PLIKOW_NUTY
@@ -93,6 +138,7 @@ FORMATY_PLIKOW_BINARNYCH = (
 
 FORMATY_PLIKOW = (
     FORMATY_PLIKOW_TEKSTOWYCH
+    | FORMATY_PLIKOW_TEKSTU_PROSTEGO
     | FORMATY_PLIKOW_DOKUMENTOW
     | FORMATY_PLIKOW_OBRAZOW
     | FORMATY_PLIKOW_AUDIO
@@ -341,7 +387,9 @@ def _zrodlo_z_pliku(
     if pozycja.format_zrodla not in FORMATY_PLIKOW:
         raise FormatNieobslugiwany(
             f"Nieobsługiwany format pliku: „{pozycja.format_zrodla or 'brak rozszerzenia'}”. "
-            "Obsługiwane są: txt, md, html, htm, xhtml, csv, srt, vtt, pdf, docx, epub, "
+            "Obsługiwane są: txt, md, json, xml, yaml, yml, toml, ini, cfg, log, "
+            "html, htm, xhtml, csv, tsv, srt, vtt, pdf, docx, epub, odt, ods, odp, "
+            "pptx, xlsx, xlsm, xls, rtf, doc, ppt, "
             "jpg, jpeg, png, webp, tif, tiff, bmp, gif, heic, heif, "
             "mp3, wav, m4a, flac, ogg, opus, aac, "
             "mid, midi, musicxml, mxl, gp3, gp4, gp5."
@@ -398,7 +446,7 @@ def typ_zrodla_dla_pliku(format_zrodla: str, *, wymus_nuty: bool = False) -> Typ
         return TypZrodla.PLIK_NUTY
     if wymus_nuty and (format_zrodla == "pdf" or format_zrodla in FORMATY_PLIKOW_OBRAZOW):
         return TypZrodla.PLIK_NUTY
-    if format_zrodla in FORMATY_PLIKOW_TEKSTOWYCH:
+    if format_zrodla in FORMATY_PLIKOW_TEKSTOWYCH | FORMATY_PLIKOW_TEKSTU_PROSTEGO:
         return TypZrodla.PLIK_TEKSTOWY
     if format_zrodla in FORMATY_PLIKOW_OBRAZOW:
         return TypZrodla.PLIK_OBRAZ

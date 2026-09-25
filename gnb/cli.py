@@ -131,16 +131,17 @@ NARZEDZIA: tuple[Narzedzie, ...] = (
     ),
     Narzedzie(
         nazwa="LibreOffice",
-        polecenia=("soffice",),
+        polecenia=("soffice.com", "soffice"),
         argument_wersji="--version",
         do_czego_sluzy=(
-            "bywa potrzebny do importu plików ODT; żadna ścieżka przetwarzania go dziś "
-            "nie używa, bo obsługa formatu ODT nie jest w aplikacji zrealizowana"
+            "odczyt starych plików DOC i PPT: program zamienia je na DOCX i PPTX, a dalej "
+            "pracują zwykłe adaptery; pozostałe formaty biurowe aplikacja czyta sama"
         ),
         co_przestanie_dzialac=(
-            "nic w tej wersji aplikacji — funkcja, której dotyczyłoby to narzędzie, "
-            "jeszcze nie istnieje"
+            "odczyt plików DOC i PPT; takie pliki dostaną status „pominiete” z czytelnym "
+            "komunikatem, a pozostałe źródła i formaty biurowe działają normalnie"
         ),
+        wyszukiwarka=lambda: _wyszukaj_libreoffice(),
     ),
     Narzedzie(
         nazwa="MuseScore",
@@ -276,6 +277,25 @@ def _wyszukaj_musescore() -> Path | None:
         sciezka_wskazana = ""
     try:
         return znajdz_musescore(sciezka_wskazana)
+    except BladGnb:
+        return None
+
+
+def _wyszukaj_libreoffice() -> Path | None:
+    """Odnajduje LibreOffice z uwzględnieniem ścieżki wskazanej w konfiguracji.
+
+    Na Windows zwracany jest plik konsolowy `soffice.com`, a nie `soffice.exe`,
+    który otwiera okno i blokuje proces. Błąd wczytania konfiguracji nie może
+    wywrócić diagnostyki, więc jest łapany.
+    """
+    from gnb.extractors.libreoffice import znajdz_libreoffice
+
+    try:
+        sciezka_wskazana = wczytaj_konfiguracje().sciezka_libreoffice
+    except BladGnb:
+        sciezka_wskazana = ""
+    try:
+        return znajdz_libreoffice(sciezka_wskazana)
     except BladGnb:
         return None
 

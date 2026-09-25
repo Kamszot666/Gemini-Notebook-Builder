@@ -287,7 +287,9 @@ KOMUNIKAT_BRAK_TEKSTU_POSREDNIEGO = (
 # Formaty plików dokumentowych, dla których tytuł i podział na akapity są
 # naturalną cechą prozy, więc ich brak jest sygnałem utraty treści, a nie
 # właściwością formatu. CSV, SRT i VTT celowo nie są tutaj wymienione.
-_FORMATY_DOKUMENTOW_OCENIANE = frozenset({"pdf", "docx", "epub", "html", "htm", "xhtml"})
+_FORMATY_DOKUMENTOW_OCENIANE = frozenset(
+    {"pdf", "docx", "epub", "html", "htm", "xhtml", "odt", "rtf", "doc"}
+)
 
 
 def _czy_status_koncowy(stan: StanZrodla, ponownie_usuniete: bool = True) -> bool:
@@ -606,6 +608,7 @@ def przetworz_projekt(
         wymus_transkrypcje=wymus_transkrypcje,
         sciezka_audiveris=konfiguracja.sciezka_audiveris,
         nuty_zapis_dzwiekow_wlaczony=konfiguracja.nuty_zapis_dzwiekow_wlaczony,
+        sciezka_libreoffice=konfiguracja.sciezka_libreoffice,
     )
     czas_startu = zegar()
 

@@ -143,6 +143,7 @@ DOMYSLNA_SCIEZKA_MUSESCORE = ""
 # rozpoznaje zapis nutowy z obrazu i z pliku PDF w drugiej części etapu
 # dziesiątego, patrz gnb/music/audiveris.py.
 DOMYSLNA_SCIEZKA_AUDIVERIS = ""
+DOMYSLNA_SCIEZKA_LIBREOFFICE = ""
 
 # Włączenie zapisu dźwięków ścieżek strunowych w opisie materiału nutowego
 # Guitar Pro, dodane w etapie trzynastym. Domyślnie włączone, bo to jest cel,
@@ -267,6 +268,7 @@ _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
     PREFIKS_ZMIENNYCH + "SCIEZKA_TESSDATA": "sciezka_tessdata",
     PREFIKS_ZMIENNYCH + "SCIEZKA_MUSESCORE": "sciezka_musescore",
     PREFIKS_ZMIENNYCH + "SCIEZKA_AUDIVERIS": "sciezka_audiveris",
+    PREFIKS_ZMIENNYCH + "SCIEZKA_LIBREOFFICE": "sciezka_libreoffice",
     PREFIKS_ZMIENNYCH + "NUTY_ZAPIS_DZWIEKOW_WLACZONY": "nuty_zapis_dzwiekow_wlaczony",
     PREFIKS_ZMIENNYCH + "TRANSKRYPCJA_WLACZONA": "transkrypcja_wlaczona",
     PREFIKS_ZMIENNYCH + "TRANSKRYPCJA_MODEL": "transkrypcja_model",
@@ -356,6 +358,7 @@ class Konfiguracja:
     sciezka_tessdata: str = DOMYSLNA_SCIEZKA_TESSDATA
     sciezka_musescore: str = DOMYSLNA_SCIEZKA_MUSESCORE
     sciezka_audiveris: str = DOMYSLNA_SCIEZKA_AUDIVERIS
+    sciezka_libreoffice: str = DOMYSLNA_SCIEZKA_LIBREOFFICE
     nuty_zapis_dzwiekow_wlaczony: bool = DOMYSLNY_NUTY_ZAPIS_DZWIEKOW_WLACZONY
     transkrypcja_wlaczona: bool = DOMYSLNA_TRANSKRYPCJA_WLACZONA
     transkrypcja_model: str = DOMYSLNY_TRANSKRYPCJA_MODEL
@@ -522,6 +525,9 @@ def wczytaj_konfiguracje(
         ),
         sciezka_audiveris=_jako_sciezka_pliku(
             scalone, "sciezka_audiveris", domyslna.sciezka_audiveris
+        ),
+        sciezka_libreoffice=_jako_sciezka_pliku(
+            scalone, "sciezka_libreoffice", domyslna.sciezka_libreoffice
         ),
         nuty_zapis_dzwiekow_wlaczony=_jako_prawda_falsz(
             scalone, "nuty_zapis_dzwiekow_wlaczony", domyslna.nuty_zapis_dzwiekow_wlaczony

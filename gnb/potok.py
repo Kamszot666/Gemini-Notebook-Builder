@@ -2888,34 +2888,65 @@ def odtworz_wejscia(checkpoint: Checkpoint, konfiguracja: Konfiguracja) -> list[
     moment = datetime.now(UTC)
     pozycje: list[PozycjaWejsciowa] = []
     for wejscie in checkpoint.wejscia:
-        if wejscie.typ_wejscia == TypWejscia.URL.value:
-            pozycje.append(
-                przyjmij_url(
-                    wejscie.wartosc,
-                    moment,
-                    konfiguracja.dodatkowe_parametry_sledzace,
-                    grupa=wejscie.grupa,
-                )
-            )
-        elif wejscie.typ_wejscia == TypWejscia.PLIK.value:
-            pozycje.append(
-                przyjmij_plik(
-                    Path(wejscie.wartosc),
-                    moment,
-                    grupa=wejscie.grupa,
-                    nuty=wejscie.wymus_nuty,
-                )
-            )
-        elif wejscie.typ_wejscia == TypWejscia.TEKST.value:
-            pozycje.append(
-                przyjmij_tekst(
-                    wejscie.wartosc,
-                    moment,
-                    format_tekstu=wejscie.format_zrodla or "txt",
-                    grupa=wejscie.grupa,
-                )
-            )
+        pozycja = pozycja_z_wejscia(wejscie, konfiguracja, moment)
+        if pozycja is not None:
+            pozycje.append(pozycja)
     return pozycje
+
+
+def pozycja_z_wejscia(
+    wejscie: WejscieZapis, konfiguracja: Konfiguracja, moment: datetime
+) -> PozycjaWejsciowa | None:
+    """Odbudowuje pozycję wejściową z wpisu checkpointu albo zwraca nic dla nieznanego rodzaju.
+
+    Wydzielone z `odtworz_wejscia`, żeby operacje na pojedynczym źródle, na
+    przykład usunięcie go z projektu, mogły ustalić, które zapisane wejście
+    prowadzi do jakiego identyfikatora źródła, bez odbudowywania wszystkich.
+    """
+    if wejscie.typ_wejscia == TypWejscia.URL.value:
+        return przyjmij_url(
+            wejscie.wartosc,
+            moment,
+            konfiguracja.dodatkowe_parametry_sledzace,
+            grupa=wejscie.grupa,
+        )
+    if wejscie.typ_wejscia == TypWejscia.PLIK.value:
+        return przyjmij_plik(
+            Path(wejscie.wartosc), moment, grupa=wejscie.grupa, nuty=wejscie.wymus_nuty
+        )
+    if wejscie.typ_wejscia == TypWejscia.TEKST.value:
+        return przyjmij_tekst(
+            wejscie.wartosc,
+            moment,
+            format_tekstu=wejscie.format_zrodla or "txt",
+            grupa=wejscie.grupa,
+        )
+    return None
+
+
+def odbuduj_manifest_i_raport(
+    uklad: UkladProjektu, konfiguracja: Konfiguracja, checkpoint: Checkpoint
+) -> None:
+    """Odbudowuje manifest i raport z aktualnego stanu checkpointu, bez przetwarzania.
+
+    Używane po ręcznej zmianie w projekcie, na przykład oznaczeniu źródła jako
+    zweryfikowanego albo usunięciu go, żeby raport oglądany na stronie projektu
+    zgadzał się z checkpointem. Raport odświeżony w ten sposób nie zna czasu
+    pracy ani wykazu wejść już obecnych z ostatniego przebiegu, bo tych danych
+    checkpoint nie przechowuje; mówi o tym wprost w wierszu czasu pracy.
+    """
+    zapisz_manifest(uklad.manifest_json, uklad.manifest_txt, _zbuduj_manifest(uklad, checkpoint))
+    podsumowanie = _zbuduj_podsumowanie(
+        checkpoint=checkpoint,
+        limit_zrodel=konfiguracja.limit_zrodel,
+        czas_pracy_sekundy=None,
+    )
+    zapisz_raport(uklad.raport, zbuduj_raport(uklad.nazwa_projektu, podsumowanie))
+
+
+def identyfikatory_materialow_do_sprawdzenia(checkpoint: Checkpoint) -> frozenset[str]:
+    """Zwraca identyfikatory źródeł, które raport wymienia jako materiały do sprawdzenia."""
+    return frozenset(material.identyfikator for material in _materialy_do_sprawdzenia(checkpoint))
 
 
 def _zbuduj_manifest(uklad: UkladProjektu, checkpoint: Checkpoint) -> Manifest:
@@ -3024,7 +3055,7 @@ def _zbuduj_podsumowanie(
     *,
     checkpoint: Checkpoint,
     limit_zrodel: int,
-    czas_pracy_sekundy: float,
+    czas_pracy_sekundy: float | None,
     zrodla_juz_w_projekcie: tuple[ZrodloJuzWProjekcie, ...] = (),
     nieudane_zastapienia: tuple[ZastapienieNieudane, ...] = (),
 ) -> PodsumowanieProjektu:

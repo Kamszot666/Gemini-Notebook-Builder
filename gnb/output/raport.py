@@ -54,7 +54,9 @@ class MaterialDoSprawdzenia:
     warstwy tekstowej w pliku PDF. Pole `ostrzezenia_pakowania` niesie kompromisy
     podziału źródła zbyt dużego, na przykład cięcie wewnątrz zdania. Zlanie ich
     w jedną listę kazałoby użytkownikowi zgadywać, które zdanie jest faktem,
-    a które podejrzeniem.
+    a które podejrzeniem. Pole `pliki_wynikowe` mówi wprost, w którym pliku jest
+    treść tego źródła, żeby ta sekcja raportu nie była odbierana jako informacja
+    o odrzuceniu — źródło jest zapisane i ma swój plik, tylko wymaga obejrzenia.
     """
 
     identyfikator: str
@@ -63,6 +65,23 @@ class MaterialDoSprawdzenia:
     ostrzezenia: tuple[str, ...] = ()
     mozliwe_duplikaty: tuple[str, ...] = ()
     ostrzezenia_pakowania: tuple[str, ...] = ()
+    pliki_wynikowe: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ZrodloJuzWProjekcie:
+    """Wejście z bieżącego przebiegu, które okazało się źródłem znanym już projektowi.
+
+    Dotyczy adresu albo pliku podanego ponownie: w poprzednim przebiegu, albo
+    wcześniej w tym samym, gdy wznowienie doszło już do jego przetworzenia.
+    Bez tego wpisu ponowne dodanie źródła wygląda z perspektywy użytkownika, jak
+    gdyby „nic się nie stało” — checkpoint po cichu pomija je jako już gotowe.
+    """
+
+    identyfikator: str
+    pochodzenie: str
+    status: str
+    pliki_wynikowe: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +104,7 @@ class PodsumowanieProjektu:
     czas_pracy_sekundy: float
     zrodla_nieprzetworzone: tuple[ZrodloNieprzetworzone, ...] = ()
     materialy_do_sprawdzenia: tuple[MaterialDoSprawdzenia, ...] = ()
+    zrodla_juz_w_projekcie: tuple[ZrodloJuzWProjekcie, ...] = ()
     # Liczba materiałów nutowych, które trafiły do własnego pliku wynikowego
     # mimo podanej przez użytkownika opcji --grupa. Materiały nutowe nie
     # podlegają grupowaniu tematycznemu; zero oznacza, że nie było takiego
@@ -131,6 +151,7 @@ def zbuduj_raport(nazwa_projektu: str, podsumowanie: PodsumowanieProjektu) -> st
             "osobny plik wynikowy."
         )
     wiersze.extend(_wiersze_zrodel_nieprzetworzonych(podsumowanie.zrodla_nieprzetworzone))
+    wiersze.extend(_wiersze_zrodel_juz_w_projekcie(podsumowanie.zrodla_juz_w_projekcie))
     wiersze.extend(_wiersze_materialow_do_sprawdzenia(podsumowanie.materialy_do_sprawdzenia))
     return "\n".join(wiersze) + "\n"
 
@@ -149,6 +170,30 @@ def _wiersze_zrodel_nieprzetworzonych(
         wiersze.append(f"  Powód: {zrodlo.powod}")
         wiersze.append("")
     return wiersze[:-1]
+
+
+def _wiersze_zrodel_juz_w_projekcie(
+    zrodla: tuple[ZrodloJuzWProjekcie, ...],
+) -> list[str]:
+    """Buduje wykaz wejść, które okazały się źródłami już obecnymi w projekcie."""
+    if not zrodla:
+        return []
+    wiersze = ["", "Źródła już obecne w projekcie, liczba: " + str(len(zrodla)), ""]
+    for zrodlo in zrodla:
+        wiersze.append(f"Źródło: {zrodlo.pochodzenie}")
+        wiersze.append(f"  Identyfikator: {zrodlo.identyfikator}")
+        wiersze.append(f"  Status: {zrodlo.status}")
+        wiersze.append(f"  {_wiersz_plikow_wynikowych(zrodlo.pliki_wynikowe)}")
+        wiersze.append("")
+    return wiersze[:-1]
+
+
+def _wiersz_plikow_wynikowych(pliki: tuple[str, ...]) -> str:
+    if not pliki:
+        return "Treść nie ma jeszcze pliku wynikowego (źródło czeka na dalsze etapy)."
+    if len(pliki) == 1:
+        return f"Treść jest w pliku: {pliki[0]}"
+    return "Treść jest w plikach: " + ", ".join(pliki)
 
 
 def _wiersze_materialow_do_sprawdzenia(
@@ -171,6 +216,7 @@ def _wiersze_materialow_do_sprawdzenia(
     for material in materialy:
         wiersze.append(f"Źródło: {material.pochodzenie}")
         wiersze.append(f"  Identyfikator: {material.identyfikator}")
+        wiersze.append(f"  {_wiersz_plikow_wynikowych(material.pliki_wynikowe)}")
         if material.ostrzezenia:
             wiersze.append("  Ostrzeżenia ekstrakcji:")
             wiersze.extend(f"    - {ostrzezenie}" for ostrzezenie in material.ostrzezenia)

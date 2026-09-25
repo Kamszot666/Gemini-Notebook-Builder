@@ -147,3 +147,32 @@ def test_wznowienie_konczy_projekt_przerwany_przed_pakowaniem(tmp_path: Path) ->
     assert drugie.liczba_bledow == 0
     pliki = list((drugie.katalog_projektu / "pliki_wynikowe").iterdir())
     assert pliki, "wznowienie musi odtworzyć pliki wynikowe"
+
+
+def test_ponowne_dodanie_juz_gotowego_zrodla_trafia_do_raportu_i_logu_waznego(
+    tmp_path: Path,
+) -> None:
+    """Pozycja piąta listy zmian etapu czternastego.
+
+    Wejście, które w poprzednim przebiegu skończyło jako spakowane źródło, nie
+    może po cichu zniknąć przy ponownym podaniu — użytkownik musi się dowiedzieć,
+    że „nic się nie stało”, dlaczego, i w którym pliku jest treść.
+    """
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path)
+    pierwsze = przetworz_projekt(
+        _pozycje(), konfiguracja, nazwa_projektu="Test ponownego dodania", zegar=_zegar_krokowy()
+    )
+    assert pierwsze.liczba_przetworzonych == 2
+
+    drugie = przetworz_projekt(
+        _pozycje(), konfiguracja, nazwa_projektu="Test ponownego dodania", zegar=_zegar_krokowy()
+    )
+
+    assert drugie.wznowiono is True
+    raport = drugie.sciezka_raportu.read_text(encoding="utf-8")
+    assert "Źródła już obecne w projekcie, liczba: 2" in raport
+    assert "Krótki tekst wklejony do testu wznowienia." not in raport  # to jest treść, nie adres
+    assert "Treść jest w pliku:" in raport
+
+    log_wazny = (drugie.katalog_projektu / "logi" / "log_wazne.txt").read_text(encoding="utf-8")
+    assert "Źródło już obecne w projekcie:" in log_wazny

@@ -8,6 +8,7 @@ from pathlib import Path
 from gnb.output.raport import (
     MaterialDoSprawdzenia,
     PodsumowanieProjektu,
+    ZrodloJuzWProjekcie,
     zapisz_raport,
     zbuduj_raport,
 )
@@ -145,6 +146,51 @@ def test_wykorzystanie_limitu_liczy_pliki_wynikowe_a_nie_zrodla() -> None:
 
     assert "Wykorzystanie limitu źródeł: 6 procent" in tekst
     assert "plików do wgrania 6" in tekst
+
+
+def test_raport_bez_zrodel_juz_w_projekcie_nie_ma_takiej_sekcji() -> None:
+    tekst = zbuduj_raport("Projekt testowy", _PODSUMOWANIE)
+
+    assert "Źródła już obecne w projekcie" not in tekst
+
+
+def test_raport_wymienia_zrodla_juz_w_projekcie_wraz_z_plikiem() -> None:
+    podsumowanie = replace(
+        _PODSUMOWANIE,
+        zrodla_juz_w_projekcie=(
+            ZrodloJuzWProjekcie(
+                identyfikator="gov_pl-abc123",
+                pochodzenie="https://www.gov.pl/web/mieszkanie-dla-ciebie/dom-bez-formalnosci",
+                status="spakowane",
+                pliki_wynikowe=("pliki_wynikowe/prawo_zgloszenie_581112a7.txt",),
+            ),
+        ),
+    )
+
+    tekst = zbuduj_raport("Projekt testowy", podsumowanie)
+
+    assert "Źródła już obecne w projekcie, liczba: 1" in tekst
+    assert "Źródło: https://www.gov.pl/web/mieszkanie-dla-ciebie/dom-bez-formalnosci" in tekst
+    assert "  Status: spakowane" in tekst
+    assert "  Treść jest w pliku: pliki_wynikowe/prawo_zgloszenie_581112a7.txt" in tekst
+
+
+def test_material_do_sprawdzenia_wskazuje_swoj_plik_wynikowy() -> None:
+    podsumowanie = replace(
+        _PODSUMOWANIE,
+        materialy_do_sprawdzenia=(
+            MaterialDoSprawdzenia(
+                identyfikator="prawo_zgloszenie",
+                pochodzenie="https://prawnikpodpowienabudowie.pl/",
+                powody=("treść zawiera zwrot typowy dla strony błędu: sign in to continue",),
+                pliki_wynikowe=("pliki_wynikowe/prawo_zgloszenie_581112a7.txt",),
+            ),
+        ),
+    )
+
+    tekst = zbuduj_raport("Projekt testowy", podsumowanie)
+
+    assert "  Treść jest w pliku: pliki_wynikowe/prawo_zgloszenie_581112a7.txt" in tekst
 
 
 def test_wykorzystanie_limitu_dolicza_tematyczne_pliki_pdf() -> None:

@@ -1,4 +1,4 @@
-# Rozwiązywanie problemów — stan po etapie dwunastym
+# Rozwiązywanie problemów — stan po etapie czternastym
 
 Ten dokument opisuje problemy, które wystąpiły w rzeczywistej pracy z aplikacją,
 oraz te, które wynikają wprost z jej budowy. Każdy przypadek ma tę samą budowę:
@@ -37,6 +37,11 @@ ozdobników, a polecenia do wpisania są w osobnych blokach.
     powiodła.
 24. Skrót nie znajduje aktywnego projektu albo nie odczytuje adresu, mimo że
     serwer interfejsu działa.
+25. Zamknąłem serwer, a skrót właśnie coś dodał: co się stało z tym źródłem.
+26. Źródło ma status „pominiete” z powodem „plik wynikowy usunięty ręcznie
+    z dysku”.
+27. Strona za logowaniem została pominięta zamiast zapisana.
+28. Plik grupy zmienił nazwę po dodaniu kolejnego źródła.
 
 ## 1. Windows blokuje plik wykonywalny narzędzia deweloperskiego
 
@@ -570,3 +575,54 @@ adres strony albo plik z Eksploratora, tak jak za pierwszym razem. Trwałego
 zapisu kolejki między uruchomieniami serwera aplikacja świadomie nie ma,
 zgodnie z sekcją 18e CLAUDE.md — okno utraty jest wąskie i wymaga zbiegu
 okoliczności, a każda utrata jest zgłaszana, nigdy cicha.
+
+## 26. Źródło ma status „pominiete” z powodem „plik wynikowy usunięty ręcznie z dysku”
+
+Objaw. W raporcie, w sekcji „Źródła nieprzetworzone”, jest źródło z powodem
+zaczynającym się od słów „plik wynikowy usunięty ręcznie z dysku”, a przy nim
+nazwa pliku. Przy pliku grupy takich źródeł jest kilka.
+
+Przyczyna. Plik wynikowy TXT albo PDF został usunięty z katalogu projektu poza
+aplikacją, na przykład w Eksploratorze. Na początku kolejnego przebiegu
+aplikacja porównuje checkpoint z dyskiem i nie udaje, że źródło nadal ma swoją
+treść w wynikach: oznacza je jako pominięte. Robi to wyłącznie na początku
+przebiegu, nigdy przy samym oglądaniu strony projektu ani raportu.
+
+Co zrobić. Jeżeli plik usunąłeś celowo, nic: źródło zostaje pominięte, a jego
+wpis jest w raporcie i w manifeście. Jeżeli chcesz je odzyskać, dodaj ten sam
+adres albo ten sam plik jeszcze raz, na przykład formularzem dosyłania pod
+raportem. Źródło zostanie przetworzone od nowa. Zwykły przycisk „Wznów ten
+projekt” go nie odzyska, bo nie jest ponownym dodaniem. Jeżeli komunikat
+wymienia pozostałe pliki źródła, to zawierają one tylko część jego treści:
+nie wgrywaj ich do notatnika. Brak samego pliku wersji MD niczego nie zmienia,
+bo treść jest w pliku TXT; jest tylko wpis w logach.
+
+## 27. Strona za logowaniem została pominięta zamiast zapisana
+
+Objaw. Adres strony ma status „pominiete”, a powód mówi o osłonie logowania
+albo stronie błędu, ze zwrotem, na przykład „zaloguj się, aby przeczytać”.
+
+Przyczyna. Wynik ekstrakcji miał mniej niż pięćdziesiąt słów i jednocześnie
+zawierał zwrot typowy dla osłony logowania albo strony błędu. Taki wynik to
+niemal na pewno sam szkielet strony, więc zamiast go zapisać, aplikacja go
+pomija, żeby nie zajmował miejsca w limicie źródeł notatnika. Długi artykuł
+z takim zwrotem w stopce oraz krótka treść bez takiego zwrotu nie są pomijane.
+
+Co zrobić. Zapisz stronę w przeglądarce do pliku (Control plus S), po
+zalogowaniu się, i na stronie projektu użyj przy tym źródle działania „Zastąp
+treść plikiem”. Źródło zachowa adres, a nagłówek metadanych dostanie wiersz
+„Uwaga o treści”.
+
+## 28. Plik grupy zmienił nazwę po dodaniu kolejnego źródła
+
+Objaw. Po dodaniu źródła do istniejącej grupy dawny plik grupy zniknął,
+a w katalogu jest jeden plik o innej nazwie. Raport ma wiersz „Plik grupy
+zastąpiony: stara nazwa → nowa nazwa”.
+
+Przyczyna. Dopisanie źródła do grupy pakuje całą grupę od nowa, żeby cała
+grupa była w jednym pliku. Nazwa pliku grupy wynika z jej składu, więc zmienia
+się razem z nim. Stary plik jest usuwany dopiero po zapisaniu nowego.
+
+Co zrobić. Niczego nie naprawiaj. Do notatnika wgraj nowy plik, a stary
+zastąp albo usuń w notatniku. Manifest ma pełny wykaz zastąpień w liście
+`zastapione_pliki_grup`.

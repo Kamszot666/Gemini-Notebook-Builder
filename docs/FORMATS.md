@@ -1,4 +1,4 @@
-# Obsługiwane formaty — stan po etapie trzynastym
+# Obsługiwane formaty — stan po etapie czternastym
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
 Formaty ODT i PPTX nie są obsługiwane i nie są zaplanowane w żadnym etapie
@@ -797,7 +797,10 @@ pól jest stała:
 10. Rodzaj napisów, wyłącznie dla filmu z pobranymi napisami.
 11. Data importu, w czasie lokalnym.
 12. Identyfikator źródła.
-13. Część, wyłącznie dla źródła podzielonego, w postaci „2 z 3”.
+13. Uwaga o treści, wyłącznie dla źródła, którego treść użytkownik zastąpił
+    plikiem zapisanym ręcznie, w postaci „treść zapisana ręcznie w pliku
+    NAZWA”. Ta sama informacja jest w manifeście.
+14. Część, wyłącznie dla źródła podzielonego, w postaci „2 z 3”.
 
 Pole nieobecne dla danego źródła jest pomijane w całości, a nie drukowane z pustą
 wartością. Pola „Adres” i „Plik” wykluczają się wzajemnie, a tekst wklejony nie ma
@@ -843,6 +846,20 @@ wszystkich źródeł jednego wywołania `przetworz`. Kolejną grupę w tym samym
 projekcie dodaje się osobnym wywołaniem: checkpoint kumuluje źródła między
 uruchomieniami. Źródło bez nazwy grupy dostaje własny plik, dokładnie jak przed
 tym etapem.
+
+Dopisanie źródła do grupy, która ma już spakowane źródła, pakuje całą grupę od
+nowa. Dawniej nowe źródło dostawało osobny plik obok pliku grupy, co przeczyło
+sensowi grupy tematycznej. Teraz wcześniejsze źródła grupy wracają do puli
+pakowania, powstaje jeden plik z całym składem, a stary plik grupy jest usuwany
+dopiero po zapisaniu nowego, więc przerwanie pracy w środku nie zostawia grupy
+bez pliku. Raport wymienia zastąpienie w wierszu „Plik grupy zastąpiony: stara
+nazwa → nowa nazwa”, a manifest zapisuje je w liście `zastapione_pliki_grup`.
+Nazwa pliku grupy wynika ze składu grupy, więc plik zmienia nazwę, gdy skład się
+zmienia, a zostaje pod tą samą nazwą i jest nadpisany w miejscu, gdy skład jest
+ten sam. Przepakowanie wymaga tekstu pośredniego wszystkich wcześniejszych
+źródeł grupy: gdy któregoś brakuje, grupa nie jest ruszana, nowe źródło dostaje
+osobny plik, a powód jest w logu szczegółowym. Materiał nutowy nigdy nie jest
+członkiem grupy.
 
 W pliku grupy przed treścią każdego fragmentu stoi jego nagłówek metadanych,
 a fragmenty rozdziela wiersz „Kolejny fragment tego pliku:”. Gdy skład grupy nie
@@ -977,11 +994,91 @@ Ocena „podejrzana” powstaje, gdy zachodzi co najmniej jeden z warunków:
 Warunki ósmy i dziewiąty dotyczą tylko materiału z rozpoznaną strukturą.
 Transkrypcja filmu nie ma nagłówków, więc nie może stać się przez nie podejrzana.
 
-Źródło podejrzane jest zapisywane normalnie i nigdy nie jest kasowane ani
-pomijane. Ma pliki wynikowe, ma status „spakowane” i liczy się do limitu źródeł.
-Zmienia się tylko to, że użytkownik o nim wie: ocena i lista powodów trafiają do
+Źródło podejrzane jest zapisywane normalnie i nie jest kasowane ani pomijane.
+Ma pliki wynikowe, ma status „spakowane” i liczy się do limitu źródeł. Zmienia
+się tylko to, że użytkownik o nim wie: ocena i lista powodów trafiają do
 manifestu, wpis pojawia się w logu ważnym i w logu szczegółowym, a raport końcowy
 wymienia takie źródła w sekcji „Materiały do sprawdzenia”.
+
+Jest jeden wąski wyjątek od tej zasady, uzgodniony z użytkownikiem w etapie
+czternastym. Źródło, w którym jednocześnie treść ma mniej słów niż próg
+pięćdziesięciu i pasuje do jednego ze zwrotów typowych dla strony błędu,
+żądania skryptów albo osłony logowania, jest pomijane ze statusem „pominiete”
+i powodem, zamiast zapisywane. Takie źródło to niemal na pewno sam szkielet
+strony, na przykład dwadzieścia słów zachęty do zalogowania, a nie treść
+merytoryczna, i nie powinno zajmować miejsca w limicie źródeł ani trafiać do
+bazy wiedzy. Oba warunki muszą zajść naraz. Zwrot w długim artykule, na
+przykład w stopce albo w cytacie, oraz krótka treść bez takiego zwrotu
+zostają źródłem podejrzanym, ale zapisanym. Pominiętego źródła nie trzeba
+porzucać: zapisz stronę z przeglądarki do pliku i zastąp nim treść źródła na
+stronie projektu. Wyjątek nie działa dla treści podstawionej ręcznie, bo to
+świadoma decyzja użytkownika.
+
+## Ręczne zmiany w projekcie
+
+Po zakończeniu przetwarzania użytkownik może zmienić stan projektu ręcznie.
+Każda zmiana trafia jednocześnie do checkpointu, do obu logów, do manifestu i do
+raportu, zgodnie z zasadą, że zmiana bez śladu jest gorsza niż błąd.
+
+### Zweryfikowane ręcznie
+
+Źródło z materiałów do sprawdzenia można oznaczyć jako obejrzane i uznane za
+dobre. Pole `zweryfikowane_recznie` w checkpoincie i w manifeście ma wartość
+domyślną fałsz. Oznaczenie nie zmienia oceny jakości ani ostrzeżeń: mówi tylko,
+że człowiek je widział. Źródło znika z sekcji „Materiały do sprawdzenia”, a raport
+wymienia je w sekcji „Źródła zweryfikowane ręcznie”, wraz z dawnymi powodami.
+Oznaczyć można tylko źródło, które jest na liście materiałów do sprawdzenia.
+
+### Zastąpienie treści plikiem
+
+Treść źródła można zastąpić plikiem zapisanym ręcznie, na przykład stroną
+zapisaną z przeglądarki, gdy strona za logowaniem nie dała się pobrać. Źródło
+zachowuje identyfikator i pochodzenie. Treść przechodzi te same etapy co każde
+źródło: ekstrakcję adapterem właściwym dla formatu pliku, normalizację i ocenę
+jakości. Plik HTML podstawiony za stronę internetową jest ekstrahowany jak
+strona, z danymi strukturalnymi. W nagłówku metadanych pojawia się wiersz „Uwaga
+o treści”, a w manifeście pole `tresc_zastapiona_plikiem` z nazwą pliku.
+
+Zastąpienie jest bezpieczne. Dotychczasowy stan źródła jest zamieniany dopiero
+wtedy, gdy nowa treść przejdzie ekstrakcję i normalizację i nie okaże się pusta.
+Przy niepowodzeniu stan zostaje bez zmian, a powód jest w logach i w sekcji
+raportu „Zastąpienia treści, które się nie powiodły”. Zastąpić można treść
+źródła spakowanego, znormalizowanego, pominiętego albo z błędem. Zastąpienie
+treści źródła z grupy pakuje całą grupę od nowa.
+
+### Usunięcie źródła z projektu
+
+Usunięcie jest zalecaną drogą pozbycia się źródła i wymaga potwierdzenia
+wpisanym słowem. Źródło znika z checkpointu, z listy wejść, z decyzji
+deduplikacji, z manifestu i z raportu, a jego pliki wynikowe i wyniki pośrednie
+z dysku. Zachowane oryginały i wysłane pliki zostają w katalogu projektu. Lista
+wejść jest oczyszczona, więc wznowienie projektu nie przywraca usuniętego źródła.
+Źródła uznane dotąd za duplikaty usuwanego źródła wracają do puli pakowania,
+bo były duplikatami tylko wobec niego. Usunięcie źródła z grupy, w której
+zostają inne, pakuje grupę od nowa.
+
+### Plik wynikowy usunięty ręcznie z dysku
+
+Gdy plik wynikowy TXT albo PDF zniknie z katalogu projektu, checkpoint dalej
+uważa jego źródła za spakowane. Sprawdzenie i zmiana statusu zachodzą wyłącznie
+na początku przebiegu przetwarzania, nigdy przy wyświetlaniu strony projektu ani
+raportu, bo samo oglądanie projektu nie może zmieniać jego stanu. Strona
+projektu tylko pokazuje rozbieżność w sekcji „Pliki wynikowe brakujące na
+dysku”.
+
+Na początku przebiegu każde źródło brakującego pliku dostaje status „pominiete”
+z powodem „plik wynikowy usunięty ręcznie z dysku” i nazwą pliku, z wpisem
+w `log_wazne.txt`, w logu szczegółowym, w manifeście i w raporcie. Przy pliku
+grupy dotyczy to wszystkich jego źródeł, a raport wymienia je z nazwy. Jeżeli
+źródło ma jeszcze inne pliki na dysku, na przykład wersję MD albo kolejną część,
+komunikat je wymienia i ostrzega, że zawierają tylko część treści i nie należy
+ich wgrywać do notatnika. Brak samego pliku wersji MD nie zmienia statusu:
+treść źródła jest nadal w pliku TXT, a brak jest tylko odnotowany w logach.
+
+Decyzja jest odwracalna. Ponowne dodanie tego samego adresu albo pliku, na
+przykład przez formularz dosyłania, przetwarza źródło od nowa, zamiast
+traktować je jako już obecne w projekcie. Zwykłe wznowienie projektu z zapisanych
+wejść nie jest ponownym dodaniem i nie cofa pominięcia po cichu.
 
 Progi są celowo zachowawcze. Fałszywe podejrzenie kosztuje jedno zajrzenie do
 pliku, a przeoczona utrata treści kosztuje wiarygodność całej bazy wiedzy.

@@ -90,6 +90,14 @@ komunikat to podsumowanie w rodzaju „Postęp: 30 procent, pobrano 3 z 11
 całego przebiegu, zaokrąglany w dół do pełnej dziesiątki, i rośnie tylko
 w górę, nigdy się nie cofa. Pojedyncze zdarzenia nie są ogłaszane.
 
+Procent jest przybliżeniem z zamierzenia, nie z niedopatrzenia. Deduplikacja
+i pakowanie liczą się jako po jednym kroku każda, niezależnie od tego, ile
+naprawdę trwają, bo w ich trakcie potok nie zgłasza postępu cząstkowego. Przy
+dużej liczbie źródeł oznacza to, że procent stoi w miejscu w czasie tych dwóch
+kroków, a komunikat mówi, który z nich trwa: „Deduplikacja źródeł” albo
+„Pakowanie i zapis plików wynikowych”. Zakończenie przebiegu zawsze pokazuje
+sto procent.
+
 Gdy w przeglądarce działa JavaScript, region odpytuje stan od razu po
 wczytaniu strony, a potem co cztery sekundy — dzięki temu krótki przebieg,
 trwający kilka sekund, zdąża pokazać choć jeden pośredni komunikat postępu,
@@ -159,6 +167,56 @@ Każda pozycja listy jest odnośnikiem do pola, którego dotyczy błąd. Każde 
 z błędem ma ustawione `aria-invalid` na „true” oraz `aria-describedby`
 wskazujące komunikat błędu pod polem, więc czytnik ekranu odczytuje ten
 komunikat po wejściu w pole.
+
+## Źródła projektu i ich działania
+
+Strona projektu, po zakończeniu przetwarzania, ma sekcję „Źródła projektu”.
+Każde źródło jest w niej osobnym elementem listy z własnym nagłówkiem
+trzeciego poziomu, więc czytnik ekranu pozwala przeskakiwać między źródłami
+klawiszem nagłówka. Pod nagłówkiem, który niesie nazwę albo adres źródła, jest
+krótka lista jego cech: status słowami, grupa tematyczna, nazwy plików
+wynikowych, komunikat pominięcia albo błędu, powody podejrzenia oraz informacje
+o ręcznych zmianach.
+
+Przy źródle są trzy działania. Przyciski i odnośnik nie powtarzają nazwy
+źródła w swojej etykiecie, bo czytnik odczytywałby ją w całości przy każdym
+działaniu, a nazwa adresu bywa długa. Zamiast tego każde działanie jest
+powiązane z nagłówkiem źródła atrybutem `aria-describedby`, więc NVDA po
+etykiecie „Oznacz jako zweryfikowane” czyta jako opis nazwę źródła.
+
+1. „Oznacz jako zweryfikowane” — tylko przy źródłach z materiałów do
+   sprawdzenia. Po użyciu źródło znika z sekcji „Materiały do sprawdzenia”
+   w raporcie, ale zostaje w osobnej sekcji „Źródła zweryfikowane ręcznie”,
+   razem z powodami, które je tam pierwotnie umieściły. Ocena jakości
+   w manifeście się nie zmienia.
+2. „Zastąp treść plikiem” — pole wyboru pliku z etykietą „Plik z ręcznie
+   zapisaną treścią tego źródła” oraz przycisk. Przydaje się przy stronie za
+   logowaniem: zapisujesz stronę w przeglądarce do pliku i podstawiasz ją za
+   źródło. Źródło zachowuje identyfikator i pochodzenie, a nagłówek metadanych
+   pliku wynikowego dostaje wiersz „Uwaga o treści”. Gdy nowa treść okaże się
+   pusta albo nie da się jej odczytać, dotychczasowy stan źródła zostaje bez
+   zmian, a powód jest w raporcie w sekcji „Zastąpienia treści, które się nie
+   powiodły”.
+3. „Usuń źródło z projektu” — odnośnik, a nie przycisk, bo prowadzi na osobną
+   stronę. Strona pyta „Usunąć źródło z projektu?”, opisuje skutki i prosi
+   o wpisanie słowa USUŃ w polu z etykietą. Wielkość liter i brak polskiego
+   znaku nie mają znaczenia. Błędne potwierdzenie zwraca tę samą stronę z listą
+   błędów, z polem oznaczonym `aria-invalid` i powiązanym z komunikatem.
+   Usunięte źródło znika z projektu, z manifestu i z raportu, a jego pliki
+   wynikowe z dysku. Zachowane oryginały i wysłane pliki zostają na dysku.
+
+Każde z tych działań jest osobnym formularzem, wymaga metody POST i tokenu
+CSRF. Gdy trwa przetwarzanie, serwer odmawia zmiany źródeł z komunikatem, że
+trzeba poczekać na jego zakończenie, bo w jednej chwili checkpoint zapisuje
+tylko jedno miejsce.
+
+### Pliki wynikowe brakujące na dysku
+
+Gdy plik wynikowy, który znasz z raportu, zniknął z katalogu projektu, strona
+projektu pokazuje sekcję „Pliki wynikowe brakujące na dysku” z nazwą pliku
+i źródłami, których dotyczy. Sekcja tylko pokazuje rozbieżność. Samo
+wyświetlenie strony niczego nie zmienia w projekcie: status źródeł zmienia
+dopiero początek następnego przebiegu przetwarzania, opisany w `FORMATS.md`.
 
 ## Motyw i ruch
 

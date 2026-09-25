@@ -306,7 +306,7 @@ Podstawa czasu jest rozdzielona świadomie. Plik `log_wazne.txt` prowadź w czas
 
 Manifest: `manifest.json` jest źródłem prawdy, `manifest.txt` jest generowanym z niego czytelnym widokiem dla użytkownika. Dla każdego źródła zapisuj identyfikator, typ, URL lub nazwę pliku, checksum, status, informację o duplikacie, OCR, transkrypcji, konwersji, kondensacji oraz plik wynikowy. Dla każdego wyniku zapisuj ścieżkę, typ, rozmiar, liczbę słów, liczbę znaków, liczbę źródeł, checksum i status.
 
-Status `pominiete` obejmuje nie tylko przekroczenie limitu, ale też wynik ekstrakcji bez żadnej treści merytorycznej, czyli plik, który zawierałby wyłącznie nagłówek metadanych: taki plik nie dostaje statusu `spakowane` i nie powstaje, żeby pusty plik nie zajmował slotu notatnika.
+Status `pominiete` obejmuje nie tylko przekroczenie limitu, ale też wynik ekstrakcji bez żadnej treści merytorycznej, czyli plik, który zawierałby wyłącznie nagłówek metadanych: taki plik nie dostaje statusu `spakowane` i nie powstaje, żeby pusty plik nie zajmował slotu notatnika. Obejmuje też dwa przypadki z etapu czternastego. Pierwszy: krótką stronę, w której treść ma mniej słów niż próg i jednocześnie pasuje do `ZWROTY_PODEJRZANE` — wąski wyjątek od zasady zapisywania źródeł podejrzanych, opisany w docstringu `gnb/output/ocena_jakosci.py`. Drugi: źródło, którego plik wynikowy TXT albo PDF usunięto ręcznie z dysku. Sprawdzenie i zmiana statusu zachodzą wyłącznie na początku przebiegu, nigdy przy wyświetlaniu strony projektu, a decyzja jest odwracalna: ponowne podanie tego samego adresu albo pliku przetwarza źródło od nowa, natomiast zwykłe wznowienie z zapisanych wejść tego nie robi.
 
 Raport końcowy: po zakończeniu projektu pokaż jako zwykły tekst liczbę wejść, liczbę prawidłowych źródeł, liczbę pominiętych, liczbę błędów, liczbę wykrytych duplikatów, liczbę źródeł po deduplikacji, liczbę plików TXT, MD i PDF, procent wykorzystania limitu źródeł, największy plik wynikowy, łączną liczbę słów oraz czas pracy. Raport ma być czytelny liniowo, bez tabel, i zapisany do pliku obok manifestu.
 
@@ -398,6 +398,7 @@ Pełny zapis każdej pozycji, z objawem, przyczyną i propozycją, jest w `docs/
 5. Grupa rozłożona na kilka plików nie jest zestawiona z pozostałym budżetem `limit_zrodel`; czeka na zgłoszenie z realnego przebiegu.
 6. Rozszerzenie przeglądarki do odczytu zaznaczonego tekstu wymagałoby nowego punktu końcowego na `127.0.0.1` z własnym uwierzytelnieniem; odłożone.
 7. Kolejka globalnego skrótu żyje tylko w pamięci procesu serwera; utrata przy zamknięciu w trakcie przetwarzania jest logowana, ale nieodzyskiwana.
+8. Źródła dosłane w kolejnym przebiegu nie przechodzą deduplikacji, bo znacznik `deduplikacja.wykonana` nigdy nie jest zerowany. Stwierdzone eksperymentem, niezmienione; wymaga osobnej decyzji.
 
 ## 19. Kryterium ukończenia funkcji
 

@@ -3,8 +3,9 @@
 Udostępnia trzy polecenia. Polecenie ``diagnostyka`` sprawdza dostępność
 narzędzi zewnętrznych wymienionych w sekcji piątej CLAUDE.md. Polecenie
 ``przetworz`` uruchamia potok przetwarzania dla tekstu wklejonego, plików
-lokalnych w formacie TXT, MD, HTML, CSV, SRT, VTT, PDF, DOCX, EPUB, obrazów,
-nagrań mowy, materiałów nutowych MIDI, MusicXML, MXL i Guitar Pro gp3, gp4
+lokalnych w formacie TXT, MD, HTML, CSV, TSV, SRT, VTT, PDF, DOCX, EPUB, ODT,
+ODS, ODP, PPTX, XLSX, XLS, RTF, DOC, PPT oraz JSON, XML, YAML, TOML, INI, CFG
+i LOG, obrazów, nagrań mowy, materiałów nutowych MIDI, MusicXML, MXL i Guitar Pro gp3, gp4
 i gp5, adresów stron internetowych oraz adresów filmów z serwisu YouTube,
 dla których pobierane są napisy. Opcja ``--nuty`` kieruje pliki PDF i obrazy
 danego wywołania do ścieżki materiałów nutowych, gdzie zapis nutowy jest

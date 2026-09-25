@@ -319,8 +319,9 @@ def _czy_ocenic_jakosc(typ_zrodla: TypZrodla, format_zrodla: str) -> bool:
 
     Strona i film mają treść powstającą przez rozpoznanie niezależnie od
     formatu, więc są oceniane zawsze. Plik dokumentowy jest oceniany tylko dla
-    formatów prozy — PDF, DOCX, EPUB i HTML lokalny — bo CSV oraz napisy SRT
-    i VTT z natury formatu nie mają tytułu ani akapitów.
+    formatów prozy — PDF, DOCX, EPUB, ODT, RTF, DOC i HTML lokalny — bo CSV, TSV,
+    arkusze, prezentacje oraz napisy SRT i VTT z natury formatu nie mają tytułu
+    ani akapitów.
     """
     if typ_zrodla in (TypZrodla.STRONA_WWW, TypZrodla.YOUTUBE):
         return True
@@ -2031,7 +2032,7 @@ class _Wykonanie:
     ) -> OcenaJakosci | None:
         """Ocenia jakość wyniku dla źródeł, w których treść powstaje przez ekstrakcję.
 
-        Strona, film, PDF, DOCX, EPUB i plik HTML lokalny przechodzą przez
+        Strona, film, PDF, DOCX, EPUB, ODT, RTF, DOC i plik HTML lokalny przechodzą przez
         rozpoznawanie treści, więc mogą stracić jej część po cichu i dlatego są
         oceniane. Tekst wklejony oraz pliki TXT i MD nie są oceniane, bo ich
         treść jest dokładnie tym, co podał użytkownik. Plik CSV oraz napisy SRT

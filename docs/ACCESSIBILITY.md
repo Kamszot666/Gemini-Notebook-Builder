@@ -58,8 +58,8 @@ Pierwsza to formularz nowego projektu. Pola, w kolejności:
    YouTube, dla których pobierane są napisy.
 4. Pliki z dysku. Pole wyboru pliku z możliwością wskazania wielu plików naraz.
    Otwiera zwykłe okno wyboru pliku systemu Windows, w pełni dostępne z NVDA.
-   Obsługiwane formaty to te same, które przyjmuje wiersz poleceń: TXT, MD, HTML,
-   CSV, SRT, VTT, PDF, DOCX i EPUB.
+   Obsługiwane formaty to te same, które przyjmuje wiersz poleceń; ich pełny
+   wykaz jest w `FORMATS.md`.
 5. Nazwa grupy tematycznej. Pole opcjonalne. Wszystkie źródła jednego wysłania
    z wypełnioną tą samą nazwą grupy są łączone w możliwie najmniej plików
    wynikowych.

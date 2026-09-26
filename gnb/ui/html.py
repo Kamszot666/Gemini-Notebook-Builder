@@ -10,6 +10,7 @@ w odpowiedzi serwera. Widoki nie wolno budować przez wstawianie surowych napis�
 from __future__ import annotations
 
 import html
+import re
 
 
 def escapuj(wartosc: object) -> str:
@@ -29,3 +30,38 @@ def atrybut(nazwa: str, wartosc: object) -> str:
     nigdy z danych. Wartość jest zawsze escapowana.
     """
     return f'{nazwa}="{escapuj(wartosc)}"'
+
+
+_WZORZEC_ADRESU_HTTP = re.compile(r"https?://\S+")
+_ZNAKI_KONCA_ZDANIA = ".,;:!?)]}»”\"'"
+
+
+def tekst_z_odnosnikami(tekst: str) -> str:
+    """Escapuje tekst i zamienia adresy http oraz https na odnośniki w nowej karcie.
+
+    Adres innego schematu, na przykład ``javascript:``, nigdy nie staje się
+    odnośnikiem, bo wzorzec dopasowuje wyłącznie ``http://`` i ``https://``.
+    Znaki interpunkcji doklejone do adresu na końcu zdania zostają poza
+    odnośnikiem. Bezpieczeństwo nie zależy od zawartości adresu: cały dopasowany
+    fragment przechodzi przez ``escapuj`` w atrybucie ``href`` i w widocznym
+    tekście, więc adres z doklejonym cudzysłowem albo nawiasem ostrym nie
+    wyrywa się z atrybutu i nie wstawia własnego znacznika.
+    """
+    fragmenty: list[str] = []
+    pozycja = 0
+    for dopasowanie in _WZORZEC_ADRESU_HTTP.finditer(tekst):
+        koniec = dopasowanie.end()
+        while koniec > dopasowanie.start() and tekst[koniec - 1] in _ZNAKI_KONCA_ZDANIA:
+            koniec -= 1
+        adres_surowy = tekst[dopasowanie.start() : koniec]
+        if len(adres_surowy) <= len("https://"):
+            continue
+        fragmenty.append(escapuj(tekst[pozycja : dopasowanie.start()]))
+        adres = escapuj(adres_surowy)
+        fragmenty.append(
+            f'<a href="{adres}" target="_blank" rel="noopener noreferrer">'
+            f"{adres} (otwiera się w nowej karcie)</a>"
+        )
+        pozycja = koniec
+    fragmenty.append(escapuj(tekst[pozycja:]))
+    return "".join(fragmenty)

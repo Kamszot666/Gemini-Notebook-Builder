@@ -1,0 +1,31 @@
+# Globalny skrót klawiszowy — zasady modułu gnb/hotkeys
+
+Ten plik jest wczytywany, gdy pracujesz w katalogu `gnb/hotkeys/`. Przeniesiono go z sekcji dwunastej głównego `CLAUDE.md` bez zmiany treści.
+
+## 12. Globalny skrót — ważna pułapka
+
+Domyślny skrót wskazany przez użytkownika to Caps Lock plus F12. Ma tu zastosowanie realny problem techniczny, który należy rozwiązać, a nie zignorować.
+
+Powody:
+
+1. Funkcja Windows `RegisterHotKey` przyjmuje jako modyfikatory wyłącznie Alt, Control, Shift i Windows. Caps Lock nie jest tam obsługiwany. Skrót z Caps Lock wymaga niskopoziomowego haka klawiatury `SetWindowsHookEx` z `WH_KEYBOARD_LL`, co oznacza również konieczność zablokowania przełączenia Caps Lock przy trafieniu w skrót.
+2. NVDA w układzie laptopowym używa Caps Lock jako klawisza NVDA, a wielu użytkowników włącza Caps Lock jako klawisz NVDA także w układzie desktopowym. W takiej konfiguracji NVDA może przechwycić kombinację, zanim dotrze ona do aplikacji.
+
+Rozwiązanie przyjęte przez użytkownika:
+
+1. Domyślny skrót to Control plus Shift plus F12, rejestrowany przez `RegisterHotKey`.
+2. Zaimplementuj także drugą ścieżkę, opartą na niskopoziomowym haku, i udostępnij ją jako opcję dla użytkowników, którzy chcą kombinacji z Caps Lock. Ta ścieżka nie jest domyślna i nie jest potrzebna w pierwszej wersji.
+3. Przy starcie wykryj konflikt i poinformuj o nim czytelnym komunikatem, w tym o możliwym konflikcie z NVDA.
+4. Nieudana rejestracja skrótu nigdy nie zatrzymuje aplikacji. Zapisz to w logu i pracuj dalej.
+5. Cały ten moduł jest opcjonalny. Na serwerze nie istnieje i aplikacja musi działać bez niego.
+
+Decyzje dotyczące zachowania skrótu, ustalone przy planowaniu etapu jedenastego, część A:
+
+6. Skrót działa wyłącznie wtedy, gdy uruchomiony jest serwer interfejsu poleceniem `python -m gnb.ui.server`. Rejestracja zachodzi przy starcie serwera, wyrejestrowanie przy jego zamknięciu. Nie powstaje żaden osobny proces w tle ani autostart.
+7. Naciśnięcie skrótu dodaje do aktywnego projektu to, co jest otwarte w aktywnym oknie: adres bieżącej strony w Chrome albo Firefoksie, albo zaznaczone pliki w Eksploratorze Windows. To dwie przeglądarki, z których użytkownik korzysta na co dzień — obie zostały sprawdzone bezpośrednio na jego komputerze.
+8. Zmiana po teście użytkownika z NVDA: gdy użytkownik nie wybrał żadnego projektu, skrót dodaje źródła do projektu „Adresy ze skrótu” (stała `NAZWA_DOMYSLNEGO_PROJEKTU_SKROTU`) i ustawia go jako aktywny; jawny wybór ma pierwszeństwo. Powód: skrót nie może milczeć po restarcie serwera, a nazwany projekt domyślny nie jest „ostatnio otwartym”, więc ryzyko źródła w przypadkowym projekcie nie wraca. Reszta poniższego punktu opisuje pierwotną decyzję. Aktywny projekt skrótu jest wyborem jawnym, nie „ostatnio otwartym projektem”. Użytkownik ustawia go przyciskiem „Ustaw jako aktywny projekt skrótu” na stronie projektu; strona główna i strona każdego projektu pokazują tekst „Aktywny projekt skrótu: nazwa” albo „Brak aktywnego projektu skrótu”. Powód: użytkownik naciska skrót w przeglądarce, na innej stronie niż interfejs, więc w tej chwili słyszy tylko dźwięk, nie widzi komunikatu. Samo zajrzenie na stronę innego projektu nie może więc po cichu przenieść miejsca, do którego trafia materiał — źródło w złym projekcie byłoby błędem poprawności danych, która w hierarchii priorytetów z sekcji czwartej stoi nad wygodą. Wybór żyje w pamięci serwera, chroniony zamkiem jak rejestr zadań; po restarcie serwera nie ma aktywnego projektu, dopóki użytkownik nie wybierze go ponownie.
+9. Potwierdzenie bez przenoszenia fokusu: dwa różne dźwięki przez `winsound.Beep` — sukces to dwa krótkie, rosnące tony, porażka to jeden niski, dłuższy ton, bo mają różnić się rytmem, nie tylko wysokością — plus trwały komunikat tekstowy w interfejsie (sekcja „Globalny skrót klawiszowy” na stronie głównej i na stronie projektu) i w logu `gnb.hotkeys`. `winsound.MessageBeep` odrzucony, bo gra z motywu dźwiękowego systemu, który użytkownik mógł wyciszyć niezależnie od głośności aplikacji.
+10. Bez schowka, w żadnej roli, także awaryjnej. Adres czytany jest przez UI Automation z paska adresu, dopasowywany po nazwie klasy kontrolki (`OmniboxViewViews` w Chrome, `urlbar-input` w Firefoksie), sprawdzonej bezpośrednio w obu przeglądarkach, nie po lokalizowanej nazwie elementu, która zależy od języka interfejsu.
+11. Kolejka: źródło dodane skrótem w trakcie trwającego przebiegu jest zapisywane od razu, a przetwarzane w kolejnym przebiegu — natychmiast, gdy rejestr zadań interfejsu jest wolny, albo automatycznie po zakończeniu bieżącego zadania. To nie jest nowy proces w tle: to dokończenie pracy, którą użytkownik już zaczął naciśnięciem skrótu.
+12. Klucz konfiguracji `globalny_skrot_wlaczony`, zmienna środowiskowa `GNB_GLOBALNY_SKROT_WLACZONY`, wartość domyślna prawda. Na systemie innym niż Windows klucz nie ma żadnego skutku, a diagnostyka mówi to wprost.
+13. Zaznaczony w przeglądarce tekst jako źródło z pierwszeństwem przed adresem strony był rozważony jako rozszerzenie części A, żeby obsłużyć strony wymagające zalogowania. Sprawdzone bezpośrednio na komputerze użytkownika, z uruchomionym NVDA, w Chrome w wersji 152 i w Firefoksie w wersji 155, pięcioma różnymi sposobami zaznaczania — w tym zaznaczeniem klawiaturą i trybem przeglądania z karetką: wzorzec tekstowy (`TextPattern`, w Firefoksie `TextPattern2`) jest dostępny w obu przeglądarkach, ale w żadnym z wykonanych pomiarów `GetSelection()` nie zwrócił niepustego zakresu zaznaczenia treści strony, mimo że ten sam mechanizm poprawnie odczytuje zaznaczenie w zwykłej kontrolce edycyjnej Windows (test kontrolny w Notatniku). Przyczyna tego wyniku nie została rozstrzygnięta. Ten zapis mówi dokładnie tyle, ile sprawdzono, i nie jest dowodem, że odczyt zaznaczenia treści strony jest niemożliwy — inna wersja przeglądarki, inna strona albo inny sposób odpytania wzorca tekstowego mogą dać inny wynik. Funkcja odłożona poza część A: frazy stron logowania w `ZWROTY_PODEJRZANE` w `gnb/output/ocena_jakosci.py` łagodzą ten sam problem inną drogą. Warunek rewizji: znalezienie innego sposobu odczytu zaznaczenia treści strony niż jednorazowe odpytanie `GetSelection()`, na przykład przez subskrypcję zdarzenia `TextSelectionChangedEvent`, albo nowy pomiar dający inny wynik.

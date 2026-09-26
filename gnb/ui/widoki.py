@@ -16,13 +16,12 @@ napisu do HTML.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from urllib.parse import quote
 
 from gnb.persistence.pola_notatnika import PolaNotatnika
 from gnb.ui.csrf import NAZWA_POLA_FORMULARZA
-from gnb.ui.html import escapuj
+from gnb.ui.html import escapuj, tekst_z_odnosnikami
 from gnb.ui.projekty import ProjektNaLiscie
 from gnb.ui.stan_skrotu import KomunikatSkrotu
 from gnb.ui.zadania import InformacjaOZadaniu, StanZadania
@@ -154,34 +153,6 @@ def _pole_csrf(token_csrf: str) -> str:
     )
 
 
-_WZORZEC_ADRESU_HTTP = re.compile(r"https?://\S+")
-
-
-def _tekst_z_odnosnikami(tekst: str) -> str:
-    """Zamienia adresy http i https w tekście na odnośniki otwierane w nowej karcie.
-
-    Adres innego schematu, na przykład ``javascript:``, nigdy nie staje się
-    odnośnikiem — wzorzec dopasowuje wyłącznie ``http://`` i ``https://``.
-    Bezpieczeństwo nie zależy jednak od tego, co adres zawiera: cały dopasowany
-    fragment przechodzi przez ``escapuj`` zarówno w atrybucie ``href``, jak
-    i w widocznym tekście, więc nawet adres ze sztucznie doklejonym cudzysłowem
-    albo nawiasem ostrym nie wyrywa się z atrybutu ani nie wstawia własnego
-    znacznika — zostaje po prostu dziwnie wyglądającym, nieszkodliwym tekstem.
-    """
-    fragmenty: list[str] = []
-    pozycja = 0
-    for dopasowanie in _WZORZEC_ADRESU_HTTP.finditer(tekst):
-        fragmenty.append(escapuj(tekst[pozycja : dopasowanie.start()]))
-        adres = escapuj(dopasowanie.group(0))
-        fragmenty.append(
-            f'<a href="{adres}" target="_blank" rel="noopener noreferrer">'
-            f"{adres} (otwiera się w nowej karcie)</a>"
-        )
-        pozycja = dopasowanie.end()
-    fragmenty.append(escapuj(tekst[pozycja:]))
-    return "".join(fragmenty)
-
-
 def sciezka_projektu(nazwa: str) -> str:
     """Buduje ścieżkę adresu strony projektu, z nazwą zakodowaną do postaci bezpiecznej w URL."""
     return "/projekt/" + quote(nazwa, safe="")
@@ -203,27 +174,29 @@ def strona_glowna(
     atrybuty_nazwa, blad_nazwa = _opis_bledu_pola(bledy, "nazwa_projektu")
     atrybuty_tekst, blad_tekst = _opis_bledu_pola(bledy, "tekst")
     atrybuty_adresy, blad_adresy = _opis_bledu_pola(bledy, "adresy")
+    atrybuty_grupa, blad_grupa = _opis_bledu_pola(bledy, "grupa")
 
     formularz = f"""<h1>Gemini Notebook Builder</h1>
 <form class="blok" method="post" action="/projekt/nowy" enctype="multipart/form-data">
 {_pole_csrf(token_csrf)}
 {_lista_bledow(bledy)}
 <h2>Nowy projekt</h2>
-<label for="nazwa_projektu">Nazwa projektu (wymagana)</label>
 <input type="text" id="nazwa_projektu" name="nazwa_projektu"
+  aria-label="Nazwa projektu" placeholder="Nazwa projektu (wymagana)"
   value="{escapuj(dane.nazwa_projektu)}" required{atrybuty_nazwa}>
 {blad_nazwa}
-<label for="tekst">Tekst wklejony</label>
-<textarea id="tekst" name="tekst"{atrybuty_tekst}>{escapuj(dane.tekst)}</textarea>
+<textarea id="tekst" name="tekst" aria-label="Tekst wklejony"
+  placeholder="tutaj wklej tekst"{atrybuty_tekst}>{escapuj(dane.tekst)}</textarea>
 {blad_tekst}
 <label for="adresy">Adresy stron i filmów, po jednym w wierszu</label>
 <textarea id="adresy" name="adresy"{atrybuty_adresy}>{escapuj(dane.adresy)}</textarea>
 {blad_adresy}
 <label for="pliki">Pliki z dysku</label>
 <input type="file" id="pliki" name="pliki" multiple>
-<label for="grupa">Nazwa grupy tematycznej (opcjonalna)</label>
-<input type="text" id="grupa" name="grupa" value="{escapuj(dane.grupa)}">
-<p class="pomoc">Źródła z tą samą nazwą grupy są łączone w jak najmniej plików wynikowych.</p>
+<input type="text" id="grupa" name="grupa" aria-label="Nazwa grupy tematycznej"
+  placeholder="Nazwa grupy tematycznej (wymagana)" value="{escapuj(dane.grupa)}"
+  required{atrybuty_grupa}>
+{blad_grupa}
 <button type="submit">Utwórz projekt i rozpocznij przetwarzanie</button>
 </form>"""
 
@@ -255,7 +228,8 @@ def _akapit_ostatniego_komunikatu(komunikat: KomunikatSkrotu | None) -> str:
     if komunikat is None:
         return ""
     wynik = "powodzenie" if komunikat.sukces else "porażka"
-    return f'<p class="pomoc">Ostatnie zdarzenie skrótu ({wynik}): {escapuj(komunikat.tekst)}</p>'
+    tekst = tekst_z_odnosnikami(komunikat.tekst)
+    return f'<p class="pomoc">Ostatnie zdarzenie skrótu ({wynik}): {tekst}</p>'
 
 
 def _sekcja_niedokonczone(projekty: list[ProjektNaLiscie], token_csrf: str) -> str:
@@ -269,7 +243,7 @@ def _sekcja_niedokonczone(projekty: list[ProjektNaLiscie], token_csrf: str) -> s
     for projekt in projekty:
         sciezka = sciezka_projektu(projekt.nazwa)
         opis_bledu = (
-            f'<p class="pomoc">Uwaga: {escapuj(projekt.komunikat_bledu)}</p>'
+            f'<p class="pomoc">Uwaga: {tekst_z_odnosnikami(projekt.komunikat_bledu)}</p>'
             if projekt.komunikat_bledu
             else ""
         )
@@ -303,11 +277,17 @@ def strona_projektu(
     bledy: list[BladPola] | None = None,
     aktywny_projekt_skrotu: str | None = None,
     ostatni_komunikat_skrotu: KomunikatSkrotu | None = None,
-    grupa_ostatniego_wyslania: str = "",
+    grupy_projektu: list[str] | None = None,
     dane_dosylania: DaneFormularzaProjektu | None = None,
     bledy_dosylania: list[BladPola] | None = None,
+    zrodla_html: str = "",
 ) -> str:
-    """Strona projektu: region postępu, dwa pola tekstowe oraz raport po zakończeniu."""
+    """Strona projektu: region postępu, dwa pola tekstowe oraz raport po zakończeniu.
+
+    Argument `zrodla_html` to gotowy fragment z wykazem źródeł i ich działaniami,
+    zbudowany przez `gnb.ui.widoki_zrodel`. Jest przekazywany jako napis, żeby
+    ten moduł nie zależał od modułu, który sam z niego korzysta.
+    """
     bledy = bledy or []
     sciezka = sciezka_projektu(nazwa)
     czesci = [f"<h1>Projekt: {escapuj(nazwa)}</h1>", _sekcja_postepu(sciezka, informacja)]
@@ -316,10 +296,11 @@ def strona_projektu(
         podsumowanie,
         raport,
         sciezka,
-        grupa_ostatniego_wyslania,
+        grupy_projektu or [],
         token_csrf,
         dane_dosylania,
         bledy_dosylania,
+        zrodla_html,
     )
     czesci.append(f'<div id="wynik-po-zakonczeniu">{fragment_wyniku}</div>')
 
@@ -347,95 +328,84 @@ def _fragment_wyniku(
     podsumowanie: PodsumowanieWyniku | None,
     raport: str | None,
     sciezka: str,
-    grupa_ostatniego_wyslania: str,
+    grupy_projektu: list[str],
     token_csrf: str,
     dane_dosylania: DaneFormularzaProjektu | None,
     bledy_dosylania: list[BladPola] | None,
+    zrodla_html: str = "",
 ) -> str:
-    """Buduje blok pokazywany po zakończeniu przebiegu: podsumowanie, raport i formularz dosyłania.
+    """Buduje blok pokazywany po zakończeniu przebiegu: podsumowanie, raport, źródła i dosyłanie.
 
-    Ten sam blok budują dwie ścieżki: pełne wyrenderowanie strony projektu przy
-    wejściu na nią po zakończeniu, oraz odpytywanie postępu, które wstawia go do
-    strony bez przeładowania, gdy przebieg kończy się w trakcie odsłuchu — patrz
-    ``fragment_po_zakonczeniu`` i skrypt ``_SKRYPT_POSTEPU``. Formularz dosyłania
-    pojawia się tylko wtedy, gdy jest już co najmniej jeden raport, bo dosyła się
-    źródła do istniejącego projektu, a nie tworzy nowy.
+    Blok jest częścią strony budowanej przy wejściu na nią. Po zakończeniu
+    przebiegu w trakcie odsłuchu skrypt ``_SKRYPT_POSTEPU`` niczego nie wstawia
+    do strony, tylko dodaje odnośnik do jej ponownego wczytania: wstawianie
+    bloku w miejscu przy działającym czytniku ekranu przenosiło fokus. Formularz
+    dosyłania pojawia się tylko wtedy, gdy jest już co najmniej jeden raport.
     """
-    if podsumowanie is None and raport is None:
+    if podsumowanie is None and raport is None and not zrodla_html:
         return ""
     czesci = []
     if podsumowanie is not None:
         czesci.append(_sekcja_podsumowania(podsumowanie))
     if raport is not None:
         czesci.append(_sekcja_raportu(raport))
+    if zrodla_html:
+        czesci.append(zrodla_html)
+    if raport is not None:
         czesci.append(
             _formularz_dosylania(
-                sciezka, grupa_ostatniego_wyslania, token_csrf, dane_dosylania, bledy_dosylania
+                sciezka, grupy_projektu, token_csrf, dane_dosylania, bledy_dosylania
             )
         )
     return "\n".join(czesci)
-
-
-def fragment_po_zakonczeniu(
-    podsumowanie: PodsumowanieWyniku,
-    raport: str,
-    sciezka: str,
-    grupa_ostatniego_wyslania: str,
-    token_csrf: str,
-) -> str:
-    """Buduje fragment HTML wstawiany bez przeładowania strony po zakończeniu przebiegu.
-
-    Wołane przez obsługę żądania ``/postep``, pozycja pierwsza listy zmian etapu
-    czternastego: region stanu ogłasza jedno zdanie, a treść raportu pojawia się
-    od razu pod nim, zamiast wymagać aktywowania odnośnika „Odśwież stan”.
-    """
-    return _fragment_wyniku(
-        podsumowanie, raport, sciezka, grupa_ostatniego_wyslania, token_csrf, None, None
-    )
 
 
 def _sekcja_raportu(raport: str) -> str:
     """Blok raportu końcowego z adresami http i https jako klikalnymi odnośnikami."""
     return (
         '<div class="blok">\n<h2>Raport końcowy</h2>\n'
-        f"<pre>{_tekst_z_odnosnikami(raport)}</pre>\n</div>"
+        f"<pre>{tekst_z_odnosnikami(raport)}</pre>\n</div>"
     )
 
 
 def _formularz_dosylania(
     sciezka: str,
-    grupa_ostatniego_wyslania: str,
+    grupy_projektu: list[str],
     token_csrf: str,
     dane: DaneFormularzaProjektu | None,
     bledy: list[BladPola] | None,
 ) -> str:
     """Formularz dosyłania kolejnych źródeł do już przetworzonego projektu.
 
-    Te same pola co formularz nowego projektu na stronie głównej, bez pola nazwy
-    projektu — nazwa jest już znana z adresu strony i trafia jako pole ukryte.
-    Pole grupy jest domyślnie wypełnione nazwą grupy ostatniego wysłania, żeby
-    kolejne źródła trafiały do tego samego pliku bez przepisywania nazwy.
+    Opisy pól są tekstem podpowiedzi wewnątrz pól, tak jak na stronie głównej,
+    a nie osobnymi etykietami i akapitami. Nazwa grupy jest wymagana i ma listę
+    podpowiedzi z grupami, które projekt już zna, więc kolejne źródło trafia do
+    istniejącego pliku grupy bez przepisywania jej nazwy.
     """
-    dane = dane or DaneFormularzaProjektu(grupa=grupa_ostatniego_wyslania)
+    dane = dane or DaneFormularzaProjektu(grupa=grupy_projektu[-1] if grupy_projektu else "")
     bledy = bledy or []
     atrybuty_tekst, blad_tekst = _opis_bledu_pola(bledy, "dosylanie-tekst")
     atrybuty_adresy, blad_adresy = _opis_bledu_pola(bledy, "dosylanie-adresy")
+    atrybuty_grupa, blad_grupa = _opis_bledu_pola(bledy, "dosylanie-grupa")
+    opcje_grup = "".join(f'<option value="{escapuj(grupa)}">' for grupa in grupy_projektu)
     return f"""<form class="blok" method="post" action="{escapuj(sciezka)}/dosylanie"
   enctype="multipart/form-data">
 {_pole_csrf(token_csrf)}
 {_lista_bledow(bledy)}
-<h2>Dodaj kolejne źródła do tego projektu</h2>
-<label for="dosylanie-tekst">Tekst wklejony</label>
-<textarea id="dosylanie-tekst" name="tekst"{atrybuty_tekst}>{escapuj(dane.tekst)}</textarea>
+<h2>Dodaj kolejne źródła</h2>
+<textarea id="dosylanie-tekst" name="tekst" aria-label="Tekst wklejony"
+  placeholder="tutaj wklej tekst"{atrybuty_tekst}>{escapuj(dane.tekst)}</textarea>
 {blad_tekst}
-<label for="dosylanie-adresy">Adresy stron i filmów, po jednym w wierszu</label>
-<textarea id="dosylanie-adresy" name="adresy"{atrybuty_adresy}>{escapuj(dane.adresy)}</textarea>
+<textarea id="dosylanie-adresy" name="adresy" aria-label="Adresy stron i filmów"
+  placeholder="adresy, po jednym w wierszu"{atrybuty_adresy}>{escapuj(dane.adresy)}</textarea>
 {blad_adresy}
 <label for="dosylanie-pliki">Pliki z dysku</label>
 <input type="file" id="dosylanie-pliki" name="pliki" multiple>
-<label for="dosylanie-grupa">Nazwa grupy tematycznej (opcjonalna)</label>
-<input type="text" id="dosylanie-grupa" name="grupa" value="{escapuj(dane.grupa)}">
-<p class="pomoc">Źródła z tą samą nazwą grupy są łączone w jak najmniej plików wynikowych.</p>
+<input type="text" id="dosylanie-grupa" name="grupa" list="dosylanie-grupy"
+  aria-label="Nazwa grupy tematycznej" placeholder="Nazwa grupy tematycznej (wymagana)"
+  value="{escapuj(dane.grupa)}" required{atrybuty_grupa}>
+<datalist id="dosylanie-grupy">{opcje_grup}</datalist>
+{blad_grupa}
 <button type="submit">Dodaj źródła i uruchom kolejny przebieg</button>
 </form>"""
 
@@ -453,9 +423,9 @@ def _sekcja_postepu(sciezka: str, informacja: InformacjaOZadaniu | None) -> str:
         StanZadania.ZAKONCZONE: "zakończone",
         StanZadania.BLAD: "zakończone błędem",
     }[informacja.stan]
-    tresc = escapuj(informacja.komunikat_postepu or "Przygotowanie do pracy.")
+    tresc = tekst_z_odnosnikami(informacja.komunikat_postepu or "Przygotowanie do pracy.")
     blad = (
-        f'<p class="pomoc">Powód błędu: {escapuj(informacja.komunikat_bledu)}</p>'
+        f'<p class="pomoc">Powód błędu: {tekst_z_odnosnikami(informacja.komunikat_bledu)}</p>'
         if informacja.komunikat_bledu
         else ""
     )
@@ -583,7 +553,7 @@ def strona_bledu(*, kod: int, tytul: str, komunikat: str) -> str:
         f"Błąd {kod}",
         f"""<h1>{escapuj(tytul)}</h1>
 <div class="blok">
-<p>{escapuj(komunikat)}</p>
+<p>{tekst_z_odnosnikami(komunikat)}</p>
 </div>
 <p><a href="/">Wróć do strony głównej</a></p>""",
     )
@@ -608,7 +578,14 @@ _SKRYPT_POSTEPU = """
         if (dane.stan && dane.stan !== 'trwa') {
           region.setAttribute('data-koniec', 'tak');
           if (naglowek && dane.naglowek) { naglowek.textContent = dane.naglowek; }
-          if (wynik && dane.fragment) { wynik.innerHTML = dane.fragment; }
+          if (wynik && !wynik.hasChildNodes()) {
+            var odnosnik = document.createElement('a');
+            odnosnik.href = window.location.pathname;
+            odnosnik.textContent = 'Pokaż wyniki przetwarzania';
+            var akapit = document.createElement('p');
+            akapit.appendChild(odnosnik);
+            wynik.appendChild(akapit);
+          }
         }
       })
       .catch(function () {});

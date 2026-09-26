@@ -1,8 +1,10 @@
-# Obsługiwane formaty — stan po etapie trzynastym
+# Obsługiwane formaty — stan po etapie czternastym
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
-Formaty ODT i PPTX nie są obsługiwane i nie są zaplanowane w żadnym etapie
-z sekcji osiemnastej pliku `CLAUDE.md`.
+Etap czternasty dodał formaty biurowe ODT, ODS, ODP, PPTX, XLSX, XLS, RTF, DOC
+i PPT, plik TSV oraz pliki tekstu prostego: JSON, XML, YAML, TOML, INI, CFG
+i LOG oraz archiwa ZIP, których pliki przechodzą te same adaptery co pliki podane
+wprost.
 
 ## Wejście
 
@@ -10,23 +12,27 @@ Obsługiwane są następujące rodzaje wejścia:
 
 1. Tekst wklejony bezpośrednio przez użytkownika, traktowany jako tekst płaski.
 2. Tekst wklejony zadeklarowany przez użytkownika jako Markdown.
-3. Plik lokalny w jednym z formatów tekstowych i dokumentowych: TXT, MD, HTML,
-   CSV, SRT, VTT, PDF, DOCX albo EPUB. Pierwsze dwa są plikiem tekstowym,
-   pozostałe plikiem dokumentem — rozróżnienie opisuje sekcja „Pliki dokumentowe”.
-4. Plik obrazu: JPG, PNG, WebP, TIFF, BMP oraz statyczna klatka GIF, a przy
+3. Archiwum ZIP z plikami w dowolnym z obsługiwanych formatów — opisuje je sekcja
+   „Archiwa ZIP”.
+4. Plik lokalny w jednym z formatów tekstowych i dokumentowych: TXT, MD, HTML,
+   CSV, TSV, SRT, VTT, PDF, DOCX, EPUB, ODT, ODS, ODP, PPTX, XLSX, XLS, RTF, DOC,
+   PPT albo MHTML (także MHT), a także plik tekstu prostego: JSON, XML, YAML, YML, TOML, INI, CFG
+   albo LOG. TXT, MD i pliki tekstu prostego są plikiem tekstowym, pozostałe
+   plikiem dokumentem — rozróżnienie opisuje sekcja „Pliki dokumentowe”.
+5. Plik obrazu: JPG, PNG, WebP, TIFF, BMP oraz statyczna klatka GIF, a przy
    zainstalowanej bibliotece opcjonalnej pillow-heif także HEIC i HEIF.
    Obsługę obrazów opisuje sekcja „Obrazy”.
-5. Nagranie audio: MP3, WAV, M4A, FLAC, OGG, OPUS albo AAC. Obsługiwane są
+6. Nagranie audio: MP3, WAV, M4A, FLAC, OGG, OPUS albo AAC. Obsługiwane są
    wyłącznie nagrania mowy — obsługę opisuje sekcja „Nagrania audio
    i transkrypcja mowy”.
-6. Materiał nutowy w formacie natywnym: MIDI (`mid`, `midi`), MusicXML
+7. Materiał nutowy w formacie natywnym: MIDI (`mid`, `midi`), MusicXML
    (`musicxml`), skompresowany kontener MusicXML (`mxl`) albo Guitar Pro
    w wersjach `gp3`, `gp4` i `gp5`. Obsługę opisuje sekcja „Materiały nutowe”.
-7. Zapis nutowy jako obraz albo plik PDF, wskazany opcją `--nuty`, rozpoznawany
+8. Zapis nutowy jako obraz albo plik PDF, wskazany opcją `--nuty`, rozpoznawany
    optycznie programem Audiveris. Obsługę opisuje ta sama sekcja „Materiały
    nutowe”.
-8. Adres strony internetowej, podany pojedynczo albo listą.
-9. Adres filmu z serwisu YouTube, dla którego pobierane są napisy.
+9. Adres strony internetowej, podany pojedynczo albo listą.
+10. Adres filmu z serwisu YouTube, dla którego pobierane są napisy.
 
 Opcja `--nuty` polecenia `przetworz` kieruje pliki PDF i obrazy danego wywołania
 do ścieżki materiałów nutowych, gdzie zapis nutowy jest rozpoznawany optycznie
@@ -41,6 +47,15 @@ Nie zatrzymuje to przetwarzania pozostałych źródeł.
 Adres można podać na trzy sposoby: pojedynczo, kilka adresów rozdzielonych
 spacjami oraz kilka adresów w osobnych wierszach. To samo dotyczy importowanego
 pliku TXT z listą adresów. Wiersz zaczynający się od krzyżyka jest komentarzem.
+
+Plik TXT wysłany w interfejsie WWW, który składa się wyłącznie z adresów, jest
+traktowany jak lista źródeł: aplikacja pobiera każdą wskazaną stronę, a sam
+plik z listą nie trafia do notatnika jako treść. Plik TXT lub MD ze zwykłym tekstem
+pozostaje źródłem tekstowym, a adresy http i https znalezione w jego treści są
+dodatkowo pobierane jako osobne źródła. Takie adresy nie zostały podane wprost,
+więc podlegają kontroli robots.txt, także gdy wyjątek dla źródeł jawnych jest
+włączony. Adres zaczynający się od „www.”, bez schematu, dostaje https
+automatycznie; inny adres bez schematu jest odrzucany.
 
 Zanim cokolwiek zostanie pobrane, aplikacja pokazuje podsumowanie: ile adresów
 wykryto, ile jest poprawnych, ile pominięto jako duplikat i ile wpisów odrzucono
@@ -537,6 +552,222 @@ czy list, bo jego jedyna struktura — tabela — jest odczytywana wprost, bez
 zgadywania. Nagranie audio dostaje poziom niski, bo transkrypcja mowy nie ma
 nagłówków, list ani tabel.
 
+### Dokumenty OpenDocument: ODT, ODS i ODP
+
+Pliki OpenDocument są archiwami ZIP z treścią w pliku `content.xml`. Aplikacja
+czyta je wyłącznie biblioteką standardową Pythona, bez żadnej zależności
+zewnętrznej i bez programu LibreOffice. Format niesie prawdziwą strukturę:
+nagłówek ma zapisany poziom, lista ma styl wypunktowany albo numerowany, a
+tabela jest osobnym elementem, więc poziom pewności struktury jest wysoki.
+
+ODT, dokument tekstowy: nagłówki, akapity, listy, tabele. Numeracja listy
+wynika ze stylu zapisanego w dokumencie. Zagnieżdżone listy są spłaszczane,
+bo wewnętrzny format bloku listy jest płaski. Treść przypisów dolnych trafia do
+osobnych akapitów „Przypis: …” zaraz po akapicie, w którym przypis stoi, żeby
+nie przepadła. Automatycznie generowane spisy treści i skorowidze są pomijane,
+bo powtarzają nagłówki, a tekst usunięty w śledzonych zmianach nie należy do
+dokumentu. Sekcje i ramki tekstowe są rozwijane. Tytuł pochodzi z metadanych,
+a przy ich braku z pierwszego nagłówka.
+
+ODS, arkusz: każdy arkusz jest nagłówkiem „Arkusz: nazwa” i jedną tabelą.
+Komórka jest zapisana tak, jak widzi ją użytkownik, czyli sformatowana, na
+przykład „1 234,50 zł” albo data w wybranym formacie, a nie surową liczbą.
+Pierwszy wiersz arkusza jest nagłówkiem kolumn z założenia, tak jak w pliku CSV.
+Puste komórki i wiersze zapisane jednym elementem z liczbą powtórzeń rzędu
+tysięcy są rozwijane z ograniczeniem: bez niego jeden wiersz rozrósłby się do
+tysięcy pustych komórek.
+
+ODP, prezentacja: każdy slajd jest nagłówkiem „Slajd N: tytuł”, po którym idzie
+jego treść, a na końcu notatki mówcy. Tytuł jest brany z ramki oznaczonej jako
+tytuł, jeżeli program ją tak zapisał. Numer slajdu, data i stopka nie są treścią.
+
+Obrazy, wykresy i obiekty osadzone nie są odczytywane. Ich liczba trafia do
+ostrzeżeń ekstraktora, żeby utrata treści nie była cicha. Dokument zaszyfrowany
+hasłem jest odrzucany z komunikatem, jak go zapisać bez szyfrowania.
+
+Bezpieczeństwo odczytu archiwum jest wspólne dla ODF i PPTX. Rozmiar rozpakowanej
+treści każdego wpisu jest ograniczony do dwustu megabajtów, przy czym sprawdzany
+jest zarówno rozmiar zadeklarowany w archiwum, jak i faktycznie odczytany. Wpis
+zawierający deklarację typu dokumentu albo definicję encji jest odrzucany,
+bo dokumenty tych formatów ich nie używają, a to one umożliwiają atak przez
+rozszerzanie encji. Żaden wpis archiwum nie jest zapisywany na dysku, więc nazwy
+wpisów nie mają jak wyprowadzić zapisu poza katalog projektu.
+
+### Prezentacje PPTX
+
+PPTX też jest archiwum ZIP, czytanym biblioteką standardową. Kolejność slajdów
+wynika z listy w `ppt/presentation.xml`, a nie z numerów w nazwach plików:
+użytkownik potrafi przestawić slajdy, a pliki zostają pod starymi nazwami.
+Slajd jest nagłówkiem „Slajd N: tytuł”, ukryty slajd jest odczytany i oznaczony.
+Akapit w kształcie zastępczym treści slajdu jest elementem listy, jeżeli nie ma
+jawnie wyłączonego wypunktowania, bo takie kształty dziedziczą wypunktowanie
+z wzorca slajdów, którego aplikacja nie odczytuje. Akapit w zwykłym polu
+tekstowym jest akapitem, chyba że ma jawne wypunktowanie. Tabele są odczytywane,
+grupy kształtów rozwijane, notatki mówcy dopisywane na końcu slajdu. Obrazy,
+wykresy i diagramy nie są odczytywane, a ich liczba trafia do ostrzeżeń.
+
+### Arkusze XLSX i XLS
+
+XLSX jest czytany biblioteką `openpyxl` w trybie strumieniowym, a stary XLS
+biblioteką `xlrd`. Obie są w czystym Pythonie. Każdy arkusz jest nagłówkiem
+„Arkusz: nazwa” i jedną tabelą, z pierwszym wierszem jako nagłówkiem kolumn.
+Arkusz ukryty jest odczytany i oznaczony. Zasady zapisu wartości są wspólne:
+
+1. Data jest zapisana jako RRRR-MM-DD, a data z godziną jako RRRR-MM-DD
+   GG:MM:SS. Data w arkuszu jest liczbą zależną od stylu komórki, więc odczytana
+   bez uwzględnienia stylu wyglądałaby jak przypadkowa liczba.
+2. Liczba ma piętnaście cyfr znaczących, jak w arkuszu, więc 0,1 dodane do 0,2
+   nie daje zapisu 0,30000000000000004. Liczba całkowita nie ma części dziesiętnej.
+3. Komórka o formacie procentowym jest zapisana jako procent.
+4. Wartość logiczna to „prawda” albo „fałsz”, a błąd komórki jest zapisany jego nazwą.
+
+Wartości pochodzą z zapisanych w pliku wyników formuł. Formuła, której wyniku
+nie zapisano, na przykład w arkuszu wygenerowanym programem bez silnika obliczeń,
+dałaby pustą komórkę, więc ich liczba trafia do ostrzeżeń, wraz ze wskazówką, żeby
+otworzyć plik w programie arkusza i zapisać go ponownie.
+
+Komórki z formatem walutowym są zapisane jako same liczby, bez symbolu waluty:
+format waluty nie jest odtwarzany, a liczba bez jednostki mogłaby zostać
+odebrana jako liczba bez jednostki, więc liczba takich komórek trafia do ostrzeżeń.
+To różnica wobec ODS, gdzie komórka jest zapisana tak, jak widzi ją użytkownik.
+Wykresy i obrazy nie są odczytywane i są zgłaszane w ostrzeżeniach. Makra w pliku
+XLSM nie są uruchamiane ani odczytywane. Skoroszyt zaszyfrowany hasłem jest
+odrzucany z komunikatem.
+
+### RTF
+
+Plik RTF jest czytany biblioteką `striprtf`. Polskie znaki są dekodowane według
+strony kodowej zapisanej w samym pliku, więc „ą” i „ż” się nie zamieniają.
+Biblioteka zwraca sam tekst, bez struktury, więc poziom pewności struktury jest
+niski i nie powstają bloki. Tabela jest spłaszczona do wierszy z komórkami
+rozdzielonymi kreską pionową: struktura tabeli jest uproszczona, a nie zgubiona,
+i plik z tabelą dostaje o tym ostrzeżenie. Obrazy i obiekty osadzone nie są
+odczytywane i są zgłaszane w ostrzeżeniach.
+
+### MHTML
+
+Plik MHTML (`.mhtml` i `.mht`) to strona zapisana z przeglądarki w jednym pliku,
+na przykład poleceniem „Zapisz jako” w Chrome. Aplikacja wyciąga z niego część
+HTML, zdejmuje kodowanie transferu, dekoduje polskie znaki (zadeklarowany zestaw
+znaków ma pierwszeństwo, a przy jego braku kodowanie jest wykrywane) i oddaje ją
+temu samemu ekstraktorowi, który czyta strony internetowe. Obrazy i arkusze
+stylów z pozostałych części są pomijane. Adres, z którego zapisano stronę, trafia
+do metadanych jako „adres_zapisanej_strony”. To wygodny sposób na strony
+za logowaniem albo budowane skryptami: zapisujesz stronę już wyświetloną
+w przeglądarce i podajesz plik jako źródło. Plik bez części HTML i bez części
+tekstowej kończy się czytelnym błędem.
+
+### Pliki DOC i PPT przez LibreOffice
+
+Dla starych formatów binarnych Worda i PowerPointa nie ma dobrej biblioteki
+w czystym Pythonie, więc LibreOffice zamienia DOC na DOCX, a PPT na PPTX,
+i dalej pracują zwykłe ekstraktory. Wynik niesie ostrzeżenie, że treść przeszła
+przez konwersję, bo jest ona przybliżeniem: tekst zostaje, ale układ złożonego
+dokumentu mógł się zmienić. Aplikacja używa pliku konsolowego `soffice.com`,
+a nie `soffice.exe`, który otwiera okno i blokuje proces. Konwersja odbywa się
+w osobnym, tymczasowym profilu, więc nie koliduje z otwartym LibreOffice, a plik
+jest zapisywany wyłącznie w katalogu tymczasowym systemu. Limit czasu jednej
+konwersji to trzy minuty.
+
+Brak LibreOffice nie zatrzymuje aplikacji: plik DOC albo PPT dostaje status
+„pominiete” z komunikatem, że brakuje programu i że można zapisać plik w nowszym
+formacie, a pozostałe źródła i formaty działają normalnie. Ścieżkę programu można
+wskazać kluczem konfiguracji `sciezka_libreoffice`.
+
+### TSV
+
+Plik TSV to ta sama tabela co CSV, z ogranicznikiem tabulatora zadanym przez
+format. Ogranicznik nie jest zgadywany: plik TSV z przecinkami w komórkach nie
+może zostać rozbity po przecinku tylko dlatego, że rozpoznawanie ogranicznika
+uznałoby je za częstsze.
+
+## Archiwa ZIP
+
+Archiwum ZIP nie jest źródłem, tylko pojemnikiem na źródła. Aplikacja rozpakowuje
+je do katalogu projektu i przetwarza znalezione pliki tymi samymi adapterami co
+pliki podane wprost: dokument DOCX z archiwum jest czytany jak dokument DOCX
+podany bezpośrednio. Archiwum jest rozpoznawane po rozszerzeniu `.zip`, a jego
+zawartość jest wykazana w manifeście, w raporcie i w logach.
+
+Pochodzenie każdego pliku jest zapisane w postaci „materialy.zip » folder/plik.pdf”,
+a przy archiwum zagnieżdżonym cała droga, na przykład
+„materialy.zip » paczka.zip » plik.pdf”. Nagłówek metadanych pliku wynikowego ma
+wiersz „Plik” z drogą wewnątrz archiwum i wiersz „Archiwum” z nazwą głównego
+archiwum, a wpis źródła w manifeście ma pole `archiwum`.
+
+Pliki z archiwum nie są łączone w grupę automatycznie: zasada z sekcji dziesiątej
+`CLAUDE.md` każe łączyć wyłącznie tematycznie, a zawartość archiwum nie musi być
+jednym tematem. Każdy plik dostaje więc własne źródło i własny plik wynikowy,
+a zajmuje przy tym slot notatnika. Jeżeli podasz nazwę grupy dla archiwum, opcją
+`--grupa` albo polem grupy w interfejsie, wszystkie jego pliki dziedziczą tę grupę
+i tworzą wspólny plik wynikowy. Obrazy z archiwum dostają, jak każdy obraz podany
+bez grupy, wspólną numerowaną grupę tego uruchomienia i trafiają do tematycznego
+pliku PDF.
+
+Przed przetwarzaniem aplikacja sprawdza, czy pliki z archiwum zmieszczą się
+w wolnych slotach notatnika. Jeżeli nie, zapisuje ostrzeżenie w logu ważnym,
+w logu szczegółowym, we wpisie archiwum w manifeście i w raporcie, wraz z liczbą
+potrzebnych i wolnych slotów oraz wskazówką, żeby podać nazwę grupy albo podnieść
+limit. Przetwarzanie trwa dalej, a pliki ponad limit dostają zwykły status
+pominięcia z powodem.
+
+### Limity i ochrona
+
+Wszystkie limity są polami konfiguracji, opisanymi w `CONFIGURATION.md`. Trzy z nich
+dotyczą całego archiwum, a ich przekroczenie pomija całe archiwum, nigdy jego część:
+niekompletny zbiór dokumentów w notatniku, bez informacji, że czegoś brakuje, byłby
+cichą utratą treści. Powód pominięcia jest w manifeście, w raporcie i w logach.
+
+1. Liczba plików: domyślnie 200 na archiwum, wraz z plikami w archiwach zagnieżdżonych.
+2. Rozmiar po rozpakowaniu: domyślnie 500 megabajtów łącznie. Liczony jest zarówno
+   według rozmiaru zadeklarowanego w archiwum, jak i według faktycznie odczytanych
+   bajtów, bo deklaracja może kłamać.
+3. Stosunek kompresji: domyślnie 200 do 1 na plik. Wyższy jest cechą bomby
+   kompresji, więc pomijane jest całe archiwum.
+4. Zagłębienie: domyślnie dwa poziomy. Archiwum w archiwum jest rozwijane, ale
+   archiwum w archiwum w archiwum nie: taki wpis jest pominięty z komunikatem.
+
+Ochrona przed ścieżkami wychodzącymi jest zasadnicza. Żaden plik nie jest zapisywany
+pod nazwą z archiwum: trafia do katalogu projektu pod nazwą własną, z numerem
+i oczyszczoną nazwą końcową, bez katalogów. Nazwa z archiwum służy wyłącznie do
+opisu pochodzenia. Wpis ze ścieżką bezwzględną, literą dysku, składnikiem „..”,
+dowiązaniem symbolicznym albo znakiem zerowym jest pominięty z komunikatem, a
+reszta archiwum jest przetwarzana dalej. Wpis zaszyfrowany hasłem jest pominięty:
+aplikacja nie próbuje haseł.
+
+Pominięte są też, z powodem, wpisy w nieobsługiwanym formacie, wpisy puste oraz
+pliki metadanych systemu, takie jak `.DS_Store`, `Thumbs.db` i katalog `__MACOSX`.
+Każdy pominięty wpis jest wymieniony w raporcie i w manifeście, a ich liczba jest
+w podsumowaniu polecenia `przetworz` w wierszu „Pominięte pliki i archiwa ZIP”:
+pominięcie po cichu byłoby gorsze niż błąd. Nazwy wpisów w starszych archiwach, zapisanych bez
+znacznika UTF-8, są poprawiane ze strony kodowej DOS dla polskiego systemu, ale
+dotyczy to wyłącznie opisu pochodzenia, nigdy treści pliku.
+
+### Wpis archiwum w manifeście
+
+`manifest.json` ma listę `archiwa`. Każde archiwum ma nazwę, sumę kontrolną, status,
+komunikat, ostrzeżenia i listę plików. Status archiwum to „rozwiniete” albo
+„pominiete”, a status pliku to „przyjety” albo „pominiety”. Przy przyjętym pliku jest
+identyfikator źródła, który łączy wpis archiwum ze źródłem, oraz suma kontrolna
+pliku. Ponowne dodanie tego samego archiwum, rozpoznawanego po sumie kontrolnej,
+zastępuje jego dotychczasowy wpis, a pliki z niego, znane już projektowi, są
+raportowane jako źródła już obecne.
+
+Wznowienie projektu odtwarza z checkpointu pliki z archiwum, a nie samo archiwum,
+więc niczego nie rozpakowuje drugi raz.
+
+## Pliki tekstu prostego
+
+JSON, XML, YAML, YML, TOML, INI, CFG i LOG są zapisywane jako zwykły tekst, z
+wykrytym kodowaniem i bez interpretowania struktury. Struktura tych plików jest
+informacją, więc nie jest przepisywana na prozę, a plik dostaje typ „plik
+tekstowy” i niski poziom pewności struktury, jak plik TXT. Plik nie dostaje
+tytułu z pierwszego wiersza, bo pierwszy wiersz pliku JSON to zwykle sam nawias,
+a pliku XML deklaracja; nazwa pliku jest w nagłówku metadanych jako „Plik”.
+Bardzo duży plik podlega normalnym limitom słów i rozmiaru, a podział na części
+idzie tą samą drogą co przy każdym innym źródle. Plik `.env` nie jest obsługiwany,
+bo takie pliki zawierają sekrety.
+
 ## Nagrania audio i transkrypcja mowy
 
 Obsługiwane formaty nagrań to MP3, WAV, M4A, FLAC, OGG, OPUS i AAC. Plik audio
@@ -797,7 +1028,10 @@ pól jest stała:
 10. Rodzaj napisów, wyłącznie dla filmu z pobranymi napisami.
 11. Data importu, w czasie lokalnym.
 12. Identyfikator źródła.
-13. Część, wyłącznie dla źródła podzielonego, w postaci „2 z 3”.
+13. Uwaga o treści, wyłącznie dla źródła, którego treść użytkownik zastąpił
+    plikiem zapisanym ręcznie, w postaci „treść zapisana ręcznie w pliku
+    NAZWA”. Ta sama informacja jest w manifeście.
+14. Część, wyłącznie dla źródła podzielonego, w postaci „2 z 3”.
 
 Pole nieobecne dla danego źródła jest pomijane w całości, a nie drukowane z pustą
 wartością. Pola „Adres” i „Plik” wykluczają się wzajemnie, a tekst wklejony nie ma
@@ -843,6 +1077,20 @@ wszystkich źródeł jednego wywołania `przetworz`. Kolejną grupę w tym samym
 projekcie dodaje się osobnym wywołaniem: checkpoint kumuluje źródła między
 uruchomieniami. Źródło bez nazwy grupy dostaje własny plik, dokładnie jak przed
 tym etapem.
+
+Dopisanie źródła do grupy, która ma już spakowane źródła, pakuje całą grupę od
+nowa. Dawniej nowe źródło dostawało osobny plik obok pliku grupy, co przeczyło
+sensowi grupy tematycznej. Teraz wcześniejsze źródła grupy wracają do puli
+pakowania, powstaje jeden plik z całym składem, a stary plik grupy jest usuwany
+dopiero po zapisaniu nowego, więc przerwanie pracy w środku nie zostawia grupy
+bez pliku. Raport wymienia zastąpienie w wierszu „Plik grupy zastąpiony: stara
+nazwa → nowa nazwa”, a manifest zapisuje je w liście `zastapione_pliki_grup`.
+Nazwa pliku grupy wynika ze składu grupy, więc plik zmienia nazwę, gdy skład się
+zmienia, a zostaje pod tą samą nazwą i jest nadpisany w miejscu, gdy skład jest
+ten sam. Przepakowanie wymaga tekstu pośredniego wszystkich wcześniejszych
+źródeł grupy: gdy któregoś brakuje, grupa nie jest ruszana, nowe źródło dostaje
+osobny plik, a powód jest w logu szczegółowym. Materiał nutowy nigdy nie jest
+członkiem grupy.
 
 W pliku grupy przed treścią każdego fragmentu stoi jego nagłówek metadanych,
 a fragmenty rozdziela wiersz „Kolejny fragment tego pliku:”. Gdy skład grupy nie
@@ -946,7 +1194,9 @@ przechodzące przez rozpoznawanie treści dostaje ocenę jakości: „poprawna�
 
 Oceniane są strony internetowe i filmy, bo ich treść powstaje przez ekstrakcję
 albo przez napisy, a od etapu czwartego także pliki PDF, DOCX, EPUB i HTML
-lokalny, z tego samego powodu. Tekst wklejony oraz pliki TXT i MD nie są
+lokalny, a od etapu czternastego także ODT, RTF i DOC, z tego samego powodu.
+Arkusze i prezentacje nie są oceniane: z natury formatu są tabelami i slajdami,
+a nie prozą, więc nie mają tytułu ani akapitów. Tekst wklejony oraz pliki TXT i MD nie są
 oceniane, bo ich treść jest dokładnie tym, co podał użytkownik.
 
 Obrazy mają własną, osobną ocenę: jakość tekstu rozpoznanego przez OCR. Wynik
@@ -977,11 +1227,91 @@ Ocena „podejrzana” powstaje, gdy zachodzi co najmniej jeden z warunków:
 Warunki ósmy i dziewiąty dotyczą tylko materiału z rozpoznaną strukturą.
 Transkrypcja filmu nie ma nagłówków, więc nie może stać się przez nie podejrzana.
 
-Źródło podejrzane jest zapisywane normalnie i nigdy nie jest kasowane ani
-pomijane. Ma pliki wynikowe, ma status „spakowane” i liczy się do limitu źródeł.
-Zmienia się tylko to, że użytkownik o nim wie: ocena i lista powodów trafiają do
+Źródło podejrzane jest zapisywane normalnie i nie jest kasowane ani pomijane.
+Ma pliki wynikowe, ma status „spakowane” i liczy się do limitu źródeł. Zmienia
+się tylko to, że użytkownik o nim wie: ocena i lista powodów trafiają do
 manifestu, wpis pojawia się w logu ważnym i w logu szczegółowym, a raport końcowy
 wymienia takie źródła w sekcji „Materiały do sprawdzenia”.
+
+Jest jeden wąski wyjątek od tej zasady, uzgodniony z użytkownikiem w etapie
+czternastym. Źródło, w którym jednocześnie treść ma mniej słów niż próg
+pięćdziesięciu i pasuje do jednego ze zwrotów typowych dla strony błędu,
+żądania skryptów albo osłony logowania, jest pomijane ze statusem „pominiete”
+i powodem, zamiast zapisywane. Takie źródło to niemal na pewno sam szkielet
+strony, na przykład dwadzieścia słów zachęty do zalogowania, a nie treść
+merytoryczna, i nie powinno zajmować miejsca w limicie źródeł ani trafiać do
+bazy wiedzy. Oba warunki muszą zajść naraz. Zwrot w długim artykule, na
+przykład w stopce albo w cytacie, oraz krótka treść bez takiego zwrotu
+zostają źródłem podejrzanym, ale zapisanym. Pominiętego źródła nie trzeba
+porzucać: zapisz stronę z przeglądarki do pliku i zastąp nim treść źródła na
+stronie projektu. Wyjątek nie działa dla treści podstawionej ręcznie, bo to
+świadoma decyzja użytkownika.
+
+## Ręczne zmiany w projekcie
+
+Po zakończeniu przetwarzania użytkownik może zmienić stan projektu ręcznie.
+Każda zmiana trafia jednocześnie do checkpointu, do obu logów, do manifestu i do
+raportu, zgodnie z zasadą, że zmiana bez śladu jest gorsza niż błąd.
+
+### Zweryfikowane ręcznie
+
+Źródło z materiałów do sprawdzenia można oznaczyć jako obejrzane i uznane za
+dobre. Pole `zweryfikowane_recznie` w checkpoincie i w manifeście ma wartość
+domyślną fałsz. Oznaczenie nie zmienia oceny jakości ani ostrzeżeń: mówi tylko,
+że człowiek je widział. Źródło znika z sekcji „Materiały do sprawdzenia”, a raport
+wymienia je w sekcji „Źródła zweryfikowane ręcznie”, wraz z dawnymi powodami.
+Oznaczyć można tylko źródło, które jest na liście materiałów do sprawdzenia.
+
+### Zastąpienie treści plikiem
+
+Treść źródła można zastąpić plikiem zapisanym ręcznie, na przykład stroną
+zapisaną z przeglądarki, gdy strona za logowaniem nie dała się pobrać. Źródło
+zachowuje identyfikator i pochodzenie. Treść przechodzi te same etapy co każde
+źródło: ekstrakcję adapterem właściwym dla formatu pliku, normalizację i ocenę
+jakości. Plik HTML podstawiony za stronę internetową jest ekstrahowany jak
+strona, z danymi strukturalnymi. W nagłówku metadanych pojawia się wiersz „Uwaga
+o treści”, a w manifeście pole `tresc_zastapiona_plikiem` z nazwą pliku.
+
+Zastąpienie jest bezpieczne. Dotychczasowy stan źródła jest zamieniany dopiero
+wtedy, gdy nowa treść przejdzie ekstrakcję i normalizację i nie okaże się pusta.
+Przy niepowodzeniu stan zostaje bez zmian, a powód jest w logach i w sekcji
+raportu „Zastąpienia treści, które się nie powiodły”. Zastąpić można treść
+źródła spakowanego, znormalizowanego, pominiętego albo z błędem. Zastąpienie
+treści źródła z grupy pakuje całą grupę od nowa.
+
+### Usunięcie źródła z projektu
+
+Usunięcie jest zalecaną drogą pozbycia się źródła i wymaga potwierdzenia
+wpisanym słowem. Źródło znika z checkpointu, z listy wejść, z decyzji
+deduplikacji, z manifestu i z raportu, a jego pliki wynikowe i wyniki pośrednie
+z dysku. Zachowane oryginały i wysłane pliki zostają w katalogu projektu. Lista
+wejść jest oczyszczona, więc wznowienie projektu nie przywraca usuniętego źródła.
+Źródła uznane dotąd za duplikaty usuwanego źródła wracają do puli pakowania,
+bo były duplikatami tylko wobec niego. Usunięcie źródła z grupy, w której
+zostają inne, pakuje grupę od nowa.
+
+### Plik wynikowy usunięty ręcznie z dysku
+
+Gdy plik wynikowy TXT albo PDF zniknie z katalogu projektu, checkpoint dalej
+uważa jego źródła za spakowane. Sprawdzenie i zmiana statusu zachodzą wyłącznie
+na początku przebiegu przetwarzania, nigdy przy wyświetlaniu strony projektu ani
+raportu, bo samo oglądanie projektu nie może zmieniać jego stanu. Strona
+projektu tylko pokazuje rozbieżność w sekcji „Pliki wynikowe brakujące na
+dysku”.
+
+Na początku przebiegu każde źródło brakującego pliku dostaje status „pominiete”
+z powodem „plik wynikowy usunięty ręcznie z dysku” i nazwą pliku, z wpisem
+w `log_wazne.txt`, w logu szczegółowym, w manifeście i w raporcie. Przy pliku
+grupy dotyczy to wszystkich jego źródeł, a raport wymienia je z nazwy. Jeżeli
+źródło ma jeszcze inne pliki na dysku, na przykład wersję MD albo kolejną część,
+komunikat je wymienia i ostrzega, że zawierają tylko część treści i nie należy
+ich wgrywać do notatnika. Brak samego pliku wersji MD nie zmienia statusu:
+treść źródła jest nadal w pliku TXT, a brak jest tylko odnotowany w logach.
+
+Decyzja jest odwracalna. Ponowne dodanie tego samego adresu albo pliku, na
+przykład przez formularz dosyłania, przetwarza źródło od nowa, zamiast
+traktować je jako już obecne w projekcie. Zwykłe wznowienie projektu z zapisanych
+wejść nie jest ponownym dodaniem i nie cofa pominięcia po cichu.
 
 Progi są celowo zachowawcze. Fałszywe podejrzenie kosztuje jedno zajrzenie do
 pliku, a przeoczona utrata treści kosztuje wiarygodność całej bazy wiedzy.

@@ -8,7 +8,10 @@ from pathlib import Path
 from gnb.output.raport import (
     MaterialDoSprawdzenia,
     PodsumowanieProjektu,
+    ZastapienieNieudane,
+    ZastapionyPlik,
     ZrodloJuzWProjekcie,
+    ZrodloZweryfikowane,
     zapisz_raport,
     zbuduj_raport,
 )
@@ -207,3 +210,64 @@ def test_wykorzystanie_limitu_dolicza_tematyczne_pliki_pdf() -> None:
 
     assert "Wykorzystanie limitu źródeł: 2 procent" in tekst
     assert "plików do wgrania 2" in tekst
+
+
+def test_raport_wymienia_zastapione_pliki_grup() -> None:
+    podsumowanie = replace(
+        _PODSUMOWANIE,
+        zastapione_pliki=(ZastapionyPlik("grupa_aaa.txt", "grupa_bbb.txt", "Grupa"),),
+    )
+
+    raport = zbuduj_raport("Projekt", podsumowanie)
+
+    assert "Pliki grup zastąpione, liczba: 1" in raport
+    assert "Plik grupy zastąpiony: grupa_aaa.txt → grupa_bbb.txt" in raport
+    assert "  Grupa: Grupa" in raport
+
+
+def test_raport_wymienia_zrodla_zweryfikowane_recznie_wraz_z_powodami() -> None:
+    podsumowanie = replace(
+        _PODSUMOWANIE,
+        zrodla_zweryfikowane=(
+            ZrodloZweryfikowane(
+                "strona_www-1",
+                "https://przyklad.pl/a",
+                powody=("treść ma mniej niż 50 słów",),
+            ),
+        ),
+    )
+
+    raport = zbuduj_raport("Projekt", podsumowanie)
+
+    assert "Źródła zweryfikowane ręcznie, liczba: 1" in raport
+    assert "Użytkownik obejrzał to źródło i uznał je za dobre." in raport
+    assert "- treść ma mniej niż 50 słów" in raport
+
+
+def test_raport_wymienia_nieudane_zastapienia_i_mowi_ze_stan_sie_nie_zmienil() -> None:
+    podsumowanie = replace(
+        _PODSUMOWANIE,
+        nieudane_zastapienia=(
+            ZastapienieNieudane("strona_www-1", "https://przyklad.pl/a", "Plik jest pusty."),
+        ),
+    )
+
+    raport = zbuduj_raport("Projekt", podsumowanie)
+
+    assert "Zastąpienia treści, które się nie powiodły, liczba: 1" in raport
+    assert "Powód: Plik jest pusty." in raport
+    assert "Dotychczasowy stan źródła nie został zmieniony." in raport
+
+
+def test_raport_bez_zmian_recznych_nie_ma_ich_sekcji() -> None:
+    raport = zbuduj_raport("Projekt", _PODSUMOWANIE)
+
+    assert "zastąpione" not in raport
+    assert "zweryfikowane ręcznie" not in raport
+    assert "nie powiodły" not in raport
+
+
+def test_raport_odswiezony_po_zmianie_recznej_nie_udaje_czasu_pracy() -> None:
+    raport = zbuduj_raport("Projekt", replace(_PODSUMOWANIE, czas_pracy_sekundy=None))
+
+    assert "Czas pracy: nie dotyczy, raport odświeżony po ręcznej zmianie w projekcie" in raport

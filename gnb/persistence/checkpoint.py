@@ -102,6 +102,17 @@ class StanZrodla:
     `ostrzezenia_pakowania` zbiera ostrzeżenia z podziału źródła zbyt dużego,
     na przykład informację o cięciu wewnątrz zdania. Oba pola są dodane
     z bezpieczną wartością domyślną i nie zmieniają wersji schematu.
+
+    Trzy pola dodane w etapie czternastym, również z bezpieczną wartością
+    domyślną, opisują ręczne działania użytkownika na źródle. Pole
+    `zweryfikowane_recznie` mówi, że użytkownik obejrzał źródło z materiałów do
+    sprawdzenia i uznał je za dobre; nie zmienia ono oceny jakości, tylko
+    wyłącza źródło z sekcji „Materiały do sprawdzenia”. Pole
+    `tresc_zastapiona_plikiem` niesie nazwę pliku, którego treść użytkownik
+    podstawił za wynik ekstrakcji, przy zachowaniu identyfikatora i pochodzenia
+    źródła. Pole `plik_wynikowy_usuniety` odróżnia pominięcie z powodu ręcznie
+    usuniętego pliku wynikowego od każdego innego pominięcia: tylko takie źródło
+    jest przetwarzane od nowa, gdy użytkownik poda je ponownie.
     """
 
     identyfikator: str
@@ -126,6 +137,61 @@ class StanZrodla:
     duplikat_glowny: str | None = None
     grupa_pakowania: str | None = None
     ostrzezenia_pakowania: list[str] = field(default_factory=list)
+    zweryfikowane_recznie: bool = False
+    tresc_zastapiona_plikiem: str | None = None
+    plik_wynikowy_usuniety: bool = False
+    archiwum: str | None = None
+
+
+@dataclass
+class WpisArchiwumZapis:
+    """Jeden plik z archiwum ZIP: przyjęty jako wejście albo pominięty z powodem.
+
+    Pole `identyfikator_zrodla` jest uzupełniane, gdy przyjęty plik dostaje
+    identyfikator źródła, żeby wpis archiwum dało się powiązać ze źródłem
+    w manifeście.
+    """
+
+    sciezka: str
+    status: str
+    format: str = ""
+    rozmiar_bajtow: int = 0
+    komunikat: str | None = None
+    suma_kontrolna: str | None = None
+    identyfikator_zrodla: str | None = None
+
+
+@dataclass
+class StanArchiwum:
+    """Zapisany w checkpoincie opis jednego archiwum ZIP dodanego do projektu.
+
+    Archiwum nie jest źródłem, tylko pojemnikiem na źródła, więc ma własny wpis
+    z listą zawartości. Status „pominiete” oznacza, że całe archiwum nie zostało
+    rozwinięte, a `komunikat` mówi dlaczego. Pole dodane z pustą listą jako
+    wartością domyślną w kontrakcie `Checkpoint`, więc nie podnosi numeru schematu.
+    """
+
+    nazwa: str
+    suma_kontrolna: str
+    status: str
+    komunikat: str | None = None
+    wpisy: list[WpisArchiwumZapis] = field(default_factory=list)
+    ostrzezenia: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ZastapionyPlikGrupy:
+    """Zapis o pliku grupy zastąpionym przy pełnym przepakowaniu grupy.
+
+    Gdy do istniejącej grupy dochodzi nowe źródło albo źródło z niej znika,
+    grupa jest pakowana od nowa, a stary plik wynikowy przestaje istnieć. Wpis
+    zachowuje starą i nową nazwę, żeby raport i manifest mogły o tym powiedzieć
+    wprost, zamiast pozwolić plikowi po cichu zniknąć.
+    """
+
+    stara_nazwa: str
+    nowa_nazwa: str
+    grupa: str | None = None
 
 
 @dataclass
@@ -185,6 +251,14 @@ class WejscieZapis:
     # obraz ma być ponownie potraktowany jako materiał nutowy. Pole addytywne
     # z bezpieczną wartością domyślną, więc nie podnosi numeru schematu.
     wymus_nuty: bool = False
+    # Fałsz oznacza adres znaleziony w treści wysłanego pliku, a nie podany wprost
+    # przez użytkownika: dla takiego adresu obowiązuje kontrola robots.txt. Pole
+    # addytywne z bezpieczną wartością domyślną, więc nie podnosi numeru schematu.
+    wskazane_jawnie: bool = True
+    # Wypełnione dla pliku rozpakowanego z archiwum ZIP: nazwa głównego archiwum
+    # i droga pliku w nim. Pola addytywne z bezpieczną wartością domyślną.
+    archiwum: str | None = None
+    sciezka_w_archiwum: str | None = None
 
 
 @dataclass
@@ -207,6 +281,12 @@ class Checkpoint:
     zakonczony: bool = False
     deduplikacja: StanDeduplikacji = field(default_factory=StanDeduplikacji)
     wejscia: list[WejscieZapis] = field(default_factory=list)
+    zastapione_pliki_grup: list[ZastapionyPlikGrupy] = field(default_factory=list)
+    archiwa: list[StanArchiwum] = field(default_factory=list)
+    # Identyfikatory źródeł sieciowych, które użytkownik zweryfikował ręcznie przed
+    # ponownym pobraniem. Nowo utworzony stan takiego źródła dostaje od razu
+    # znacznik weryfikacji. Pole addytywne z pustą wartością domyślną.
+    zweryfikowane_wstepnie: list[str] = field(default_factory=list)
 
 
 def zapisz(sciezka: Path, checkpoint: Checkpoint) -> None:
@@ -402,6 +482,12 @@ def _checkpoint_do_slownika(checkpoint: Checkpoint) -> dict[str, Any]:
         "zakonczony": checkpoint.zakonczony,
         "deduplikacja": _deduplikacja_do_slownika(checkpoint.deduplikacja),
         "wejscia": [_wejscie_do_slownika(wejscie) for wejscie in checkpoint.wejscia],
+        "archiwa": [_archiwum_do_slownika(archiwum) for archiwum in checkpoint.archiwa],
+        "zweryfikowane_wstepnie": list(checkpoint.zweryfikowane_wstepnie),
+        "zastapione_pliki_grup": [
+            {"stara_nazwa": wpis.stara_nazwa, "nowa_nazwa": wpis.nowa_nazwa, "grupa": wpis.grupa}
+            for wpis in checkpoint.zastapione_pliki_grup
+        ],
         "zrodla": {klucz: _stan_do_slownika(stan) for klucz, stan in checkpoint.zrodla.items()},
     }
 
@@ -414,6 +500,31 @@ def _wejscie_do_slownika(wejscie: WejscieZapis) -> dict[str, Any]:
         "moment_dodania": wejscie.moment_dodania,
         "grupa": wejscie.grupa,
         "wymus_nuty": wejscie.wymus_nuty,
+        "wskazane_jawnie": wejscie.wskazane_jawnie,
+        "archiwum": wejscie.archiwum,
+        "sciezka_w_archiwum": wejscie.sciezka_w_archiwum,
+    }
+
+
+def _archiwum_do_slownika(archiwum: StanArchiwum) -> dict[str, Any]:
+    return {
+        "nazwa": archiwum.nazwa,
+        "suma_kontrolna": archiwum.suma_kontrolna,
+        "status": archiwum.status,
+        "komunikat": archiwum.komunikat,
+        "ostrzezenia": list(archiwum.ostrzezenia),
+        "wpisy": [
+            {
+                "sciezka": wpis.sciezka,
+                "status": wpis.status,
+                "format": wpis.format,
+                "rozmiar_bajtow": wpis.rozmiar_bajtow,
+                "komunikat": wpis.komunikat,
+                "suma_kontrolna": wpis.suma_kontrolna,
+                "identyfikator_zrodla": wpis.identyfikator_zrodla,
+            }
+            for wpis in archiwum.wpisy
+        ],
     }
 
 
@@ -459,6 +570,10 @@ def _stan_do_slownika(stan: StanZrodla) -> dict[str, Any]:
         "duplikat_glowny": stan.duplikat_glowny,
         "grupa_pakowania": stan.grupa_pakowania,
         "ostrzezenia_pakowania": list(stan.ostrzezenia_pakowania),
+        "zweryfikowane_recznie": stan.zweryfikowane_recznie,
+        "tresc_zastapiona_plikiem": stan.tresc_zastapiona_plikiem,
+        "plik_wynikowy_usuniety": stan.plik_wynikowy_usuniety,
+        "archiwum": stan.archiwum,
     }
 
 
@@ -511,7 +626,61 @@ def _checkpoint_ze_slownika(dane: dict[str, Any]) -> Checkpoint:
         zakonczony=bool(dane.get("zakonczony", False)),
         deduplikacja=_deduplikacja_ze_slownika(dane.get("deduplikacja")),
         wejscia=_wejscia_ze_slownika(dane.get("wejscia")),
+        zastapione_pliki_grup=_zastapione_pliki_ze_slownika(dane.get("zastapione_pliki_grup")),
+        archiwa=_archiwa_ze_slownika(dane.get("archiwa")),
+        zweryfikowane_wstepnie=[
+            wpis for wpis in (dane.get("zweryfikowane_wstepnie") or []) if isinstance(wpis, str)
+        ],
     )
+
+
+def _archiwa_ze_slownika(dane: Any) -> list[StanArchiwum]:
+    """Odczytuje wykaz archiwów. Jego brak jest poprawny dla starszych plików."""
+    if not isinstance(dane, list):
+        return []
+    wynik: list[StanArchiwum] = []
+    for element in dane:
+        if not isinstance(element, dict) or "nazwa" not in element or "status" not in element:
+            continue
+        wpisy = [
+            WpisArchiwumZapis(
+                sciezka=str(wpis["sciezka"]),
+                status=str(wpis["status"]),
+                format=str(wpis.get("format", "")),
+                rozmiar_bajtow=int(wpis.get("rozmiar_bajtow", 0) or 0),
+                komunikat=_opcjonalny_tekst(wpis.get("komunikat")),
+                suma_kontrolna=_opcjonalny_tekst(wpis.get("suma_kontrolna")),
+                identyfikator_zrodla=_opcjonalny_tekst(wpis.get("identyfikator_zrodla")),
+            )
+            for wpis in element.get("wpisy", [])
+            if isinstance(wpis, dict) and "sciezka" in wpis and "status" in wpis
+        ]
+        wynik.append(
+            StanArchiwum(
+                nazwa=str(element["nazwa"]),
+                suma_kontrolna=str(element.get("suma_kontrolna", "")),
+                status=str(element["status"]),
+                komunikat=_opcjonalny_tekst(element.get("komunikat")),
+                wpisy=wpisy,
+                ostrzezenia=[str(o) for o in element.get("ostrzezenia", [])],
+            )
+        )
+    return wynik
+
+
+def _zastapione_pliki_ze_slownika(dane: Any) -> list[ZastapionyPlikGrupy]:
+    """Odczytuje wykaz zastąpionych plików grup. Jego brak jest poprawny dla starszych plików."""
+    if not isinstance(dane, list):
+        return []
+    return [
+        ZastapionyPlikGrupy(
+            stara_nazwa=str(element["stara_nazwa"]),
+            nowa_nazwa=str(element["nowa_nazwa"]),
+            grupa=_opcjonalny_tekst(element.get("grupa")),
+        )
+        for element in dane
+        if isinstance(element, dict) and "stara_nazwa" in element and "nowa_nazwa" in element
+    ]
 
 
 def _wejscia_ze_slownika(dane: Any) -> list[WejscieZapis]:
@@ -540,6 +709,9 @@ def _wejscia_ze_slownika(dane: Any) -> list[WejscieZapis]:
                 moment_dodania=str(element.get("moment_dodania", "")),
                 grupa=_opcjonalny_tekst(element.get("grupa")),
                 wymus_nuty=bool(element.get("wymus_nuty", False)),
+                wskazane_jawnie=bool(element.get("wskazane_jawnie", True)),
+                archiwum=_opcjonalny_tekst(element.get("archiwum")),
+                sciezka_w_archiwum=_opcjonalny_tekst(element.get("sciezka_w_archiwum")),
             )
         )
     return wynik
@@ -602,6 +774,10 @@ def _stan_ze_slownika(dane: Any) -> StanZrodla:
         duplikat_glowny=_opcjonalny_tekst(dane.get("duplikat_glowny")),
         grupa_pakowania=_opcjonalny_tekst(dane.get("grupa_pakowania")),
         ostrzezenia_pakowania=[str(element) for element in dane.get("ostrzezenia_pakowania", [])],
+        zweryfikowane_recznie=bool(dane.get("zweryfikowane_recznie", False)),
+        tresc_zastapiona_plikiem=_opcjonalny_tekst(dane.get("tresc_zastapiona_plikiem")),
+        plik_wynikowy_usuniety=bool(dane.get("plik_wynikowy_usuniety", False)),
+        archiwum=_opcjonalny_tekst(dane.get("archiwum")),
     )
 
 

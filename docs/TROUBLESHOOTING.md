@@ -1,4 +1,4 @@
-# Rozwiązywanie problemów — stan po etapie dwunastym
+# Rozwiązywanie problemów — stan po etapie czternastym
 
 Ten dokument opisuje problemy, które wystąpiły w rzeczywistej pracy z aplikacją,
 oraz te, które wynikają wprost z jej budowy. Każdy przypadek ma tę samą budowę:
@@ -37,6 +37,17 @@ ozdobników, a polecenia do wpisania są w osobnych blokach.
     powiodła.
 24. Skrót nie znajduje aktywnego projektu albo nie odczytuje adresu, mimo że
     serwer interfejsu działa.
+25. Zamknąłem serwer, a skrót właśnie coś dodał: co się stało z tym źródłem.
+26. Źródło ma status „pominiete” z powodem „plik wynikowy usunięty ręcznie
+    z dysku”.
+27. Strona za logowaniem została pominięta zamiast zapisana.
+28. Plik grupy zmienił nazwę po dodaniu kolejnego źródła.
+29. Plik DOC albo PPT dostał status „pominiete”: brak LibreOffice.
+30. Arkusz XLSX ma puste komórki tam, gdzie w programie były wyniki.
+31. W arkuszu liczby są bez waluty albo RTF ma uproszczoną tabelę.
+32. Całe archiwum ZIP zostało pominięte.
+33. Z archiwum ZIP przyjęto mniej plików, niż w nim jest.
+34. Pliki z archiwum ZIP zajęły wiele slotów notatnika.
 
 ## 1. Windows blokuje plik wykonywalny narzędzia deweloperskiego
 
@@ -532,10 +543,13 @@ na stronie głównej albo stronie projektu wyjaśnia dlaczego.
 
 Przyczyna i co zrobić, według treści komunikatu:
 
-1. „Brak aktywnego projektu skrótu” — żaden projekt nie został jeszcze
-   ustawiony jako aktywny w tej sesji serwera, albo serwer został od tego
-   czasu uruchomiony ponownie i wybór się wyczyścił. Otwórz stronę projektu
-   i aktywuj przycisk „Ustaw jako aktywny projekt skrótu”.
+1. Skrót milczy albo gra dźwięk porażki po ponownym uruchomieniu serwera.
+   Bez wybranego projektu skrót dodaje źródła do projektu „Adresy ze skrótu”,
+   więc jego brak nie jest już powodem porażki. Sprawdź, czy nie działa drugi,
+   stary serwer: trzyma zarejestrowany skrót i nowy serwer nie może go zająć
+   (w logu jest wtedy kod błędu 1409). Zamknij wszystkie procesy
+   `python -m gnb.ui.server` i uruchom jeden. Inny projekt wybierzesz
+   przyciskiem „Ustaw jako aktywny projekt skrótu”.
 2. „Nie udało się odczytać paska adresu” — okno przeglądarki jest aktywne, ale
    UI Automation nie znalazło w nim kontrolki paska adresu, na przykład bo
    pasek jest w trakcie przejścia w tryb pełnoekranowy. Wróć do zwykłego
@@ -570,3 +584,148 @@ adres strony albo plik z Eksploratora, tak jak za pierwszym razem. Trwałego
 zapisu kolejki między uruchomieniami serwera aplikacja świadomie nie ma,
 zgodnie z sekcją 18e CLAUDE.md — okno utraty jest wąskie i wymaga zbiegu
 okoliczności, a każda utrata jest zgłaszana, nigdy cicha.
+
+## 26. Źródło ma status „pominiete” z powodem „plik wynikowy usunięty ręcznie z dysku”
+
+Objaw. W raporcie, w sekcji „Źródła nieprzetworzone”, jest źródło z powodem
+zaczynającym się od słów „plik wynikowy usunięty ręcznie z dysku”, a przy nim
+nazwa pliku. Przy pliku grupy takich źródeł jest kilka.
+
+Przyczyna. Plik wynikowy TXT albo PDF został usunięty z katalogu projektu poza
+aplikacją, na przykład w Eksploratorze. Na początku kolejnego przebiegu
+aplikacja porównuje checkpoint z dyskiem i nie udaje, że źródło nadal ma swoją
+treść w wynikach: oznacza je jako pominięte. Robi to wyłącznie na początku
+przebiegu, nigdy przy samym oglądaniu strony projektu ani raportu.
+
+Co zrobić. Jeżeli plik usunąłeś celowo, nic: źródło zostaje pominięte, a jego
+wpis jest w raporcie i w manifeście. Jeżeli chcesz je odzyskać, dodaj ten sam
+adres albo ten sam plik jeszcze raz, na przykład formularzem dosyłania pod
+raportem. Źródło zostanie przetworzone od nowa. Zwykły przycisk „Wznów ten
+projekt” go nie odzyska, bo nie jest ponownym dodaniem. Jeżeli komunikat
+wymienia pozostałe pliki źródła, to zawierają one tylko część jego treści:
+nie wgrywaj ich do notatnika. Brak samego pliku wersji MD niczego nie zmienia,
+bo treść jest w pliku TXT; jest tylko wpis w logach.
+
+## 27. Strona za logowaniem została pominięta zamiast zapisana
+
+Objaw. Adres strony ma status „pominiete”, a powód mówi o osłonie logowania
+albo stronie błędu, ze zwrotem, na przykład „zaloguj się, aby przeczytać”.
+
+Przyczyna. Wynik ekstrakcji miał mniej niż pięćdziesiąt słów i jednocześnie
+zawierał zwrot typowy dla osłony logowania albo strony błędu. Taki wynik to
+niemal na pewno sam szkielet strony, więc zamiast go zapisać, aplikacja go
+pomija, żeby nie zajmował miejsca w limicie źródeł notatnika. Długi artykuł
+z takim zwrotem w stopce oraz krótka treść bez takiego zwrotu nie są pomijane.
+
+Co zrobić. Zapisz stronę w przeglądarce do pliku (Control plus S), po
+zalogowaniu się, i na stronie projektu użyj przy tym źródle działania „Zastąp
+treść plikiem”. Źródło zachowa adres, a nagłówek metadanych dostanie wiersz
+„Uwaga o treści”.
+
+## 28. Plik grupy zmienił nazwę po dodaniu kolejnego źródła
+
+Objaw. Po dodaniu źródła do istniejącej grupy dawny plik grupy zniknął,
+a w katalogu jest jeden plik o innej nazwie. Raport ma wiersz „Plik grupy
+zastąpiony: stara nazwa → nowa nazwa”.
+
+Przyczyna. Dopisanie źródła do grupy pakuje całą grupę od nowa, żeby cała
+grupa była w jednym pliku. Nazwa pliku grupy wynika z jej składu, więc zmienia
+się razem z nim. Stary plik jest usuwany dopiero po zapisaniu nowego.
+
+Co zrobić. Niczego nie naprawiaj. Do notatnika wgraj nowy plik, a stary
+zastąp albo usuń w notatniku. Manifest ma pełny wykaz zastąpień w liście
+`zastapione_pliki_grup`.
+
+## 29. Plik DOC albo PPT dostał status „pominiete”: brak LibreOffice
+
+Objaw. W raporcie, w sekcji „Źródła nieprzetworzone”, jest stary plik DOC albo PPT
+z powodem, że nie znaleziono programu LibreOffice.
+
+Przyczyna. Stare formaty binarne Worda i PowerPointa nie mają dobrej biblioteki
+w czystym Pythonie, więc aplikacja zamienia je na DOCX i PPTX programem
+LibreOffice. Bez niego taki plik jest pomijany, a reszta aplikacji działa dalej.
+
+Co zrobić. Zainstaluj LibreOffice albo wskaż plik `soffice.com` kluczem
+konfiguracji `sciezka_libreoffice`, a potem dodaj plik jeszcze raz. Polecenie
+`python -m gnb.cli diagnostyka` pokazuje, czy program został znaleziony. Możesz też
+zapisać plik w nowszym formacie, DOCX albo PPTX, i dodać go zamiast starego.
+Uwaga: wskazuj `soffice.com`, a nie `soffice.exe`, który otwiera okno i blokuje
+proces.
+
+## 30. Arkusz XLSX ma puste komórki tam, gdzie w programie były wyniki
+
+Objaw. Źródło jest w materiałach do sprawdzenia z ostrzeżeniem o formułach bez
+zapisanego wyniku, a w tabeli są puste komórki.
+
+Przyczyna. Arkusz czyta się z wyników formuł zapisanych w pliku, a nie z samych
+formuł. Program, który wygenerował plik, na przykład skrypt, nie zapisał wyników,
+więc komórki z formułami są puste.
+
+Co zrobić. Otwórz plik w programie arkusza, zapisz go ponownie, żeby wyniki
+zostały zapisane, i dodaj plik jeszcze raz. Bez ponownego zapisu treść tych
+komórek nie jest dostępna.
+
+## 31. W arkuszu liczby są bez waluty albo RTF ma uproszczoną tabelę
+
+Objaw. W plikach wynikowych liczba z arkusza XLSX albo XLS nie ma symbolu waluty,
+a tabela z pliku RTF jest wierszami z komórkami rozdzielonymi kreską pionową.
+
+Przyczyna. To świadome ograniczenia odczytu. XLSX i XLS zapisują komórkę jako
+liczbę, bez formatu waluty, i zgłaszają to ostrzeżeniem z liczbą takich komórek.
+Biblioteka odczytu RTF nie zachowuje struktury tabeli, więc spłaszcza ją do
+wierszy, i zgłasza to ostrzeżeniem. W ODS komórka jest zapisana tak, jak widzi ją
+użytkownik, z walutą.
+
+Co zrobić. Jeżeli jednostka ma znaczenie, dopisz ją do nagłówka kolumny w pliku
+źródłowym albo zapisz arkusz w formacie ODS, który zachowuje widoczną postać
+komórki. Tabelę z RTF zapisz w formacie DOCX albo ODT, jeżeli jej struktura jest
+ważna.
+
+## 32. Całe archiwum ZIP zostało pominięte
+
+Objaw. W raporcie, w sekcji „Archiwa ZIP”, jest wiersz „Całe archiwum zostało
+pominięte” z powodem, a w projekcie nie ma żadnego pliku z tego archiwum.
+
+Przyczyna. Archiwum przekroczyło jeden z limitów całego archiwum: liczbę plików,
+łączny rozmiar po rozpakowaniu albo stosunek kompresji, albo nie jest poprawnym
+archiwum ZIP. Przekroczenie limitu pomija całe archiwum, a nie jego część, bo
+niekompletny zbiór dokumentów w notatniku, bez informacji, że czegoś brakuje,
+byłby cichą utratą treści. Bardzo wysoki stosunek kompresji jest cechą bomby
+kompresji, więc taki plik jest odrzucany zawsze w całości.
+
+Co zrobić. Przeczytaj powód w raporcie. Jeżeli to limit liczby plików albo
+rozmiaru, podziel archiwum na mniejsze albo podnieś odpowiedni limit kluczem
+`zip_maks_plikow` albo `zip_maks_rozmiar_mb`, opisanym w `CONFIGURATION.md`.
+Jeżeli to stosunek kompresji, a plik jest Twój i wiarygodny, podnieś
+`zip_maks_stosunek_kompresji`, ale zachowaj ostrożność z archiwami od obcych.
+Jeżeli archiwum jest uszkodzone, spakuj je ponownie.
+
+## 33. Z archiwum ZIP przyjęto mniej plików, niż w nim jest
+
+Objaw. W sekcji „Archiwa ZIP” raportu liczba przyjętych plików jest mniejsza niż
+liczba plików w archiwum, a pod nią są wiersze „Pominięto: …” z powodami.
+
+Przyczyna. Pojedyncze wpisy bywają pomijane z powodu, który dotyczy tylko ich:
+nieobsługiwany format pliku, plik pusty, plik metadanych systemu, wpis
+zaszyfrowany hasłem, dowiązanie symboliczne, ścieżka wychodząca poza katalog
+albo archiwum zagnieżdżone głębiej, niż pozwala limit. Reszta archiwum jest
+przetwarzana normalnie. Każdy pominięty wpis jest w raporcie, w manifeście
+i w logu szczegółowym.
+
+Co zrobić. Przeczytaj powody. Plik w nieobsługiwanym formacie zamień na obsługiwany
+i dodaj osobno. Wpis zaszyfrowany zapisz bez hasła. Głębsze archiwum rozpakuj
+sam i dodaj zawarte w nim pliki albo podnieś `zip_maks_zaglebienie`.
+
+## 34. Pliki z archiwum ZIP zajęły wiele slotów notatnika
+
+Objaw. Po dodaniu archiwum liczba plików do wgrania gwałtownie rośnie, a raport
+ostrzega, że archiwum potrzebuje więcej slotów, niż jest wolnych.
+
+Przyczyna. Pliki z archiwum nie są łączone w grupę automatycznie: zasada każe
+łączyć wyłącznie tematycznie, a zawartość archiwum nie musi być jednym tematem.
+Każdy plik ma więc własne źródło i zajmuje jeden slot notatnika.
+
+Co zrobić. Jeżeli zawartość archiwum jest jednym tematem, dodaj je ponownie,
+podając nazwę grupy opcją `--grupa` albo polem grupy w interfejsie: wszystkie pliki
+utworzą wtedy wspólny plik wynikowy w jednym slocie. Albo podnieś limit źródeł
+w konfiguracji, jeśli Twój plan notatnika na to pozwala.

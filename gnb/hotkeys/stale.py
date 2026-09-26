@@ -32,3 +32,8 @@ DZWIEK_SUKCES_TONY_HZ: tuple[int, ...] = (880, 1318)
 DZWIEK_SUKCES_CZAS_MS = 90
 DZWIEK_PORAZKA_TON_HZ = 220
 DZWIEK_PORAZKA_CZAS_MS = 260
+
+# Nazwa projektu, do którego skrót dodaje źródła, gdy użytkownik nie wybrał
+# jawnie żadnego projektu. Dzięki niej kolejne strony można dodawać jedna po
+# drugiej bez zaglądania do interfejsu, a po restarcie serwera skrót nie milknie.
+NAZWA_DOMYSLNEGO_PROJEKTU_SKROTU = "Adresy ze skrótu"

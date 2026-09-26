@@ -27,9 +27,15 @@ def test_strona_glowna_ma_etykiety_i_pole_csrf() -> None:
     html = strona_glowna(projekty=[], token_csrf="tok123")
 
     assert '<html lang="pl">' in html
-    assert '<label for="nazwa_projektu">' in html
-    assert '<label for="tekst">' in html
-    assert '<label for="adresy">' in html
+    # Pola tekstowe mają opis w podpowiedzi wewnątrz pola i nazwę dla czytnika
+    # ekranu w aria-label, bez osobnej etykiety nad polem.
+    assert 'placeholder="Nazwa projektu (wymagana)"' in html
+    assert 'aria-label="Nazwa projektu"' in html
+    assert 'placeholder="tutaj wklej tekst"' in html
+    assert 'placeholder="Nazwa grupy tematycznej (wymagana)"' in html
+    assert '<label for="nazwa_projektu">' not in html
+    assert '<label for="tekst">' not in html
+    assert "(wymagana)</label>" not in html
     assert '<label for="pliki">' in html
     assert 'name="token_csrf" value="tok123"' in html
     assert "Nie ma niedokończonych projektów." in html
@@ -212,7 +218,8 @@ def test_adres_javascript_w_raporcie_nigdy_nie_staje_sie_odnosnikiem() -> None:
 def test_strona_projektu_po_zakonczeniu_ma_formularz_dosylania_zrodel() -> None:
     html = _strona_z_raportem("Raport końcowy projektu: Projekt\n")
 
-    assert '<label for="dosylanie-tekst">Tekst wklejony</label>' in html
+    assert 'placeholder="tutaj wklej tekst"' in html
+    assert '<label for="dosylanie-tekst">' not in html
     assert 'action="/projekt/Projekt/dosylanie"' in html
     assert "Dodaj źródła i uruchom kolejny przebieg" in html
 
@@ -333,3 +340,20 @@ def test_ostatni_komunikat_skrotu_z_niebezpieczna_trescia_jest_escapowany() -> N
 
     assert "<script>alert(1)</script>" not in html
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+
+
+def test_formularz_dosylania_podpowiada_grupy_projektu_i_wymaga_grupy() -> None:
+    html = strona_projektu(
+        nazwa="Projekt",
+        informacja=None,
+        pola=PolaNotatnika(),
+        limit_znakow_instrukcji=10_000,
+        token_csrf="t",
+        raport="Raport końcowy projektu: Projekt\n",
+        grupy_projektu=["Zwierzęta", "Rośliny"],
+    )
+    assert '<datalist id="dosylanie-grupy">' in html
+    assert '<option value="Zwierzęta">' in html
+    assert '<option value="Rośliny">' in html
+    # Domyślnie wpisana jest ostatnia grupa projektu, a pole jest wymagane.
+    assert 'value="Rośliny" required' in html

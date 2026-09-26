@@ -8,7 +8,9 @@ import pytest
 
 from gnb.core.wyjatki import BladTrwaly
 from gnb.ingestion.lista_url import (
+    adresy_znalezione_w_pliku,
     opis_podsumowania,
+    rozpoznaj_liste_adresow_w_pliku,
     wczytaj_liste_z_pliku,
     zbierz_adresy,
 )
@@ -114,3 +116,47 @@ def test_wiersz_mieszany_dzieli_sie_na_fragmenty() -> None:
     podsumowanie = zbierz_adresy("zobacz https://przyklad.pl/a oraz bzdura\n")
     assert podsumowanie.liczba_poprawnych == 1
     assert podsumowanie.liczba_odrzuconych == 3
+
+
+def test_plik_zlozony_z_adresow_jest_rozpoznany_jako_lista(tmp_path: Path) -> None:
+    plik = tmp_path / "linki.txt"
+    plik.write_text("# moje linki\nhttps://przyklad.pl/a\nwww.przyklad.pl/b\n", encoding="utf-8")
+
+    podsumowanie = rozpoznaj_liste_adresow_w_pliku(plik)
+
+    assert podsumowanie is not None
+    assert podsumowanie.liczba_poprawnych == 2
+
+
+def test_plik_z_tekstem_i_adresem_w_zdaniu_nie_jest_lista(tmp_path: Path) -> None:
+    plik = tmp_path / "notatka.txt"
+    plik.write_text("Warto przeczytać.\nWięcej na https://przyklad.pl/a w tym artykule.\n")
+
+    assert rozpoznaj_liste_adresow_w_pliku(plik) is None
+
+
+def test_plik_md_z_adresami_nie_jest_lista(tmp_path: Path) -> None:
+    plik = tmp_path / "linki.md"
+    plik.write_text("https://przyklad.pl/a\n", encoding="utf-8")
+
+    assert rozpoznaj_liste_adresow_w_pliku(plik) is None
+
+
+def test_adresy_znalezione_w_prozie_sa_wyluskane_bez_interpunkcji(tmp_path: Path) -> None:
+    plik = tmp_path / "notatka.txt"
+    plik.write_text(
+        "Zobacz https://przyklad.pl/a, a potem (https://przyklad.pl/b).\n"
+        "Powtórka: https://przyklad.pl/a i nie-adres ftp://x.pl/c\n",
+        encoding="utf-8",
+    )
+
+    adresy = adresy_znalezione_w_pliku(plik)
+
+    assert [adres.podany for adres in adresy] == ["https://przyklad.pl/a", "https://przyklad.pl/b"]
+
+
+def test_adresy_znalezione_w_pliku_o_innym_rozszerzeniu_sa_ignorowane(tmp_path: Path) -> None:
+    plik = tmp_path / "strona.html"
+    plik.write_text("https://przyklad.pl/a", encoding="utf-8")
+
+    assert adresy_znalezione_w_pliku(plik) == ()

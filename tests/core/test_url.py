@@ -133,3 +133,12 @@ def test_usuwanie_danych_logowania_z_dowolnego_adresu() -> None:
         == "https://przyklad.pl/a?b=1"
     )
     assert bez_danych_logowania("https://przyklad.pl/a") == "https://przyklad.pl/a"
+
+
+def test_adres_zaczynajacy_sie_od_www_dostaje_schemat_https() -> None:
+    assert waliduj_adres("www.otodom.pl/oferta") == "https://www.otodom.pl/oferta"
+
+
+def test_adres_bez_schematu_i_bez_www_nadal_jest_odrzucany() -> None:
+    with pytest.raises(BladTrwaly):
+        waliduj_adres("otodom.pl/oferta")

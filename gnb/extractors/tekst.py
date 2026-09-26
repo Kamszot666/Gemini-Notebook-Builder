@@ -14,6 +14,11 @@ from gnb.core.model import DokumentWyekstrahowany
 from gnb.core.stale import PoziomPewnosciStruktury, TypZrodla
 
 _FORMATY_TEKSTU_WKLEJONEGO = frozenset({"", "txt"})
+
+# Pliki tekstu prostego bez tytułu w pierwszym wierszu: pierwszy wiersz pliku
+# JSON to najczęściej sam nawias klamrowy, a pliku XML znacznik deklaracji, więc
+# nie nadaje się na tytuł. Nazwa pliku jest w nagłówku metadanych jako „Plik”.
+_FORMATY_TEKSTU_PROSTEGO = frozenset({"json", "xml", "yaml", "yml", "toml", "ini", "cfg", "log"})
 _MAKSYMALNA_DLUGOSC_TYTULU = 80
 
 
@@ -25,7 +30,7 @@ class EkstraktorTekstu:
 
     def obsluguje(self, typ_zrodla: TypZrodla, format_zrodla: str) -> bool:
         if typ_zrodla is TypZrodla.PLIK_TEKSTOWY:
-            return format_zrodla == "txt"
+            return format_zrodla == "txt" or format_zrodla in _FORMATY_TEKSTU_PROSTEGO
         if typ_zrodla is TypZrodla.TEKST_WKLEJONY:
             return format_zrodla in _FORMATY_TEKSTU_WKLEJONEGO
         return False

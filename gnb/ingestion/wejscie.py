@@ -49,12 +49,43 @@ from gnb.normalization.kodowanie import zdekoduj
 # wprost jako tekst, bez dalszego rozpoznawania struktury dokumentu.
 FORMATY_PLIKOW_TEKSTOWYCH = frozenset({"txt", "md"})
 
+# Pliki zapisane zwykłym tekstem, których struktura jest informacją, więc nie jest
+# przepisywana na prozę: dane, konfiguracje i dzienniki. Dostają typ pliku
+# tekstowego i idą przez ekstraktor tekstu płaskiego jak plik TXT. Plik `.env`
+# celowo nie jest tu wymieniony, bo takie pliki zawierają sekrety.
+FORMATY_PLIKOW_TEKSTU_PROSTEGO = frozenset(
+    {"json", "xml", "yaml", "yml", "toml", "ini", "cfg", "log"}
+)
+
 # Formaty plików dokumentowych z etapu czwartego. HTML, CSV, SRT i VTT są
 # tekstowe i rozkodowywane tak samo jak pliki tekstowe, tylko z innym typem
 # źródła. PDF, DOCX i EPUB są kontenerami binarnymi i wymagają odczytu bajtów
 # z pominięciem rozkodowania tekstu, patrz `FORMATY_PLIKOW_BINARNYCH`.
 FORMATY_PLIKOW_DOKUMENTOW = frozenset(
-    {"html", "htm", "xhtml", "csv", "srt", "vtt", "pdf", "docx", "epub"}
+    {
+        "html",
+        "htm",
+        "xhtml",
+        "csv",
+        "tsv",
+        "srt",
+        "vtt",
+        "pdf",
+        "docx",
+        "epub",
+        "odt",
+        "ods",
+        "odp",
+        "pptx",
+        "xlsx",
+        "xlsm",
+        "xls",
+        "rtf",
+        "doc",
+        "ppt",
+        "mhtml",
+        "mht",
+    }
 )
 
 # Formaty obrazów z etapu ósmego. HEIC i HEIF wymagają biblioteki opcjonalnej
@@ -85,14 +116,36 @@ FORMATY_NUTY_GUITAR_PRO_NIEOBSLUGIWANE = frozenset({"gp", "gpx"})
 # audio. Rozmiar pliku binarnego jest ograniczony bezpiecznym limitem megabajtów,
 # bo taki plik trzeba wczytać do pamięci w całości.
 FORMATY_PLIKOW_BINARNYCH = (
-    frozenset({"pdf", "docx", "epub"})
+    frozenset(
+        {
+            "pdf",
+            "docx",
+            "epub",
+            "odt",
+            "ods",
+            "odp",
+            "pptx",
+            "xlsx",
+            "xlsm",
+            "xls",
+            "rtf",
+            "doc",
+            "ppt",
+            "mhtml",
+            "mht",
+        }
+    )
     | FORMATY_PLIKOW_OBRAZOW
     | FORMATY_PLIKOW_AUDIO
     | FORMATY_PLIKOW_NUTY
 )
 
+FORMATY_ARCHIWOW = frozenset({"zip"})
+
 FORMATY_PLIKOW = (
-    FORMATY_PLIKOW_TEKSTOWYCH
+    FORMATY_ARCHIWOW
+    | FORMATY_PLIKOW_TEKSTOWYCH
+    | FORMATY_PLIKOW_TEKSTU_PROSTEGO
     | FORMATY_PLIKOW_DOKUMENTOW
     | FORMATY_PLIKOW_OBRAZOW
     | FORMATY_PLIKOW_AUDIO
@@ -131,6 +184,13 @@ class PozycjaWejsciowa:
     prawdę sprawia, że plik PDF albo obraz jest traktowany jako materiał nutowy,
     czyli dostaje typ źródła PLIK_NUTY. Formaty jednoznacznie nutowe dostają ten
     typ niezależnie od tej flagi.
+
+    Pola `archiwum` i `sciezka_w_archiwum` są wypełnione wyłącznie dla pliku
+    rozpakowanego z archiwum ZIP: pierwsze niesie nazwę głównego archiwum,
+    drugie ścieżkę pliku wewnątrz niego, a przy archiwach zagnieżdżonych całą
+    drogę rozdzieloną znakiem „»”. Wartość w `wejscie.wartosc` jest wtedy ścieżką
+    rozpakowanego pliku w katalogu projektu, pod nazwą własną, więc nazwa
+    z archiwum służy wyłącznie do opisu pochodzenia.
     """
 
     wejscie: WejscieSurowe
@@ -139,6 +199,8 @@ class PozycjaWejsciowa:
     wskazane_jawnie: bool = True
     grupa: str | None = None
     wymus_nuty: bool = False
+    archiwum: str | None = None
+    sciezka_w_archiwum: str | None = None
 
 
 def przyjmij_tekst(
@@ -188,6 +250,7 @@ def przyjmij_url(
     dodatkowe_parametry_sledzace: tuple[str, ...] = (),
     *,
     grupa: str | None = None,
+    wskazane_jawnie: bool = True,
 ) -> PozycjaWejsciowa:
     """Tworzy pozycję wejściową z adresu strony internetowej albo filmu.
 
@@ -223,6 +286,7 @@ def przyjmij_url(
         wejscie=wejscie,
         format_zrodla=format_zrodla,
         adres_kanoniczny=kanoniczny,
+        wskazane_jawnie=wskazane_jawnie,
         grupa=_grupa_znormalizowana(grupa),
     )
 
@@ -341,7 +405,9 @@ def _zrodlo_z_pliku(
     if pozycja.format_zrodla not in FORMATY_PLIKOW:
         raise FormatNieobslugiwany(
             f"Nieobsługiwany format pliku: „{pozycja.format_zrodla or 'brak rozszerzenia'}”. "
-            "Obsługiwane są: txt, md, html, htm, xhtml, csv, srt, vtt, pdf, docx, epub, "
+            "Obsługiwane są: zip, txt, md, json, xml, yaml, yml, toml, ini, cfg, log, "
+            "html, htm, xhtml, csv, tsv, srt, vtt, pdf, docx, epub, odt, ods, odp, "
+            "pptx, xlsx, xlsm, xls, rtf, doc, ppt, "
             "jpg, jpeg, png, webp, tif, tiff, bmp, gif, heic, heif, "
             "mp3, wav, m4a, flac, ogg, opus, aac, "
             "mid, midi, musicxml, mxl, gp3, gp4, gp5."
@@ -352,12 +418,24 @@ def _zrodlo_z_pliku(
     return Zrodlo(
         identyfikator_zrodla=identyfikator_zrodla(typ, suma),
         typ_zrodla=typ,
-        pochodzenie=sciezka.name,
+        pochodzenie=pochodzenie_pliku(pozycja),
         checksum=suma,
         status=StatusZrodla.OCZEKUJE,
         utworzono=moment,
         zaktualizowano=moment,
     )
+
+
+def pochodzenie_pliku(pozycja: PozycjaWejsciowa) -> str:
+    """Zwraca opis pochodzenia pliku: jego nazwę albo drogę wewnątrz archiwum.
+
+    Plik rozpakowany z archiwum leży w katalogu projektu pod nazwą własną, więc
+    jego nazwa nic nie mówi użytkownikowi. Pochodzenie ma postać
+    „archiwum.zip » folder/plik.pdf”.
+    """
+    if pozycja.archiwum and pozycja.sciezka_w_archiwum:
+        return f"{pozycja.archiwum} » {pozycja.sciezka_w_archiwum}"
+    return Path(pozycja.wejscie.wartosc).name
 
 
 def _sprawdz_rozmiar_pliku(sciezka: Path, format_zrodla: str, konfiguracja: Konfiguracja) -> None:
@@ -398,7 +476,7 @@ def typ_zrodla_dla_pliku(format_zrodla: str, *, wymus_nuty: bool = False) -> Typ
         return TypZrodla.PLIK_NUTY
     if wymus_nuty and (format_zrodla == "pdf" or format_zrodla in FORMATY_PLIKOW_OBRAZOW):
         return TypZrodla.PLIK_NUTY
-    if format_zrodla in FORMATY_PLIKOW_TEKSTOWYCH:
+    if format_zrodla in FORMATY_PLIKOW_TEKSTOWYCH | FORMATY_PLIKOW_TEKSTU_PROSTEGO:
         return TypZrodla.PLIK_TEKSTOWY
     if format_zrodla in FORMATY_PLIKOW_OBRAZOW:
         return TypZrodla.PLIK_OBRAZ

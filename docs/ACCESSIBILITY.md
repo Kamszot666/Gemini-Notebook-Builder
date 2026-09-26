@@ -58,8 +58,8 @@ Pierwsza to formularz nowego projektu. Pola, w kolejności:
    YouTube, dla których pobierane są napisy.
 4. Pliki z dysku. Pole wyboru pliku z możliwością wskazania wielu plików naraz.
    Otwiera zwykłe okno wyboru pliku systemu Windows, w pełni dostępne z NVDA.
-   Obsługiwane formaty to te same, które przyjmuje wiersz poleceń: TXT, MD, HTML,
-   CSV, SRT, VTT, PDF, DOCX i EPUB.
+   Obsługiwane formaty to te same, które przyjmuje wiersz poleceń; ich pełny
+   wykaz jest w `FORMATS.md`.
 5. Nazwa grupy tematycznej. Pole opcjonalne. Wszystkie źródła jednego wysłania
    z wypełnioną tą samą nazwą grupy są łączone w możliwie najmniej plików
    wynikowych.
@@ -90,16 +90,24 @@ komunikat to podsumowanie w rodzaju „Postęp: 30 procent, pobrano 3 z 11
 całego przebiegu, zaokrąglany w dół do pełnej dziesiątki, i rośnie tylko
 w górę, nigdy się nie cofa. Pojedyncze zdarzenia nie są ogłaszane.
 
+Procent jest przybliżeniem z zamierzenia, nie z niedopatrzenia. Deduplikacja
+i pakowanie liczą się jako po jednym kroku każda, niezależnie od tego, ile
+naprawdę trwają, bo w ich trakcie potok nie zgłasza postępu cząstkowego. Przy
+dużej liczbie źródeł oznacza to, że procent stoi w miejscu w czasie tych dwóch
+kroków, a komunikat mówi, który z nich trwa: „Deduplikacja źródeł” albo
+„Pakowanie i zapis plików wynikowych”. Zakończenie przebiegu zawsze pokazuje
+sto procent.
+
 Gdy w przeglądarce działa JavaScript, region odpytuje stan od razu po
 wczytaniu strony, a potem co cztery sekundy — dzięki temu krótki przebieg,
 trwający kilka sekund, zdąża pokazać choć jeden pośredni komunikat postępu,
 zamiast milczeć aż do zakończenia. Gdy przetwarzanie się skończy, region
-ogłasza jedno zdanie: „Przetwarzanie zakończone. Raport jest poniżej, pod
-nagłówkiem Raport końcowy.”, a podsumowanie liczbowe, pełna treść raportu
-i formularz dosyłania kolejnych źródeł pojawiają się pod nim od razu, bez
-przeładowania strony i bez przeniesienia fokusu. Nagłówek „Stan przetwarzania”
-zmienia się razem z regionem, więc nie zostaje nieaktualny do czasu ręcznego
-odświeżenia.
+ogłasza jedno zdanie: „Przetwarzanie zakończone. Aktywuj odnośnik „Pokaż wyniki
+przetwarzania”.”, a odnośnik o tej nazwie pojawia się pod regionem. Strona
+niczego więcej nie przebudowuje w miejscu, bo wstawianie całego raportu przy
+działającym NVDA przenosiło fokus w nieprzewidywalne miejsca; wyniki pokazuje
+dopiero ponowne wczytanie strony po aktywowaniu odnośnika. Nagłówek „Stan
+przetwarzania” zmienia się razem z regionem.
 
 Gdy JavaScript jest wyłączony, region pokazuje stan z chwili wczytania strony.
 Aktualny stan sprawdzasz, aktywując odnośnik „Odśwież stan”, który jest zwykłym
@@ -112,10 +120,18 @@ karcie, z dopiskiem „(otwiera się w nowej karcie)” dla czytnika ekranu — 
 otwarcie karty nie było zaskoczeniem. Adres innego schematu, na przykład
 `javascript:`, nigdy nie staje się odnośnikiem.
 
-Pod raportem jest formularz „Dodaj kolejne źródła do tego projektu” z tymi
-samymi polami co formularz nowego projektu na stronie głównej, bez pola nazwy
-— nazwa jest już znana z adresu strony. Pole grupy tematycznej jest domyślnie
-wypełnione nazwą grupy ostatniego wysłania. Wysłanie tego formularza uruchamia
+Na stronie głównej pola nazwy projektu, tekstu i grupy nie mają osobnych
+etykiet nad polem: opis jest podpowiedzią wewnątrz pola („Nazwa projektu
+(wymagana)”, „tutaj wklej tekst”, „Nazwa grupy tematycznej (wymagana)”), a nazwę
+dla czytnika ekranu niesie atrybut aria-label. Nazwa grupy jest wymagana.
+
+Pod raportem jest formularz „Dodaj kolejne źródła” z polami zbudowanymi tak
+samo, bez pola nazwy — nazwa jest już znana z adresu strony. Pole grupy jest
+polem tekstowym z listą podpowiedzi zawierającą grupy, które projekt już zna,
+i jest domyślnie wypełnione ostatnią z nich, więc kolejne źródło trafia do
+istniejącego pliku grupy bez przepisywania nazwy. Adres bez schematu http lub
+https jest zgłaszany jako błąd walidacji przy polu adresów; jedynym wyjątkiem
+jest adres zaczynający się od „www.”, który dostaje https automatycznie. Wysłanie tego formularza uruchamia
 kolejny przebieg w tym samym projekcie, tą samą ścieżką co formularz strony
 głównej z nazwą już istniejącego projektu; błędy walidacji wracają na tę samą
 stronę projektu, powiązane z polem tak samo jak w formularzu strony głównej.
@@ -160,6 +176,55 @@ z błędem ma ustawione `aria-invalid` na „true” oraz `aria-describedby`
 wskazujące komunikat błędu pod polem, więc czytnik ekranu odczytuje ten
 komunikat po wejściu w pole.
 
+## Źródła projektu i ich działania
+
+Strona projektu, po zakończeniu przetwarzania, ma sekcję „Źródła projektu”.
+Każde źródło jest w niej osobnym elementem listy z własnym nagłówkiem
+trzeciego poziomu, więc czytnik ekranu pozwala przeskakiwać między źródłami
+klawiszem nagłówka. Pod nagłówkiem, który niesie nazwę albo adres źródła, jest
+krótka lista jego cech: status słowami, grupa tematyczna, nazwy plików
+wynikowych, komunikat pominięcia albo błędu, powody podejrzenia oraz informacje
+o ręcznych zmianach.
+
+Przy źródle są trzy działania. Przyciski i odnośnik nie powtarzają nazwy
+źródła w swojej etykiecie, bo czytnik odczytywałby ją w całości przy każdym
+działaniu, a nazwa adresu bywa długa. Zamiast tego każde działanie jest
+powiązane z nagłówkiem źródła atrybutem `aria-describedby`, więc NVDA po
+etykiecie „Oznacz jako zweryfikowane” czyta jako opis nazwę źródła.
+
+1. „Oznacz jako zweryfikowane” — tylko przy źródłach z materiałów do
+   sprawdzenia. Po użyciu źródło znika z sekcji „Materiały do sprawdzenia”
+   w raporcie, ale zostaje w osobnej sekcji „Źródła zweryfikowane ręcznie”,
+   razem z powodami, które je tam pierwotnie umieściły. Ocena jakości
+   w manifeście się nie zmienia. Jeżeli źródło pochodzi z sieci, czyli jest
+   stroną albo filmem, aplikacja po oznaczeniu pobiera je jeszcze raz i
+   uruchamia kolejny przebieg; nowo pobrane źródło od razu ma znacznik
+   weryfikacji.
+2. „Zastąp treść plikiem” — pole wyboru pliku z etykietą „Plik z ręcznie
+   zapisaną treścią tego źródła” oraz przycisk. Przydaje się przy stronie za
+   logowaniem: zapisujesz stronę w przeglądarce do pliku i podstawiasz ją za
+   źródło. Źródło zachowuje identyfikator i pochodzenie, a nagłówek metadanych
+   pliku wynikowego dostaje wiersz „Uwaga o treści”. Gdy nowa treść okaże się
+   pusta albo nie da się jej odczytać, dotychczasowy stan źródła zostaje bez
+   zmian, a powód jest w raporcie w sekcji „Zastąpienia treści, które się nie
+   powiodły”.
+3. „Usuń źródło z projektu” — przycisk, który od razu usuwa źródło, bez strony
+   pytającej i bez wpisywania słowa potwierdzenia. Usunięte źródło znika z projektu, z manifestu i z raportu, a jego pliki
+   wynikowe z dysku. Zachowane oryginały i wysłane pliki zostają na dysku.
+
+Każde z tych działań jest osobnym formularzem, wymaga metody POST i tokenu
+CSRF. Gdy trwa przetwarzanie, serwer odmawia zmiany źródeł z komunikatem, że
+trzeba poczekać na jego zakończenie, bo w jednej chwili checkpoint zapisuje
+tylko jedno miejsce.
+
+### Pliki wynikowe brakujące na dysku
+
+Gdy plik wynikowy, który znasz z raportu, zniknął z katalogu projektu, strona
+projektu pokazuje sekcję „Pliki wynikowe brakujące na dysku” z nazwą pliku
+i źródłami, których dotyczy. Sekcja tylko pokazuje rozbieżność. Samo
+wyświetlenie strony niczego nie zmienia w projekcie: status źródeł zmienia
+dopiero początek następnego przebiegu przetwarzania, opisany w `FORMATS.md`.
+
 ## Motyw i ruch
 
 Interfejs ma ciemny motyw z jasnym tekstem i wysokim kontrastem, dużą czcionką
@@ -195,8 +260,9 @@ aktywnego projektu skrótu:
 
 ### Aktywny projekt skrótu
 
-Skrót dodaje materiał do jednego, jawnie wybranego projektu, nigdy do „ostatnio
-otwartego”. Wybierasz go przyciskiem „Ustaw jako aktywny projekt skrótu” na
+Skrót dodaje materiał do jednego projektu, nigdy do „ostatnio otwartego”. Jeżeli
+nie wybrałeś żadnego, trafia on do projektu „Adresy ze skrótu”, który staje się
+wtedy aktywnym projektem skrótu. Wybierasz go przyciskiem „Ustaw jako aktywny projekt skrótu” na
 stronie danego projektu. Strona główna i strona każdego projektu pokazują
 tekst „Aktywny projekt skrótu: nazwa” albo „Brak aktywnego projektu skrótu” —
 region ten sam, co reszta stanu skrótu, więc czytnik ekranu odczyta go razem

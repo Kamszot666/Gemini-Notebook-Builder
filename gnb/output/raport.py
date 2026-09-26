@@ -85,6 +85,61 @@ class ZrodloJuzWProjekcie:
 
 
 @dataclass(frozen=True, slots=True)
+class ZrodloZweryfikowane:
+    """Źródło, które użytkownik po obejrzeniu oznaczył jako sprawdzone ręcznie.
+
+    Źródło nie jest już wymieniane wśród materiałów do sprawdzenia, ale zostaje
+    w raporcie wraz z powodami, które je tam umieściły, żeby ręczna decyzja była
+    widoczna. Oznaczenie nie zmienia oceny jakości zapisanej w manifeście.
+    """
+
+    identyfikator: str
+    pochodzenie: str
+    powody: tuple[str, ...] = ()
+    ostrzezenia: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ZastapionyPlik:
+    """Plik grupy zastąpiony przy pełnym przepakowaniu grupy."""
+
+    stara_nazwa: str
+    nowa_nazwa: str
+    grupa: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ZastapienieNieudane:
+    """Próba zastąpienia treści źródła plikiem, która się nie powiodła.
+
+    Dotychczasowy stan źródła nie został wtedy zmieniony. Bez tego wpisu
+    użytkownik, który przesłał plik, nie miałby jak dowiedzieć się z raportu,
+    że nic się nie stało i dlaczego.
+    """
+
+    identyfikator: str
+    pochodzenie: str
+    powod: str
+
+
+@dataclass(frozen=True, slots=True)
+class ArchiwumWRaporcie:
+    """Archiwum ZIP dodane do projektu, z liczbą przyjętych plików i wykazem pominiętych.
+
+    Archiwum nie jest źródłem, ale każdy jego pominięty element trafia do raportu
+    z powodem, tą samą drogą co pominięte źródło: pominięcie po cichu jest gorsze
+    niż błąd. Status „pominiete” oznacza, że pominięto całe archiwum.
+    """
+
+    nazwa: str
+    status: str
+    komunikat: str | None = None
+    liczba_przyjetych: int = 0
+    pominiete: tuple[tuple[str, str], ...] = ()
+    ostrzezenia: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class PodsumowanieProjektu:
     """Zestaw liczb i wykaz źródeł nieprzetworzonych, potrzebne do raportu końcowego."""
 
@@ -101,7 +156,7 @@ class PodsumowanieProjektu:
     najwiekszy_plik_nazwa: str | None
     najwiekszy_plik_bajtow: int
     laczna_liczba_slow: int
-    czas_pracy_sekundy: float
+    czas_pracy_sekundy: float | None
     zrodla_nieprzetworzone: tuple[ZrodloNieprzetworzone, ...] = ()
     materialy_do_sprawdzenia: tuple[MaterialDoSprawdzenia, ...] = ()
     zrodla_juz_w_projekcie: tuple[ZrodloJuzWProjekcie, ...] = ()
@@ -110,6 +165,10 @@ class PodsumowanieProjektu:
     # podlegają grupowaniu tematycznemu; zero oznacza, że nie było takiego
     # przypadku i wiersz o tym w raporcie nie powstaje.
     liczba_nut_poza_grupami: int = 0
+    zrodla_zweryfikowane: tuple[ZrodloZweryfikowane, ...] = ()
+    zastapione_pliki: tuple[ZastapionyPlik, ...] = ()
+    nieudane_zastapienia: tuple[ZastapienieNieudane, ...] = ()
+    archiwa: tuple[ArchiwumWRaporcie, ...] = ()
 
 
 def zbuduj_raport(nazwa_projektu: str, podsumowanie: PodsumowanieProjektu) -> str:
@@ -152,6 +211,10 @@ def zbuduj_raport(nazwa_projektu: str, podsumowanie: PodsumowanieProjektu) -> st
         )
     wiersze.extend(_wiersze_zrodel_nieprzetworzonych(podsumowanie.zrodla_nieprzetworzone))
     wiersze.extend(_wiersze_zrodel_juz_w_projekcie(podsumowanie.zrodla_juz_w_projekcie))
+    wiersze.extend(_wiersze_archiwow(podsumowanie.archiwa))
+    wiersze.extend(_wiersze_zastapionych_plikow(podsumowanie.zastapione_pliki))
+    wiersze.extend(_wiersze_nieudanych_zastapien(podsumowanie.nieudane_zastapienia))
+    wiersze.extend(_wiersze_zrodel_zweryfikowanych(podsumowanie.zrodla_zweryfikowane))
     wiersze.extend(_wiersze_materialow_do_sprawdzenia(podsumowanie.materialy_do_sprawdzenia))
     return "\n".join(wiersze) + "\n"
 
@@ -184,6 +247,80 @@ def _wiersze_zrodel_juz_w_projekcie(
         wiersze.append(f"  Identyfikator: {zrodlo.identyfikator}")
         wiersze.append(f"  Status: {zrodlo.status}")
         wiersze.append(f"  {_wiersz_plikow_wynikowych(zrodlo.pliki_wynikowe)}")
+        wiersze.append("")
+    return wiersze[:-1]
+
+
+def _wiersze_archiwow(archiwa: tuple[ArchiwumWRaporcie, ...]) -> list[str]:
+    """Buduje wykaz archiwów ZIP wraz z pominiętymi plikami i ostrzeżeniami."""
+    if not archiwa:
+        return []
+    wiersze = ["", "Archiwa ZIP, liczba: " + str(len(archiwa)), ""]
+    for archiwum in archiwa:
+        wiersze.append(f"Archiwum: {archiwum.nazwa}")
+        if archiwum.status == "pominiete":
+            wiersze.append("  Całe archiwum zostało pominięte.")
+            if archiwum.komunikat:
+                wiersze.append(f"  Powód: {archiwum.komunikat}")
+        else:
+            wiersze.append(f"  Przyjęte pliki: {archiwum.liczba_przyjetych}")
+            wiersze.append(f"  Pominięte pliki: {len(archiwum.pominiete)}")
+        for sciezka, powod in archiwum.pominiete:
+            wiersze.append(f"    Pominięto: {sciezka}. Powód: {powod}")
+        for ostrzezenie in archiwum.ostrzezenia:
+            wiersze.append(f"  Uwaga: {ostrzezenie}")
+        wiersze.append("")
+    return wiersze[:-1]
+
+
+def _wiersze_zastapionych_plikow(pliki: tuple[ZastapionyPlik, ...]) -> list[str]:
+    """Buduje wykaz plików grup zastąpionych przy przepakowaniu, po jednym na akapit.
+
+    Wykaz jest skumulowany: obejmuje wszystkie zastąpienia w historii projektu,
+    a nie tylko te z ostatniego przebiegu, żeby odświeżenie raportu po ręcznej
+    zmianie nie kasowało informacji o tym, że jakiś plik zniknął.
+    """
+    if not pliki:
+        return []
+    wiersze = ["", "Pliki grup zastąpione, liczba: " + str(len(pliki)), ""]
+    for plik in pliki:
+        wiersze.append(f"Plik grupy zastąpiony: {plik.stara_nazwa} → {plik.nowa_nazwa}")
+        if plik.grupa:
+            wiersze.append(f"  Grupa: {plik.grupa}")
+        wiersze.append("")
+    return wiersze[:-1]
+
+
+def _wiersze_nieudanych_zastapien(zastapienia: tuple[ZastapienieNieudane, ...]) -> list[str]:
+    """Buduje wykaz zastąpień treści, które się nie powiodły, wraz z powodem."""
+    if not zastapienia:
+        return []
+    wiersze = [
+        "",
+        "Zastąpienia treści, które się nie powiodły, liczba: " + str(len(zastapienia)),
+        "",
+    ]
+    for zastapienie in zastapienia:
+        wiersze.append(f"Źródło: {zastapienie.pochodzenie}")
+        wiersze.append(f"  Identyfikator: {zastapienie.identyfikator}")
+        wiersze.append(f"  Powód: {zastapienie.powod}")
+        wiersze.append("  Dotychczasowy stan źródła nie został zmieniony.")
+        wiersze.append("")
+    return wiersze[:-1]
+
+
+def _wiersze_zrodel_zweryfikowanych(zrodla: tuple[ZrodloZweryfikowane, ...]) -> list[str]:
+    """Buduje wykaz źródeł oznaczonych jako zweryfikowane ręcznie."""
+    if not zrodla:
+        return []
+    wiersze = ["", "Źródła zweryfikowane ręcznie, liczba: " + str(len(zrodla)), ""]
+    for zrodlo in zrodla:
+        wiersze.append(f"Źródło: {zrodlo.pochodzenie}")
+        wiersze.append(f"  Identyfikator: {zrodlo.identyfikator}")
+        wiersze.append("  Użytkownik obejrzał to źródło i uznał je za dobre.")
+        if zrodlo.powody or zrodlo.ostrzezenia:
+            wiersze.append("  Powody, dla których źródło trafiło do sprawdzenia:")
+            wiersze.extend(f"    - {powod}" for powod in (*zrodlo.powody, *zrodlo.ostrzezenia))
         wiersze.append("")
     return wiersze[:-1]
 
@@ -246,7 +383,9 @@ def _procent_wykorzystania_limitu(liczba_zrodel: int, limit: int) -> int:
     return round(liczba_zrodel * 100 / limit)
 
 
-def _opis_czasu(sekundy: float) -> str:
+def _opis_czasu(sekundy: float | None) -> str:
+    if sekundy is None:
+        return "nie dotyczy, raport odświeżony po ręcznej zmianie w projekcie"
     zaokraglone = round(sekundy)
     if zaokraglone < 60:
         return f"{zaokraglone} s"

@@ -20,7 +20,8 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -114,6 +115,26 @@ class RejestrZadan:
             daemon=True,
         )
         watek.start()
+
+    @contextmanager
+    def wylacznie(self) -> Iterator[None]:
+        """Daje wyłączność na czas krótkiej operacji zmieniającej checkpoint.
+
+        Blok wykonuje się pod zamkiem rejestru, więc w jego trakcie żadne zadanie
+        nie może się zacząć, a jeśli jakieś już trwa, blok w ogóle nie zostaje
+        wykonany i zgłaszany jest ten sam błąd co przy próbie uruchomienia
+        drugiego zadania. Zapis checkpointu ma jednego właściciela naraz, a ręczne
+        operacje na źródłach są krótkie, więc nie potrzebują osobnego wątku.
+        Wnętrze bloku nie może wywoływać metod rejestru: zamek nie jest
+        wielobieżny.
+        """
+        with self._zamek:
+            if self._zadanie is not None and self._zadanie.stan is StanZadania.TRWA:
+                raise ZadanieJuzTrwa(
+                    f"Trwa przetwarzanie projektu „{self._zadanie.nazwa_projektu}”. "
+                    "Poczekaj na jego zakończenie, zanim zmienisz źródła."
+                )
+            yield
 
     def informacja(self) -> InformacjaOZadaniu | None:
         """Zwraca migawkę stanu bieżącego zadania albo nic, gdy żadnego nie było."""

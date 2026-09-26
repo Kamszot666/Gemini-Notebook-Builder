@@ -17,6 +17,7 @@ wpis. Pozwala to opisać listę adresów bez zaśmiecania podsumowania.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -124,6 +125,60 @@ def wczytaj_liste_z_pliku(
         raise BladTrwaly(f"Nie udało się odczytać listy adresów {sciezka}: {blad}") from blad
     tekst, _ = zdekoduj(dane)
     return zbierz_adresy(tekst, dodatkowe_parametry_sledzace)
+
+
+def rozpoznaj_liste_adresow_w_pliku(
+    sciezka: Path, dodatkowe_parametry_sledzace: Iterable[str] = ()
+) -> PodsumowanieListyUrl | None:
+    """Zwraca podsumowanie, gdy plik TXT jest wyłącznie listą adresów, a inaczej nic.
+
+    Plik uznajemy za listę źródeł podaną przez użytkownika tylko wtedy, gdy
+    każdy jego wpis jest poprawnym adresem albo powtórzeniem wcześniejszego,
+    a poprawny adres jest choć jeden. Zwykły tekst z pojedynczym adresem w środku
+    zdania zostaje tekstem: adresy znalezione w treści innego źródła nie
+    korzystają z wyjątku od ``robots.txt`` i nie są pobierane samoczynnie.
+    Plik nieczytelny albo niebędący listą daje ``None``, a nie błąd, bo wtedy
+    trafia do zwykłej ścieżki plików.
+    """
+    if sciezka.suffix.lower() != ".txt":
+        return None
+    try:
+        podsumowanie = wczytaj_liste_z_pliku(sciezka, dodatkowe_parametry_sledzace)
+    except BladTrwaly:
+        return None
+    if podsumowanie.liczba_poprawnych == 0 or podsumowanie.liczba_odrzuconych > 0:
+        return None
+    return podsumowanie
+
+
+_WZORZEC_ADRESU_W_TEKSCIE = re.compile(r"https?://[^\s<>\"]+")
+_ZNAKI_KONCA_ZDANIA = ".,;:!?)]}»”'"
+_ROZSZERZENIA_TEKSTOWE = frozenset({".txt", ".md"})
+
+
+def adresy_znalezione_w_pliku(
+    sciezka: Path, dodatkowe_parametry_sledzace: Iterable[str] = ()
+) -> tuple[AdresWejsciowy, ...]:
+    """Zwraca poprawne, niepowtarzalne adresy http i https znalezione w pliku TXT lub MD.
+
+    Adresy są wyłuskiwane z treści zwykłego tekstu; interpunkcja doklejona na
+    końcu zdania jest odcinana. Wywołujący dodaje je jako źródła niewskazane
+    wprost, więc podlegają kontroli ``robots.txt``. Plik nieczytelny albo o innym
+    rozszerzeniu daje pustą krotkę: treść pliku jest danymi i nigdy nie powoduje
+    błędu.
+    """
+    if sciezka.suffix.lower() not in _ROZSZERZENIA_TEKSTOWE:
+        return ()
+    try:
+        tekst, _ = zdekoduj(sciezka.read_bytes())
+    except OSError:
+        return ()
+    kandydaci: list[str] = []
+    for dopasowanie in _WZORZEC_ADRESU_W_TEKSCIE.finditer(tekst):
+        adres = dopasowanie.group(0).rstrip(_ZNAKI_KONCA_ZDANIA)
+        if czy_wyglada_na_adres(adres):
+            kandydaci.append(adres)
+    return zbierz_adresy("\n".join(kandydaci), dodatkowe_parametry_sledzace).adresy
 
 
 def opis_podsumowania(podsumowanie: PodsumowanieListyUrl) -> str:

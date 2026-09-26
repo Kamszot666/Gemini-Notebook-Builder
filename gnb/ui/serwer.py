@@ -28,26 +28,53 @@ from gnb.core.konfiguracja import Konfiguracja
 from gnb.core.nazwy import sanityzuj_nazwe_projektu
 from gnb.core.postep import WywolanieZwrotnePostepu
 from gnb.core.wyjatki import BladGnb
+from gnb.ingestion.lista_url import (
+    AdresWejsciowy,
+    adresy_znalezione_w_pliku,
+    rozpoznaj_liste_adresow_w_pliku,
+)
 from gnb.ingestion.wejscie import (
     PozycjaWejsciowa,
     przyjmij_plik,
     przyjmij_tekst,
     przyjmij_url,
 )
+from gnb.operacje_projektu import (
+    STATUSY_Z_ZASTAPIENIEM_TRESCI,
+    oznacz_jako_zweryfikowane,
+    przygotuj_ponowne_pobranie,
+    sprawdz_mozliwosc_zastapienia,
+    usun_zrodlo_z_projektu,
+    wczytaj_checkpoint_projektu,
+    zapisz_plik_zastepczy,
+)
 from gnb.persistence import pola_notatnika
-from gnb.persistence.checkpoint import wczytaj
+from gnb.persistence.checkpoint import Checkpoint, WejscieZapis, wczytaj
+from gnb.persistence.pliki_wynikowe import znajdz_brakujace_pliki
 from gnb.persistence.pola_notatnika import PolaNotatnika, PrzekroczonoLimitZnakow
 from gnb.persistence.projekt import UkladProjektu, ustal_uklad, utworz_katalogi
-from gnb.potok import WynikPrzetwarzania, odtworz_wejscia, przetworz_projekt
+from gnb.potok import (
+    WynikPrzetwarzania,
+    identyfikatory_materialow_do_sprawdzenia,
+    odtworz_wejscia,
+    pozycja_z_wejscia,
+    przetworz_projekt,
+)
 from gnb.ui import csrf, formularze, widoki
 from gnb.ui.projekty import niedokonczone
 from gnb.ui.stan_skrotu import AktywnyProjektSkrotu, OstatniKomunikatSkrotu
 from gnb.ui.widoki import BladPola, DaneFormularzaProjektu, PodsumowanieWyniku, sciezka_projektu
+from gnb.ui.widoki_zrodel import (
+    BrakujacyPlikDoWidoku,
+    ZrodloDoWidoku,
+    sekcje_zrodel,
+)
 from gnb.ui.zadania import RejestrZadan, StanZadania, ZadanieJuzTrwa
 
 _LOG = logging.getLogger("gnb.ui")
 _TYP_HTML = "text/html; charset=utf-8"
 _TYP_JSON = "application/json; charset=utf-8"
+_KATALOG_PLIKOW_ZASTEPCZYCH = "zastepcze"
 _NADWYZKA_LIMITU_BAJTOW = 1_048_576
 _BAJTOW_W_MEGABAJCIE = 1024 * 1024
 
@@ -214,6 +241,8 @@ class _Handler(BaseHTTPRequestHandler):
         sciezka = urlsplit(self.path).path
         if sciezka == "/projekt/nowy":
             self._utworz_projekt()
+        elif (adres_zrodla := self._rozbij_adres_zrodla(sciezka)) is not None:
+            self._obsluz_dzialanie_na_zrodle(*adres_zrodla)
         elif sciezka.startswith("/projekt/") and sciezka.endswith("/wznow"):
             self._wznow_projekt(self._nazwa_z_url(sciezka[len("/projekt/") : -len("/wznow")]))
         elif sciezka.startswith("/projekt/") and sciezka.endswith("/pola"):
@@ -295,25 +324,30 @@ class _Handler(BaseHTTPRequestHandler):
             bledy=bledy,
             aktywny_projekt_skrotu=self._serwer.aktywny_projekt_skrotu.aktualny(),
             ostatni_komunikat_skrotu=self._serwer.ostatni_komunikat_skrotu.aktualny(),
-            grupa_ostatniego_wyslania=self._grupa_ostatniego_wyslania(uklad),
+            grupy_projektu=self._grupy_projektu(uklad),
             dane_dosylania=dane_dosylania,
             bledy_dosylania=bledy_dosylania,
+            zrodla_html=self._zrodla_html(uklad, token),
         )
         self._wyslij_html(kod, html, token=token)
 
-    def _grupa_ostatniego_wyslania(self, uklad: UkladProjektu) -> str:
-        """Nazwa grupy tematycznej ostatniego wejścia zapisanego w checkpoincie.
+    def _grupy_projektu(self, uklad: UkladProjektu) -> list[str]:
+        """Nazwy grup tematycznych znanych projektowi, w kolejności pierwszego użycia.
 
-        Wypełnia nią domyślnie pole formularza dosyłania kolejnych źródeł, żeby
-        trafiały do tego samego pliku grupy bez przepisywania nazwy — pozycja
-        czwarta listy zmian etapu czternastego.
+        Trafiają na listę podpowiedzi pola grupy w formularzu dosyłania, a ostatnia
+        z nich jest wartością domyślną tego pola, żeby kolejne źródła trafiały do
+        tego samego pliku grupy bez przepisywania nazwy.
         """
         if not uklad.checkpoint.is_file():
-            return ""
+            return []
         checkpoint = wczytaj(uklad.checkpoint)
-        if checkpoint is None or not checkpoint.wejscia:
-            return ""
-        return checkpoint.wejscia[-1].grupa or ""
+        if checkpoint is None:
+            return []
+        grupy: list[str] = []
+        for wejscie in checkpoint.wejscia:
+            if wejscie.grupa and wejscie.grupa not in grupy:
+                grupy.append(wejscie.grupa)
+        return grupy
 
     def _pokaz_prompt(self, nazwa: str) -> None:
         uklad = ustal_uklad(self._konfiguracja.katalog_wynikow, nazwa)
@@ -328,10 +362,9 @@ class _Handler(BaseHTTPRequestHandler):
     def _pokaz_postep(self) -> None:
         """Zwraca stan bieżącego zadania jako JSON, odpytywane przez skrypt strony projektu.
 
-        Gdy zadanie właśnie się zakończyło, odpowiedź niesie dodatkowo gotowy
-        fragment HTML z podsumowaniem, raportem i formularzem dosyłania —
-        pozycja pierwsza listy zmian etapu czternastego: strona wstawia go pod
-        regionem stanu bez przeładowania i bez przenoszenia fokusu.
+        Odpowiedź niesie tylko krótkie zdania stanu. Strona niczego przy tym nie
+        przebudowuje, żeby nie przenosić fokusu czytnika ekranu; po zakończeniu
+        dodaje jedynie odnośnik do ponownego wczytania strony z wynikami.
         """
         informacja = self._serwer.rejestr.informacja()
         if informacja is None:
@@ -342,25 +375,10 @@ class _Handler(BaseHTTPRequestHandler):
         dane = {"komunikat": informacja.komunikat_postepu, "stan": informacja.stan.value}
         if informacja.stan is StanZadania.ZAKONCZONE and informacja.wynik is not None:
             uklad = ustal_uklad(self._konfiguracja.katalog_wynikow, informacja.nazwa_projektu)
-            raport = _odczytaj_tekst(uklad.raport)
-            if raport is not None:
-                podsumowanie = PodsumowanieWyniku(
-                    liczba_przetworzonych=informacja.wynik.liczba_przetworzonych,
-                    liczba_pominietych=informacja.wynik.liczba_pominietych,
-                    liczba_bledow=informacja.wynik.liczba_bledow,
-                    katalog_projektu=str(informacja.wynik.katalog_projektu),
-                    wznowiono=informacja.wynik.wznowiono,
-                )
+            if _odczytaj_tekst(uklad.raport) is not None:
                 dane["naglowek"] = "Stan przetwarzania: zakończone"
                 dane["komunikat"] = (
-                    "Przetwarzanie zakończone. Raport jest poniżej, pod nagłówkiem Raport końcowy."
-                )
-                dane["fragment"] = widoki.fragment_po_zakonczeniu(
-                    podsumowanie,
-                    raport,
-                    sciezka_projektu(informacja.nazwa_projektu),
-                    self._grupa_ostatniego_wyslania(uklad),
-                    self._token_sesji(),
+                    "Przetwarzanie zakończone. Aktywuj odnośnik „Pokaż wyniki przetwarzania”."
                 )
         elif informacja.stan is StanZadania.BLAD:
             dane["naglowek"] = "Stan przetwarzania: zakończone błędem"
@@ -387,6 +405,8 @@ class _Handler(BaseHTTPRequestHandler):
         bledy: list[BladPola] = []
         if not dane.nazwa_projektu:
             bledy.append(BladPola("nazwa_projektu", "Nazwa projektu jest wymagana."))
+        if not dane.grupa:
+            bledy.append(BladPola("grupa", "Nazwa grupy tematycznej jest wymagana."))
 
         adresy = [wiersz.strip() for wiersz in dane.adresy.splitlines() if wiersz.strip()]
         pliki = [plik for plik in wynik_formularza.pliki if plik.zawartosc]
@@ -406,12 +426,16 @@ class _Handler(BaseHTTPRequestHandler):
             self._pokaz_strone_glowna(kod=400, dane=dane, bledy=bledy)
             return
 
-        grupa = dane.grupa or None
         try:
-            self._uruchom_nowy_projekt(nazwa_bezpieczna, dane, adresy, pliki, grupa)
+            self._uruchom_nowy_projekt(nazwa_bezpieczna, dane, adresy, pliki, dane.grupa)
         except ZadanieJuzTrwa as blad:
             self._pokaz_strone_glowna(
                 kod=409, dane=dane, bledy=[BladPola("nazwa_projektu", str(blad))]
+            )
+            return
+        except BladGnb as blad:
+            self._pokaz_strone_glowna(
+                kod=400, dane=dane, bledy=[BladPola("adresy", blad.komunikat)]
             )
             return
         self._przekieruj(sciezka_projektu(nazwa_bezpieczna))
@@ -422,12 +446,10 @@ class _Handler(BaseHTTPRequestHandler):
         dane: DaneFormularzaProjektu,
         adresy: list[str],
         pliki: list[formularze.PlikFormularza],
-        grupa: str | None,
+        grupa: str,
     ) -> None:
+        """Przyjmuje wejścia i uruchamia przebieg; błędny adres kończy się przed katalogiem."""
         konfiguracja = self._konfiguracja
-        uklad = ustal_uklad(konfiguracja.katalog_wynikow, nazwa)
-        utworz_katalogi(uklad, z_materialami_zrodlowymi=konfiguracja.zachowuj_oryginaly)
-
         moment = datetime.now(UTC)
         pozycje: list[PozycjaWejsciowa] = []
         if dane.tekst.strip():
@@ -436,9 +458,49 @@ class _Handler(BaseHTTPRequestHandler):
             pozycje.append(
                 przyjmij_url(adres, moment, konfiguracja.dodatkowe_parametry_sledzace, grupa=grupa)
             )
+        uklad = ustal_uklad(konfiguracja.katalog_wynikow, nazwa)
+        utworz_katalogi(uklad, z_materialami_zrodlowymi=konfiguracja.zachowuj_oryginaly)
+        znalezione: list[AdresWejsciowy] = []
         for plik in pliki:
             sciezka = self._zapisz_plik_wejsciowy(uklad.pliki_wejsciowe, plik)
-            pozycje.append(przyjmij_plik(sciezka, moment, grupa=grupa))
+            lista = rozpoznaj_liste_adresow_w_pliku(
+                sciezka, konfiguracja.dodatkowe_parametry_sledzace
+            )
+            if lista is None:
+                pozycje.append(przyjmij_plik(sciezka, moment, grupa=grupa))
+                znalezione.extend(
+                    adresy_znalezione_w_pliku(sciezka, konfiguracja.dodatkowe_parametry_sledzace)
+                )
+                continue
+            # Plik złożony wyłącznie z adresów jest listą źródeł: pobieramy strony,
+            # a sama lista nie trafia do notatnika jako treść.
+            for wpis in lista.adresy:
+                pozycje.append(
+                    przyjmij_url(
+                        wpis.podany,
+                        moment,
+                        konfiguracja.dodatkowe_parametry_sledzace,
+                        grupa=grupa,
+                    )
+                )
+
+        # Adresy znalezione w treści plików są dodawane na końcu i bez wyjątku od
+        # robots.txt, bo nie wskazał ich użytkownik wprost. Adres, który już jest
+        # na liście jawnych, nie jest dodawany drugi raz.
+        znane = {pozycja.adres_kanoniczny for pozycja in pozycje if pozycja.adres_kanoniczny}
+        for wpis in znalezione:
+            if wpis.kanoniczny in znane:
+                continue
+            znane.add(wpis.kanoniczny)
+            pozycje.append(
+                przyjmij_url(
+                    wpis.podany,
+                    moment,
+                    konfiguracja.dodatkowe_parametry_sledzace,
+                    grupa=grupa,
+                    wskazane_jawnie=False,
+                )
+            )
 
         def praca(postep: WywolanieZwrotnePostepu) -> WynikPrzetwarzania:
             return przetworz_projekt(pozycje, konfiguracja, nazwa_projektu=nazwa, postep=postep)
@@ -481,21 +543,30 @@ class _Handler(BaseHTTPRequestHandler):
                     "dosylanie-tekst", "Podaj przynajmniej jedno źródło: tekst, adres albo plik."
                 )
             )
+        if not dane.grupa:
+            bledy.append(BladPola("dosylanie-grupa", "Nazwa grupy tematycznej jest wymagana."))
         if bledy:
             self._pokaz_projekt(
                 uklad.nazwa_projektu, kod=400, dane_dosylania=dane, bledy_dosylania=bledy
             )
             return
 
-        grupa = dane.grupa or None
         try:
-            self._uruchom_nowy_projekt(uklad.nazwa_projektu, dane, adresy, pliki, grupa)
+            self._uruchom_nowy_projekt(uklad.nazwa_projektu, dane, adresy, pliki, dane.grupa)
         except ZadanieJuzTrwa as blad:
             self._pokaz_projekt(
                 uklad.nazwa_projektu,
                 kod=409,
                 dane_dosylania=dane,
                 bledy_dosylania=[BladPola("dosylanie-tekst", str(blad))],
+            )
+            return
+        except BladGnb as blad:
+            self._pokaz_projekt(
+                uklad.nazwa_projektu,
+                kod=400,
+                dane_dosylania=dane,
+                bledy_dosylania=[BladPola("dosylanie-adresy", blad.komunikat)],
             )
             return
         self._przekieruj(sciezka_projektu(uklad.nazwa_projektu))
@@ -523,7 +594,11 @@ class _Handler(BaseHTTPRequestHandler):
 
         def praca(postep: WywolanieZwrotnePostepu) -> WynikPrzetwarzania:
             return przetworz_projekt(
-                pozycje, konfiguracja, nazwa_projektu=nazwa_projektu, postep=postep
+                pozycje,
+                konfiguracja,
+                nazwa_projektu=nazwa_projektu,
+                postep=postep,
+                ponownie_przetwarzaj_usuniete=False,
             )
 
         try:
@@ -583,6 +658,242 @@ class _Handler(BaseHTTPRequestHandler):
 
         self._serwer.aktywny_projekt_skrotu.ustaw(uklad.nazwa_projektu)
         self._przekieruj(sciezka_projektu(uklad.nazwa_projektu))
+
+    # --- ręczne działania na źródłach ---------------------------------
+
+    def _rozbij_adres_zrodla(self, sciezka: str) -> tuple[str, str, str] | None:
+        """Rozpoznaje adres ``/projekt/NAZWA/zrodlo/IDENTYFIKATOR/DZIALANIE``.
+
+        Zwraca nazwę projektu, identyfikator źródła i nazwę działania albo nic,
+        gdy ścieżka ma inny kształt.
+        """
+        czesci = sciezka.split("/")
+        if len(czesci) == 6 and czesci[1] == "projekt" and czesci[3] == "zrodlo":
+            return self._nazwa_z_url(czesci[2]), unquote(czesci[4]), czesci[5]
+        return None
+
+    def _obsluz_dzialanie_na_zrodle(self, nazwa: str, identyfikator: str, akcja: str) -> None:
+        if akcja == "zweryfikowane":
+            self._oznacz_zrodlo_jako_zweryfikowane(nazwa, identyfikator)
+        elif akcja == "usun":
+            self._usun_zrodlo(nazwa, identyfikator)
+        elif akcja == "zastap":
+            self._zastap_tresc_zrodla(nazwa, identyfikator)
+        else:
+            self._blad(404, "Nie znaleziono", "Pod tym adresem nie ma żadnej operacji.")
+
+    def _uklad_istniejacego_projektu(self, nazwa: str) -> UkladProjektu | None:
+        uklad = ustal_uklad(self._konfiguracja.katalog_wynikow, nazwa)
+        if not uklad.katalog_projektu.is_dir():
+            self._blad(404, "Nie znaleziono projektu", f"Nie ma projektu o nazwie „{nazwa}”.")
+            return None
+        return uklad
+
+    def _zrodlo_do_widoku_lub_blad(
+        self, uklad: UkladProjektu, identyfikator: str
+    ) -> ZrodloDoWidoku | None:
+        checkpoint = self._wczytaj_checkpoint_do_widoku(uklad)
+        zrodla = self._zrodla_do_widoku(checkpoint) if checkpoint is not None else []
+        for zrodlo in zrodla:
+            if zrodlo.identyfikator == identyfikator:
+                return zrodlo
+        self._blad(404, "Nie znaleziono źródła", "Nie ma w projekcie źródła o tym identyfikatorze.")
+        return None
+
+    def _oznacz_zrodlo_jako_zweryfikowane(self, nazwa: str, identyfikator: str) -> None:
+        wynik_formularza = self._parsuj_formularz()
+        if wynik_formularza is None:
+            return
+        if not self._csrf_ok(wynik_formularza.pole(csrf.NAZWA_POLA_FORMULARZA)):
+            return
+        uklad = self._uklad_istniejacego_projektu(nazwa)
+        if uklad is None:
+            return
+        try:
+            with self._serwer.rejestr.wylacznie():
+                oznacz_jako_zweryfikowane(uklad, self._konfiguracja, identyfikator)
+        except ZadanieJuzTrwa as blad:
+            self._blad(409, "Inne przetwarzanie w toku", str(blad))
+            return
+        except BladGnb as blad:
+            self._blad(400, "Nie można oznaczyć źródła", blad.komunikat)
+            return
+        # Po weryfikacji źródło z sieci jest pobierane od nowa. Sama etykieta nie
+        # wystarcza, gdy użytkownik oczekuje, że aplikacja zajmie się materiałem.
+        try:
+            with self._serwer.rejestr.wylacznie():
+                wycofane = przygotuj_ponowne_pobranie(uklad, self._konfiguracja, identyfikator)
+        except ZadanieJuzTrwa as blad:
+            self._blad(409, "Inne przetwarzanie w toku", str(blad))
+            return
+        except BladGnb as blad:
+            self._blad(400, "Nie można pobrać źródła ponownie", blad.komunikat)
+            return
+        if wycofane is not None and not self._uruchom_zapisane_wejscia(
+            uklad, {}, dodatkowe_wejscia=(wycofane[0],)
+        ):
+            return
+        self._przekieruj(sciezka_projektu(uklad.nazwa_projektu))
+
+    def _usun_zrodlo(self, nazwa: str, identyfikator: str) -> None:
+        wynik_formularza = self._parsuj_formularz()
+        if wynik_formularza is None:
+            return
+        if not self._csrf_ok(wynik_formularza.pole(csrf.NAZWA_POLA_FORMULARZA)):
+            return
+        uklad = self._uklad_istniejacego_projektu(nazwa)
+        if uklad is None:
+            return
+        try:
+            with self._serwer.rejestr.wylacznie():
+                wynik = usun_zrodlo_z_projektu(uklad, self._konfiguracja, identyfikator)
+        except ZadanieJuzTrwa as blad:
+            self._blad(409, "Inne przetwarzanie w toku", str(blad))
+            return
+        except BladGnb as blad:
+            self._blad(400, "Nie można usunąć źródła", blad.komunikat)
+            return
+        if wynik.wymaga_przepakowania and not self._uruchom_zapisane_wejscia(uklad, {}):
+            return
+        self._przekieruj(sciezka_projektu(uklad.nazwa_projektu))
+
+    def _zastap_tresc_zrodla(self, nazwa: str, identyfikator: str) -> None:
+        wynik_formularza = self._parsuj_formularz()
+        if wynik_formularza is None:
+            return
+        if not self._csrf_ok(wynik_formularza.pole(csrf.NAZWA_POLA_FORMULARZA)):
+            return
+        uklad = self._uklad_istniejacego_projektu(nazwa)
+        if uklad is None:
+            return
+        pliki = [plik for plik in wynik_formularza.pliki if plik.zawartosc]
+        if not pliki:
+            self._blad(
+                400,
+                "Nie wybrano pliku",
+                "Wybierz plik z ręcznie zapisaną treścią źródła i spróbuj ponownie.",
+            )
+            return
+        try:
+            sprawdz_mozliwosc_zastapienia(wczytaj_checkpoint_projektu(uklad), identyfikator)
+        except BladGnb as blad:
+            self._blad(400, "Nie można zastąpić treści", blad.komunikat)
+            return
+        sciezka = zapisz_plik_zastepczy(
+            uklad.pliki_wejsciowe / _KATALOG_PLIKOW_ZASTEPCZYCH,
+            formularze.bezpieczna_nazwa_wysylki(pliki[0].nazwa_pliku),
+            pliki[0].zawartosc,
+        )
+        if not self._uruchom_zapisane_wejscia(uklad, {identyfikator: sciezka}):
+            return
+        self._przekieruj(sciezka_projektu(uklad.nazwa_projektu))
+
+    def _uruchom_zapisane_wejscia(
+        self,
+        uklad: UkladProjektu,
+        zastepcze_tresci: dict[str, Path],
+        dodatkowe_wejscia: tuple[WejscieZapis, ...] = (),
+    ) -> bool:
+        """Uruchamia przebieg z zapisanych wejść projektu; zwraca fałsz po wysłaniu strony błędu.
+
+        Służy przepakowaniu po usunięciu źródła z grupy oraz zastąpieniu treści
+        źródła plikiem. Zapisane wejścia nie są ponownym podaniem źródeł przez
+        użytkownika, więc źródła pominięte z powodu ręcznie usuniętego pliku
+        wynikowego zostają pominięte.
+        """
+        konfiguracja = self._konfiguracja
+        pozycje = odtworz_wejscia(wczytaj_checkpoint_projektu(uklad), konfiguracja)
+        moment = datetime.now(UTC)
+        for wejscie in dodatkowe_wejscia:
+            pozycja = pozycja_z_wejscia(wejscie, konfiguracja, moment)
+            if pozycja is not None:
+                pozycje.append(pozycja)
+        nazwa_projektu = uklad.nazwa_projektu
+
+        def praca(postep: WywolanieZwrotnePostepu) -> WynikPrzetwarzania:
+            return przetworz_projekt(
+                pozycje,
+                konfiguracja,
+                nazwa_projektu=nazwa_projektu,
+                postep=postep,
+                zastepcze_tresci=zastepcze_tresci,
+                ponownie_przetwarzaj_usuniete=False,
+            )
+
+        try:
+            self._serwer.rejestr.uruchom(nazwa_projektu, praca, liczba_pozycji=len(pozycje))
+        except ZadanieJuzTrwa as blad:
+            self._blad(
+                409,
+                "Inne przetwarzanie w toku",
+                f"{blad} Zmiana została zapisana, a przetwarzanie dokończysz przyciskiem "
+                "wznowienia projektu na stronie głównej, gdy poprzednie się skończy.",
+            )
+            return False
+        return True
+
+    def _wczytaj_checkpoint_do_widoku(self, uklad: UkladProjektu) -> Checkpoint | None:
+        """Wczytuje checkpoint do wyświetlenia. Uszkodzony albo brakujący daje ``None``."""
+        if not uklad.checkpoint.is_file():
+            return None
+        try:
+            return wczytaj(uklad.checkpoint)
+        except BladGnb:
+            return None
+
+    def _zrodla_do_widoku(self, checkpoint: Checkpoint) -> list[ZrodloDoWidoku]:
+        materialy = identyfikatory_materialow_do_sprawdzenia(checkpoint)
+        zrodla: list[ZrodloDoWidoku] = []
+        for stan in checkpoint.zrodla.values():
+            nazwy_plikow = tuple(
+                dict.fromkeys(Path(wynik.sciezka_wzgledna).name for wynik in stan.wyniki)
+            )
+            zrodla.append(
+                ZrodloDoWidoku(
+                    identyfikator=stan.identyfikator,
+                    pochodzenie=stan.pochodzenie,
+                    status=stan.status,
+                    grupa=stan.grupa_pakowania,
+                    pliki_wynikowe=nazwy_plikow,
+                    komunikat=stan.komunikat_bledu,
+                    powody_do_sprawdzenia=(
+                        *stan.powody_oceny,
+                        *stan.ostrzezenia,
+                        *stan.ostrzezenia_pakowania,
+                    ),
+                    czy_material_do_sprawdzenia=stan.identyfikator in materialy,
+                    zweryfikowane_recznie=stan.zweryfikowane_recznie,
+                    tresc_zastapiona_plikiem=stan.tresc_zastapiona_plikiem,
+                    czy_mozna_zastapic_tresc=stan.status in STATUSY_Z_ZASTAPIENIEM_TRESCI,
+                )
+            )
+        return zrodla
+
+    def _zrodla_html(self, uklad: UkladProjektu, token_csrf: str) -> str:
+        """Buduje fragment strony projektu z wykazem źródeł i brakującymi plikami.
+
+        Sprawdzenie brakujących plików jest tu wyłącznie odczytem: wyświetlenie
+        strony nigdy nie zmienia stanu projektu, status źródeł zmienia dopiero
+        początek następnego przebiegu przetwarzania.
+        """
+        checkpoint = self._wczytaj_checkpoint_do_widoku(uklad)
+        if checkpoint is None:
+            return ""
+        brakujace = [
+            BrakujacyPlikDoWidoku(
+                nazwa=brak.nazwa,
+                pochodzenie_zrodel=tuple(
+                    checkpoint.zrodla[identyfikator].pochodzenie
+                    for identyfikator in brak.identyfikatory_zrodel
+                    if identyfikator in checkpoint.zrodla
+                ),
+                czy_zajmuje_slot=brak.czy_zajmuje_slot,
+            )
+            for brak in znajdz_brakujace_pliki(uklad, checkpoint)
+        ]
+        return sekcje_zrodel(
+            uklad.nazwa_projektu, self._zrodla_do_widoku(checkpoint), brakujace, token_csrf
+        )
 
     # --- pomocnicze ---------------------------------------------------
 

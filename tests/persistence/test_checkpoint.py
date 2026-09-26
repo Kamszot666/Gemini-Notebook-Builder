@@ -16,6 +16,7 @@ from gnb.persistence.checkpoint import (
     StanWyniku,
     StanZrodla,
     WejscieZapis,
+    ZastapionyPlikGrupy,
     wczytaj,
     zapisz,
 )
@@ -523,3 +524,60 @@ def test_starszy_checkpoint_wczytuje_sie_takze_z_kopii_zapasowej(tmp_path: Path)
 
     assert odczytany is not None
     assert odczytany.zrodla["plik_tekstowy-1"].wyniki[0].liczba_znakow_pliku == 999
+
+
+def test_checkpoint_bez_pol_zmian_recznych_wczytuje_sie_z_wartosciami_domyslnymi(
+    tmp_path: Path,
+) -> None:
+    """Plik sprzed etapu czternastego nie ma pól zmian ręcznych i wczytuje się bez błędu.
+
+    Tekst pliku jest napisany ręcznie, nie wygenerowany bieżącym kodem, więc test
+    naprawdę sprawdza zgodność wsteczną. Nowe pola mają bezpieczną wartość
+    domyślną i nie wymagają migracji ani podniesienia wersji schematu.
+    """
+    sciezka = tmp_path / "checkpoint.json"
+    sciezka.write_text(_CHECKPOINT_W_WERSJI_CZWARTEJ_BEZ_PAKOWANIA, encoding="utf-8")
+
+    odczytany = wczytaj(sciezka)
+
+    assert odczytany is not None
+    assert odczytany.zastapione_pliki_grup == []
+    stan = odczytany.zrodla["plik_tekstowy-1"]
+    assert stan.zweryfikowane_recznie is False
+    assert stan.tresc_zastapiona_plikiem is None
+    assert stan.plik_wynikowy_usuniety is False
+
+
+def test_pola_zmian_recznych_przezywaja_zapis_i_odczyt(tmp_path: Path) -> None:
+    checkpoint = _przykladowy_checkpoint()
+    stan = checkpoint.zrodla["plik_tekstowy-1"]
+    stan.zweryfikowane_recznie = True
+    stan.tresc_zastapiona_plikiem = "zapisana.html"
+    stan.plik_wynikowy_usuniety = True
+    checkpoint.zastapione_pliki_grup = [
+        ZastapionyPlikGrupy("pliki_wynikowe/stary.txt", "nowy.txt", "Grupa")
+    ]
+
+    sciezka = tmp_path / "checkpoint.json"
+    zapisz(sciezka, checkpoint)
+    odczytany = wczytaj(sciezka)
+
+    assert odczytany == checkpoint
+
+
+def test_uszkodzony_wpis_zastapionego_pliku_jest_pomijany_a_nie_wywraca_odczytu(
+    tmp_path: Path,
+) -> None:
+    dane = json.loads(_CHECKPOINT_W_WERSJI_CZWARTEJ_BEZ_PAKOWANIA)
+    dane["zastapione_pliki_grup"] = [
+        {"stara_nazwa": "a.txt", "nowa_nazwa": "b.txt", "grupa": None},
+        {"stara_nazwa": "bez_nowej"},
+        "nie-obiekt",
+    ]
+    sciezka = tmp_path / "checkpoint.json"
+    sciezka.write_text(json.dumps(dane), encoding="utf-8")
+
+    odczytany = wczytaj(sciezka)
+
+    assert odczytany is not None
+    assert [wpis.stara_nazwa for wpis in odczytany.zastapione_pliki_grup] == ["a.txt"]

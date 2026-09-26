@@ -1,7 +1,7 @@
-# Architektura — stan po etapie trzynastym
+# Architektura — stan po etapie czternastym
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
-zakończeniu etapu trzynastego. Pełny docelowy podział na pakiety opisuje
+zakończeniu etapu czternastego. Pełny docelowy podział na pakiety opisuje
 sekcja szósta `CLAUDE.md`.
 
 ## Potok przetwarzania
@@ -96,6 +96,20 @@ stronie odbiorcy, nie potoku.
 przełamuje odrzucenie nagrania rozpoznanego jako niemowne. W wierszu poleceń
 ustawia ją opcja `--wymus-transkrypcje`.
 
+Dwa dalsze argumenty `przetworz_projekt` pochodzą z etapu czternastego.
+`zastepcze_tresci` odwzorowuje identyfikator źródła na plik, którego treść
+podstawia się za wynik ekstrakcji tego źródła; źródło zachowuje identyfikator
+i pochodzenie, nie jest pobierane ponownie, a zastąpienie jest bezpieczne,
+bo dotychczasowy stan jest zamieniany dopiero po udanej ekstrakcji
+i normalizacji. `ponownie_przetwarzaj_usuniete` rozstrzyga, czy źródło
+pominięte z powodu ręcznie usuniętego pliku wynikowego jest przetwarzane od
+nowa, gdy jego wejście jest wśród podanych: prawda, domyślnie, to ponowne
+podanie przez użytkownika, a fałsz, używany przez wznowienie z zapisanych
+wejść, zostawia je pominięte. Na początku każdego przebiegu funkcja
+`_odnotuj_brakujace_pliki` zamienia źródła z brakującym plikiem TXT albo PDF na
+pominięte, a faza pakowania cofa do przepakowania grupy, do których dochodzą
+nowe źródła, i po zapisaniu nowych plików usuwa stare.
+
 ## Pakiet gnb.core
 
 - `gnb/core/model.py` — siedem kontraktów danych z sekcji siódmej `CLAUDE.md`.
@@ -147,6 +161,13 @@ filmu, czyli tytułu, kanału, długości i daty publikacji, nie udostępnia
 serwisu YouTube i nie da się go po prostu wyłączyć. Bez niego film nadal dostanie
 transkrypcję, ale bez tytułu, kanału i długości, a więc i bez sensownej nazwy
 pliku wynikowego.
+- `gnb/ingestion/archiwum.py` — rozwijanie archiwów ZIP na zwykłe wejścia plikowe.
+  Nic nie jest zapisywane pod nazwą z archiwum, wpisy niebezpieczne są pomijane,
+  a limity liczby plików, rozmiaru i stosunku kompresji pomijają całe archiwum.
+  Wynik niesie listę wpisów z powodami pominięć, którą potok zapisuje
+  w checkpoincie, manifeście i raporcie. Potok rozwija archiwa zaraz po otwarciu
+  logów, przed zapamiętaniem wejść, więc wznowienie odtwarza pliki z archiwum,
+  a nie samo archiwum.
 - `gnb/ingestion/robots.py` — odczyt pliku `robots.txt` i decyzja o zgodzie na
   pobranie adresu, zgodnie z RFC 9309: 2xx oznacza reguły, 4xx zgodę, a 5xx
   i błąd sieci zakaz po wyczerpaniu ponowień.
@@ -207,6 +228,27 @@ pliku wynikowego.
 - `gnb/extractors/plik_epub.py` — rozdziały EPUB w kolejności `spine` przez
   `EbookLib`, z pominięciem dokumentu nawigacyjnego i rekurencyjnym wejściem
   w kontenery `div`, `section` i `article`. Wysoki poziom pewności struktury.
+- `gnb/extractors/pakiet_xml.py` — bezpieczny odczyt archiwów ZIP z plikami XML,
+  wspólny dla ODF i PPTX: ograniczenie rozmiaru rozpakowanego wpisu według
+  deklaracji i faktycznego odczytu, odrzucanie deklaracji typu dokumentu
+  i encji, odczyt wyłącznie do pamięci.
+- `gnb/extractors/blok_tabeli.py` — budowa bloku tabeli z wierszy komórek
+  z wyrównaniem szerokości, wspólna dla arkuszy, ODF i PPTX.
+- `gnb/extractors/plik_odf.py` — ODT, ODS i ODP wyłącznie biblioteką standardową,
+  wysoki poziom pewności struktury.
+- `gnb/extractors/plik_pptx.py` — PPTX wyłącznie biblioteką standardową, z kolejnością
+  slajdów z listy prezentacji.
+- `gnb/extractors/arkusze.py` — wspólne zasady zapisu wartości komórek arkusza;
+  `gnb/extractors/plik_xlsx.py` (biblioteka `openpyxl`, tryb strumieniowy)
+  i `gnb/extractors/plik_xls.py` (biblioteka `xlrd`).
+- `gnb/extractors/plik_rtf.py` — RTF biblioteką `striprtf`, niski poziom pewności
+  struktury.
+- `gnb/extractors/libreoffice.py` — wykrywanie pliku `soffice.com` i konwersja
+  w tymczasowym profilu; `gnb/extractors/plik_libreoffice.py` — ekstraktory DOC
+  i PPT, które konwertują plik na DOCX i PPTX i oddają go ekstraktorom tych formatów.
+- `gnb/extractors/plik_csv.py` obsługuje też TSV, z ogranicznikiem zadanym przez
+  format; `gnb/extractors/tekst.py` obsługuje też pliki tekstu prostego JSON, XML,
+  YAML, TOML, INI, CFG i LOG.
 - `gnb/extractors/dane_strukturalne.py` — odczyt metadanych artykułu z bloku
   JSON-LD strony oraz scalanie ich z metadanymi ekstraktora, z zachowaniem obu
   wartości przy rozbieżności.
@@ -321,7 +363,29 @@ jest zadaniem etapu siódmego.
   wskazanie źródła głównego duplikatu, nazwa grupy pakowania, ostrzeżenia
   podziału, numer i liczba części pliku wynikowego oraz lista wejść projektu są
   polami addytywnymi z bezpieczną wartością domyślną, więc plik starszej wersji
-  wczytuje się bez zmiany numeru schematu.
+  wczytuje się bez zmiany numeru schematu. Tak samo dodane w etapie czternastym:
+  `zweryfikowane_recznie`, `tresc_zastapiona_plikiem` i `plik_wynikowy_usuniety`
+  przy źródle oraz wykaz `zastapione_pliki_grup` przy projekcie, a także pole
+  `archiwum` przy źródle i przy wejściu, pole `sciezka_w_archiwum` przy wejściu
+  i wykaz `archiwa` przy projekcie.
+- `gnb/persistence/pliki_wynikowe.py` — zgodność checkpointu z plikami na
+  dysku: wykrywanie plików wynikowych, których nie ma, cofanie grupy do
+  przepakowania oraz usuwanie starych plików grup po zapisaniu nowych. Moduł
+  niczego nie zapisuje w checkpoincie i nie pisze do logów, bo zapis
+  checkpointu ma jednego właściciela naraz.
+
+## Moduł gnb.operacje_projektu
+
+Ręczne operacje użytkownika na źródłach istniejącego projektu: oznaczenie
+jako zweryfikowane, usunięcie z projektu i sprawdzenie, czy treść da się
+zastąpić plikiem. Każda operacja zapisuje checkpoint, odbudowuje manifest
+i raport oraz dopisuje zdarzenie do obu logów. Zastąpienie treści wykonuje
+potok, bo wymaga ekstrakcji; ten moduł tylko sprawdza, czy jest możliwe.
+Interfejs woła te operacje pod `RejestrZadan.wylacznie()`, które odmawia, gdy
+trwa przetwarzanie, żeby zapis checkpointu miał jednego właściciela naraz.
+Raport odbudowany po operacji nie zna czasu pracy ani wykazu wejść już
+obecnych z ostatniego przebiegu, bo tych danych checkpoint nie przechowuje,
+i mówi o tym wprost w wierszu czasu pracy.
 
 ## Pakiet gnb.logging_pl
 
@@ -363,6 +427,10 @@ istniejący potok z żądaniem HTTP przez semantyczny, dostępny HTML.
 - `gnb/ui/serwer.py` — `ThreadingHTTPServer` z routingiem tablicą tras. Każdy
   POST wymaga zgodnego tokenu CSRF, a po udanym POST serwer przekierowuje kodem
   303. Nieobsłużony wyjątek staje się stroną 500.
+- `gnb/ui/widoki_zrodel.py` — wykaz źródeł projektu z działaniami, sekcja
+  brakujących plików wynikowych. Zależy od
+  `widoki.py`, a nie odwrotnie: gotowy fragment jest przekazywany do strony
+  projektu jako napis. Sekcja brakujących plików tylko pokazuje rozbieżność.
 - `gnb/ui/server.py` — punkt wejścia `python -m gnb.ui.server`. Nazwa pliku jest
   angielska, bo to część kontraktu komend; logika i komunikaty są po polsku.
 - `gnb/ui/stan_skrotu.py` — `AktywnyProjektSkrotu` i `OstatniKomunikatSkrotu`,

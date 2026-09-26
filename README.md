@@ -11,7 +11,7 @@ Program powstaje dla osoby niewidomej, która pracuje na Windows 11 z czytnikiem
 Co to znaczy w praktyce:
 
 1. Interfejs to zwykła strona w przeglądarce, zbudowana z prawdziwych przycisków, odnośników, pól i nagłówków. Do niczego nie potrzeba myszy.
-2. Każde pole ma normalną etykietę, którą NVDA czyta. Gdy formularz ma błędy, dostajesz ich listę tekstem i fokus ląduje na niej.
+2. Każde pole ma nazwę, którą NVDA czyta raz: pola tekstowe niosą ją w aria-label i w podpowiedzi wewnątrz pola, a pole pliku ma zwykłą etykietę. Gdy formularz ma błędy, dostajesz ich listę tekstem i fokus ląduje na niej.
 3. Postęp długiej pracy jest ogłaszany krótkimi zdaniami, na przykład „Przetworzono 12 z 40 źródeł”, i to rzadko, żeby czytnik nie zasypał Cię komunikatami.
 4. Fokus nigdy nie skacze sam po stronie. Rusza się tylko wtedy, kiedy Ty coś zrobisz.
 5. Wysoki kontrast, ciemny motyw, duża czcionka. Nic nie jest przekazane wyłącznie kolorem. Animacje respektują ustawienie ograniczania ruchu.

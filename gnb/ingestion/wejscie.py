@@ -191,6 +191,11 @@ class PozycjaWejsciowa:
     drogę rozdzieloną znakiem „»”. Wartość w `wejscie.wartosc` jest wtedy ścieżką
     rozpakowanego pliku w katalogu projektu, pod nazwą własną, więc nazwa
     z archiwum służy wyłącznie do opisu pochodzenia.
+
+    Pole `ostrzezenia_wejscia` niesie ostrzeżenia ustalone już przy przyjęciu
+    wejścia, na przykład o pominięciu adresów z treści pliku po przekroczeniu
+    limitu. Potok dopisuje je do ostrzeżeń źródła, więc docierają do logów,
+    manifestu i raportu tą samą drogą co ostrzeżenia ekstraktora.
     """
 
     wejscie: WejscieSurowe
@@ -201,6 +206,7 @@ class PozycjaWejsciowa:
     wymus_nuty: bool = False
     archiwum: str | None = None
     sciezka_w_archiwum: str | None = None
+    ostrzezenia_wejscia: tuple[str, ...] = ()
 
 
 def przyjmij_tekst(

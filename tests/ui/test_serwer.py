@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import http.client
+import json
 import threading
 import time
 from collections.abc import Iterator
@@ -373,3 +374,56 @@ def test_strona_projektu_po_ustawieniu_aktywnym_nie_pokazuje_juz_przycisku(
     assert strona.status == 200
     assert "Ten projekt jest teraz aktywnym projektem globalnego skrótu." in tekst
     assert "Ustaw jako aktywny projekt skrótu" not in tekst
+
+
+def test_plik_z_adresami_ponad_limit_jest_zrodlem_a_adresy_nie_sa_dodawane(
+    tmp_path: Path,
+) -> None:
+    """Przekroczenie limitu adresów z treści pliku nie obcina listy po cichu.
+
+    Plik jest przetwarzany normalnie jako źródło tekstowe, żaden adres z niego nie
+    staje się źródłem, a komunikat dociera do manifestu, raportu i logów.
+    """
+    konfiguracja = Konfiguracja(
+        katalog_wynikow=tmp_path / "wyniki", port_nasluchu=0, limit_adresow_z_pliku=3
+    )
+    rejestr = RejestrZadan()
+    instancja = zbuduj_serwer(konfiguracja, rejestr)
+    host, port = instancja.server_address[0], instancja.server_address[1]
+    watek = threading.Thread(target=instancja.serve_forever, daemon=True)
+    watek.start()
+    try:
+        klient = _Klient(str(host), int(port))
+        klient.get("/")
+        granica = "----TestGranica"
+        tresc_pliku = "Notatka z odnośnikami: " + " ".join(
+            f"https://przyklad.invalid/strona{numer}" for numer in range(4)
+        )
+        naglowek = _wielloczesciowe(
+            granica,
+            {"token_csrf": _token(klient), "nazwa_projektu": "Projekt Limitu", "grupa": "Wiedza"},
+        ).removesuffix(f"--{granica}--\r\n".encode())
+        czesc_pliku = (
+            f'--{granica}\r\nContent-Disposition: form-data; name="pliki"; '
+            'filename="notatka.txt"\r\nContent-Type: text/plain\r\n\r\n'
+            f"{tresc_pliku}\r\n--{granica}--\r\n"
+        ).encode()
+        cialo = naglowek + czesc_pliku
+        odpowiedz = klient.post("/projekt/nowy", cialo, f"multipart/form-data; boundary={granica}")
+        assert odpowiedz.status == 303
+        _czekaj_na_zakonczenie(rejestr)
+    finally:
+        instancja.shutdown()
+        instancja.server_close()
+        watek.join(timeout=5)
+
+    katalog = konfiguracja.katalog_wynikow / "Projekt Limitu"
+    manifest = json.loads((katalog / "manifest.json").read_text(encoding="utf-8"))
+    assert len(manifest["zrodla"]) == 1
+    (zrodlo,) = manifest["zrodla"]
+    assert zrodlo["status"] == "spakowane"
+    assert any("znaleziono 4 adresów" in tekst for tekst in zrodlo["ostrzezenia"])
+    assert any("limit wynosi 3" in tekst for tekst in zrodlo["ostrzezenia"])
+    assert "limit_adresow_z_pliku" in (katalog / "raport.txt").read_text(encoding="utf-8")
+    szczegolowy = (katalog / "logi" / "log_szczegolowy.txt").read_text(encoding="utf-8")
+    assert "znaleziono 4 adresów" in szczegolowy

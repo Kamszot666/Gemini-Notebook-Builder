@@ -1,4 +1,4 @@
-# Obsługiwane formaty — stan po etapie czternastym
+# Obsługiwane formaty — stan po etapie czternastym i limicie adresów z pliku
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
 Etap czternasty dodał formaty biurowe ODT, ODS, ODP, PPTX, XLSX, XLS, RTF, DOC
@@ -52,7 +52,11 @@ Plik TXT wysłany w interfejsie WWW, który składa się wyłącznie z adresów,
 traktowany jak lista źródeł: aplikacja pobiera każdą wskazaną stronę, a sam
 plik z listą nie trafia do notatnika jako treść. Plik TXT lub MD ze zwykłym tekstem
 pozostaje źródłem tekstowym, a adresy http i https znalezione w jego treści są
-dodatkowo pobierane jako osobne źródła. Takie adresy nie zostały podane wprost,
+dodatkowo pobierane jako osobne źródła, jeśli jest ich nie więcej niż wynosi
+ustawienie `limit_adresow_z_pliku` (domyślnie 200, liczone bez powtórzeń). Przy
+większej liczbie żaden adres z tego pliku nie jest dodawany, plik zostaje
+źródłem tekstowym, a ostrzeżenie z liczbą adresów i limitem trafia do logów,
+manifestu i raportu. Takie adresy nie zostały podane wprost,
 więc podlegają kontroli robots.txt, także gdy wyjątek dla źródeł jawnych jest
 włączony. Adres zaczynający się od „www.”, bez schematu, dostaje https
 automatycznie; inny adres bez schematu jest odrzucany.

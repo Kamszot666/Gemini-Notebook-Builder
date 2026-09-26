@@ -314,3 +314,15 @@ def test_nuty_zapis_dzwiekow_domyslnie_wlaczony_i_da_sie_wylaczyc(tmp_path: Path
         tmp_path / "nie_ma.toml", srodowisko={"GNB_NUTY_ZAPIS_DZWIEKOW_WLACZONY": "nie"}
     )
     assert wylaczona.nuty_zapis_dzwiekow_wlaczony is False
+
+
+def test_limit_adresow_z_pliku_ma_domyslnie_dwiescie_i_zmienna_srodowiskowa_go_nadpisuje(
+    tmp_path: Path,
+) -> None:
+    plik = tmp_path / "konfiguracja.toml"
+    plik.write_text("limit_adresow_z_pliku = 50\n", encoding="utf-8")
+
+    assert wczytaj_konfiguracje(tmp_path / "brak.toml").limit_adresow_z_pliku == 200
+    assert wczytaj_konfiguracje(plik).limit_adresow_z_pliku == 50
+    nadpisany = wczytaj_konfiguracje(plik, srodowisko={"GNB_LIMIT_ADRESOW_Z_PLIKU": "7"})
+    assert nadpisany.limit_adresow_z_pliku == 7

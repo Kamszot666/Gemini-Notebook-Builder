@@ -136,7 +136,8 @@ def rozpoznaj_liste_adresow_w_pliku(
     każdy jego wpis jest poprawnym adresem albo powtórzeniem wcześniejszego,
     a poprawny adres jest choć jeden. Zwykły tekst z pojedynczym adresem w środku
     zdania zostaje tekstem: adresy znalezione w treści innego źródła nie
-    korzystają z wyjątku od ``robots.txt`` i nie są pobierane samoczynnie.
+    korzystają z wyjątku od ``robots.txt``. Interfejs WWW pobiera je osobno,
+    funkcją ``adresy_z_pliku_z_limitem``, z limitem liczby adresów.
     Plik nieczytelny albo niebędący listą daje ``None``, a nie błąd, bo wtedy
     trafia do zwykłej ścieżki plików.
     """
@@ -179,6 +180,48 @@ def adresy_znalezione_w_pliku(
         if czy_wyglada_na_adres(adres):
             kandydaci.append(adres)
     return zbierz_adresy("\n".join(kandydaci), dodatkowe_parametry_sledzace).adresy
+
+
+KOMUNIKAT_LIMIT_ADRESOW_Z_PLIKU = (
+    "W treści pliku znaleziono {znaleziono} adresów, a limit wynosi {limit}, więc żaden "
+    "z nich nie został dodany jako źródło. Sam plik został przetworzony normalnie. "
+    "Żeby pobrać te adresy, zwiększ ustawienie „limit_adresow_z_pliku” "
+    "(zmienna GNB_LIMIT_ADRESOW_Z_PLIKU) albo wgraj je jako plik złożony wyłącznie "
+    "z adresów."
+)
+
+
+@dataclass(frozen=True, slots=True)
+class AdresyZPliku:
+    """Adresy wyłuskane z treści pliku wraz z informacją o przekroczeniu limitu.
+
+    Po przekroczeniu limitu pole `adresy` jest puste: lista nigdy nie jest
+    obcinana po cichu do pierwszych adresów. Pole `liczba_znalezionych` liczy
+    adresy po usunięciu powtórzeń.
+    """
+
+    adresy: tuple[AdresWejsciowy, ...]
+    liczba_znalezionych: int
+    limit: int
+
+    @property
+    def przekroczono_limit(self) -> bool:
+        return self.liczba_znalezionych > self.limit
+
+
+def adresy_z_pliku_z_limitem(
+    sciezka: Path, limit: int, dodatkowe_parametry_sledzace: Iterable[str] = ()
+) -> AdresyZPliku:
+    """Wyłuskuje adresy z treści zwykłego pliku, stosując limit liczby adresów.
+
+    Liczone są adresy niepowtarzalne po postaci kanonicznej. Gdy jest ich więcej
+    niż limit, żaden nie jest zwracany, a wywołujący ma zgłosić to użytkownikowi.
+    Nie dotyczy pliku będącego w całości listą adresów podaną przez użytkownika.
+    """
+    adresy = adresy_znalezione_w_pliku(sciezka, dodatkowe_parametry_sledzace)
+    if len(adresy) > limit:
+        return AdresyZPliku(adresy=(), liczba_znalezionych=len(adresy), limit=limit)
+    return AdresyZPliku(adresy=adresy, liczba_znalezionych=len(adresy), limit=limit)
 
 
 def opis_podsumowania(podsumowanie: PodsumowanieListyUrl) -> str:

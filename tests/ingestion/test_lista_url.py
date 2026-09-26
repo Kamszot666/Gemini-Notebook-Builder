@@ -8,6 +8,7 @@ import pytest
 
 from gnb.core.wyjatki import BladTrwaly
 from gnb.ingestion.lista_url import (
+    adresy_z_pliku_z_limitem,
     adresy_znalezione_w_pliku,
     opis_podsumowania,
     rozpoznaj_liste_adresow_w_pliku,
@@ -160,3 +161,34 @@ def test_adresy_znalezione_w_pliku_o_innym_rozszerzeniu_sa_ignorowane(tmp_path: 
     plik.write_text("https://przyklad.pl/a", encoding="utf-8")
 
     assert adresy_znalezione_w_pliku(plik) == ()
+
+
+def _plik_z_adresami(tmp_path: Path, liczba: int, powtorzenia: int = 0) -> Path:
+    plik = tmp_path / "notatka.txt"
+    adresy = [f"https://przyklad.pl/strona{numer}" for numer in range(liczba)]
+    adresy += adresy[:1] * powtorzenia
+    plik.write_text("Zobacz: " + " oraz ".join(adresy) + ".\n", encoding="utf-8")
+    return plik
+
+
+def test_dokladnie_limit_adresow_z_pliku_przechodzi(tmp_path: Path) -> None:
+    wynik = adresy_z_pliku_z_limitem(_plik_z_adresami(tmp_path, 200), 200)
+
+    assert wynik.przekroczono_limit is False
+    assert len(wynik.adresy) == 200
+
+
+def test_ponad_limit_adresow_z_pliku_nie_zwraca_zadnego_adresu(tmp_path: Path) -> None:
+    wynik = adresy_z_pliku_z_limitem(_plik_z_adresami(tmp_path, 201), 200)
+
+    assert wynik.przekroczono_limit is True
+    assert wynik.adresy == ()
+    assert wynik.liczba_znalezionych == 201
+    assert wynik.limit == 200
+
+
+def test_powtorzony_adres_liczy_sie_do_limitu_raz(tmp_path: Path) -> None:
+    wynik = adresy_z_pliku_z_limitem(_plik_z_adresami(tmp_path, 200, powtorzenia=50), 200)
+
+    assert wynik.przekroczono_limit is False
+    assert wynik.liczba_znalezionych == 200

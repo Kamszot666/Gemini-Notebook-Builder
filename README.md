@@ -84,7 +84,7 @@ Czego notebook nie ma na swojej liście, a program obsłuży:
 6. Napisy SRT i VTT.
 7. Pliki tekstowe z danymi: JSON, XML, YAML, YML, TOML, INI, CFG, LOG.
 8. Archiwa ZIP, z zabezpieczeniami przed złośliwymi paczkami: limity liczby plików, rozmiaru, stopnia kompresji i zagłębienia oraz ochrona ścieżek.
-9. Listy adresów. W przeglądarce plik TXT złożony z samych adresów jest listą źródeł i program pobiera każdą stronę, a adresy znalezione w treści zwykłych plików TXT i MD też są pobierane, ale z kontrolą robots.txt. W terminalu listę adresów podajesz opcją `--lista-url`. Adres zaczynający się od www. działa bez https wszędzie.
+9. Listy adresów. W przeglądarce plik TXT złożony z samych adresów jest listą źródeł i program pobiera każdą stronę, a adresy znalezione w treści zwykłych plików TXT i MD też są pobierane, ale z kontrolą robots.txt i tylko do limitu 200 adresów z jednego pliku; przy większej liczbie żaden adres nie jest dodawany, a raport to zgłasza. W terminalu listę adresów podajesz opcją `--lista-url`. Adres zaczynający się od www. działa bez https wszędzie.
 10. Nuty w postaci zapisu: MIDI, MusicXML i MXL, Guitar Pro 3, 4 i 5, a także skany nut i tabulatur w PDF lub obrazach, które rozpoznaje program Audiveris. Wynik to zawsze opis tekstem: metrum, tonacja, dźwięki, tabulatura. Nagrań muzyki jako dźwięku program nie obsługuje.
 
 Nawet tam, gdzie notebook coś przyjmuje, program dokłada wartość:

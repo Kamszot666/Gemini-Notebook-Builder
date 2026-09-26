@@ -276,3 +276,29 @@ def test_skan_pdf_bez_ocr_trafia_do_materialow_do_sprawdzenia(tmp_path: Path) ->
     raport = wynik.sciezka_raportu.read_text(encoding="utf-8")
     assert "Materiały do sprawdzenia" in raport
     assert "warstwy tekstowej" in raport
+
+
+def test_obraz_bez_danych_jezyka_ocr_jest_pominiety_z_komunikatem_a_nie_bledem(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Brak pol.traineddata daje status „pominiete”, jak brak innego składnika opcjonalnego."""
+    from gnb.extractors import plik_obraz
+    from gnb.images import tesseract
+
+    monkeypatch.setattr(plik_obraz, "czy_dostepny", lambda _sciezka="": True)
+    monkeypatch.setattr(tesseract, "dostepne_jezyki", lambda _sciezka="": ("eng",))
+
+    wynik = przetworz_projekt(
+        [przyjmij_plik(KATALOG_DANYCH / "obraz_wykres.png", _MOMENT)],
+        Konfiguracja(katalog_wynikow=tmp_path),
+        nazwa_projektu="Obraz bez danych języka",
+        zegar=_zegar_krokowy(),
+    )
+
+    assert wynik.liczba_bledow == 0
+    assert wynik.liczba_pominietych == 1
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    zrodlo = manifest["zrodla"][0]
+    assert zrodlo["status"] == "pominiete"
+    assert "pol.traineddata" in json.dumps(zrodlo, ensure_ascii=False)
+    assert "pol.traineddata" in wynik.sciezka_raportu.read_text(encoding="utf-8")

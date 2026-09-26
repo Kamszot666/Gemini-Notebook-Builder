@@ -150,7 +150,7 @@ def czy_dostepny(sciezka_wskazana: str = "") -> bool:
     return True
 
 
-def dostepne_jezyki(sciezka_wskazana: str = "") -> tuple[str, ...]:
+def dostepne_jezyki(sciezka_wskazana: str = "", sciezka_tessdata: str = "") -> tuple[str, ...]:
     """Zwraca posortowaną listę zainstalowanych danych językowych Tesseracta.
 
     Pusta lista oznacza, że Tesseract nie zwrócił żadnego języka albo że nie dało
@@ -164,7 +164,8 @@ def dostepne_jezyki(sciezka_wskazana: str = "") -> tuple[str, ...]:
         return ()
     try:
         wynik = subprocess.run(
-            [str(program), "--list-langs"],
+            [str(program), "--list-langs"]
+            + (["--tessdata-dir", sciezka_tessdata] if sciezka_tessdata else []),
             capture_output=True,
             text=True,
             timeout=15,
@@ -177,7 +178,9 @@ def dostepne_jezyki(sciezka_wskazana: str = "") -> tuple[str, ...]:
     return tuple(sorted(jezyki))
 
 
-def brakujace_dane_jezykowe(jezyk: str, sciezka_wskazana: str = "") -> tuple[str, ...]:
+def brakujace_dane_jezykowe(
+    jezyk: str, sciezka_wskazana: str = "", sciezka_tessdata: str = ""
+) -> tuple[str, ...]:
     """Zwraca człony zapisu języka, dla których brakuje danych ``*.traineddata``.
 
     Zapis języka Tesseracta łączy kilka języków znakiem plus, na przykład
@@ -189,9 +192,37 @@ def brakujace_dane_jezykowe(jezyk: str, sciezka_wskazana: str = "") -> tuple[str
     Rozróżnienie braku programu od braku pliku danych językowych należy do
     wołającego: strażnik pomijania testów OCR sprawdza najpierw ``czy_dostepny``.
     """
-    zainstalowane = set(dostepne_jezyki(sciezka_wskazana))
+    zainstalowane = set(
+        dostepne_jezyki(sciezka_wskazana, sciezka_tessdata)
+        if sciezka_tessdata
+        else dostepne_jezyki(sciezka_wskazana)
+    )
     wymagane = [czlon.strip() for czlon in jezyk.split("+") if czlon.strip()]
     return tuple(czlon for czlon in wymagane if czlon not in zainstalowane)
+
+
+def wymagaj_danych_jezykowych(
+    ustawienia: UstawieniaOcr, identyfikator_zrodla: str | None = None
+) -> None:
+    """Zgłasza `BrakNarzedzia`, gdy Tesseract nie ma danych wymaganego języka.
+
+    Brak pliku ``*.traineddata`` jest brakiem opcjonalnego składnika, tak jak brak
+    samego programu: źródło jest pomijane z komunikatem, którego języka brakuje,
+    zamiast kończyć się błędem. Wywołujący sprawdza wcześniej, że sam program
+    Tesseract jest dostępny.
+    """
+    brakujace = brakujace_dane_jezykowe(
+        ustawienia.jezyk, ustawienia.sciezka_tesseract, ustawienia.sciezka_tessdata
+    )
+    if not brakujace:
+        return
+    pliki = ", ".join(f"{jezyk}.traineddata" for jezyk in brakujace)
+    raise BrakNarzedzia(
+        f"Tesseract nie ma danych językowych dla języka: {', '.join(brakujace)}. "
+        f"Doinstaluj plik {pliki} do katalogu danych Tesseracta. Bez niego obraz "
+        "albo skan nie zostanie rozpoznany, więc źródło zostało pominięte.",
+        identyfikator_zrodla,
+    )
 
 
 def rozpoznaj_tekst(

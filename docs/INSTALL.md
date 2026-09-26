@@ -1,4 +1,4 @@
-# Instalacja — stan po etapie czternastym
+# Instalacja — stan po etapie czternastym i naprawie danych językowych OCR
 
 Ten dokument opisuje przygotowanie środowiska do pracy z aplikacją: Pythona,
 środowiska wirtualnego, zależności oraz narzędzi zewnętrznych. Narzędzia
@@ -150,8 +150,8 @@ $env:GNB_SCIEZKA_TESSERACT = "C:/Program Files/Tesseract-OCR/tesseract.exe"
 ```
 
 Dogranie polskich danych językowych opisuje osobno sekcja siódma. Jest ono
-konieczne: bez pliku `pol.traineddata` OCR polskiego tekstu daje wynik
-systematycznie błędny.
+konieczne: bez pliku `pol.traineddata` obrazy i skany PDF są pomijane
+z komunikatem, którego języka brakuje.
 
 ### Etap dziewiąty: FFmpeg — rozkodowanie nagrań mowy
 

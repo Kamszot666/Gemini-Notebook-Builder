@@ -308,7 +308,7 @@ KOMUNIKAT_BRAK_TEKSTU_POSREDNIEGO = (
 # naturalną cechą prozy, więc ich brak jest sygnałem utraty treści, a nie
 # właściwością formatu. CSV, SRT i VTT celowo nie są tutaj wymienione.
 _FORMATY_DOKUMENTOW_OCENIANE = frozenset(
-    {"pdf", "docx", "epub", "html", "htm", "xhtml", "odt", "rtf", "doc"}
+    {"pdf", "docx", "epub", "html", "htm", "xhtml", "odt", "rtf", "doc", "mhtml", "mht"}
 )
 
 

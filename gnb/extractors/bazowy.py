@@ -167,6 +167,7 @@ def domyslny_rejestr_binarny(
     from gnb.extractors.plik_epub import EkstraktorEpub
     from gnb.extractors.plik_guitarpro import EkstraktorGuitarPro
     from gnb.extractors.plik_libreoffice import EkstraktorDoc, EkstraktorPpt
+    from gnb.extractors.plik_mhtml import EkstraktorMhtml
     from gnb.extractors.plik_midi import EkstraktorMidi
     from gnb.extractors.plik_musicxml import EkstraktorMusicXml
     from gnb.extractors.plik_nuty_skanowane import EkstraktorNutSkanowanych
@@ -197,6 +198,7 @@ def domyslny_rejestr_binarny(
             EkstraktorXlsx(),
             EkstraktorXls(),
             EkstraktorRtf(),
+            EkstraktorMhtml(),
             EkstraktorDoc(sciezka_libreoffice),
             EkstraktorPpt(sciezka_libreoffice),
             EkstraktorObrazu(ustawienia, ocr_wlaczony=ocr_wlaczony),

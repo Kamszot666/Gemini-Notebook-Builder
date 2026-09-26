@@ -15,8 +15,8 @@ Obsługiwane są następujące rodzaje wejścia:
 3. Archiwum ZIP z plikami w dowolnym z obsługiwanych formatów — opisuje je sekcja
    „Archiwa ZIP”.
 4. Plik lokalny w jednym z formatów tekstowych i dokumentowych: TXT, MD, HTML,
-   CSV, TSV, SRT, VTT, PDF, DOCX, EPUB, ODT, ODS, ODP, PPTX, XLSX, XLS, RTF, DOC
-   albo PPT, a także plik tekstu prostego: JSON, XML, YAML, YML, TOML, INI, CFG
+   CSV, TSV, SRT, VTT, PDF, DOCX, EPUB, ODT, ODS, ODP, PPTX, XLSX, XLS, RTF, DOC,
+   PPT albo MHTML (także MHT), a także plik tekstu prostego: JSON, XML, YAML, YML, TOML, INI, CFG
    albo LOG. TXT, MD i pliki tekstu prostego są plikiem tekstowym, pozostałe
    plikiem dokumentem — rozróżnienie opisuje sekcja „Pliki dokumentowe”.
 5. Plik obrazu: JPG, PNG, WebP, TIFF, BMP oraz statyczna klatka GIF, a przy
@@ -643,6 +643,19 @@ niski i nie powstają bloki. Tabela jest spłaszczona do wierszy z komórkami
 rozdzielonymi kreską pionową: struktura tabeli jest uproszczona, a nie zgubiona,
 i plik z tabelą dostaje o tym ostrzeżenie. Obrazy i obiekty osadzone nie są
 odczytywane i są zgłaszane w ostrzeżeniach.
+
+### MHTML
+
+Plik MHTML (`.mhtml` i `.mht`) to strona zapisana z przeglądarki w jednym pliku,
+na przykład poleceniem „Zapisz jako” w Chrome. Aplikacja wyciąga z niego część
+HTML, zdejmuje kodowanie transferu, dekoduje polskie znaki (zadeklarowany zestaw
+znaków ma pierwszeństwo, a przy jego braku kodowanie jest wykrywane) i oddaje ją
+temu samemu ekstraktorowi, który czyta strony internetowe. Obrazy i arkusze
+stylów z pozostałych części są pomijane. Adres, z którego zapisano stronę, trafia
+do metadanych jako „adres_zapisanej_strony”. To wygodny sposób na strony
+za logowaniem albo budowane skryptami: zapisujesz stronę już wyświetloną
+w przeglądarce i podajesz plik jako źródło. Plik bez części HTML i bez części
+tekstowej kończy się czytelnym błędem.
 
 ### Pliki DOC i PPT przez LibreOffice
 

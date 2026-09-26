@@ -83,6 +83,8 @@ FORMATY_PLIKOW_DOKUMENTOW = frozenset(
         "rtf",
         "doc",
         "ppt",
+        "mhtml",
+        "mht",
     }
 )
 
@@ -129,6 +131,8 @@ FORMATY_PLIKOW_BINARNYCH = (
             "rtf",
             "doc",
             "ppt",
+            "mhtml",
+            "mht",
         }
     )
     | FORMATY_PLIKOW_OBRAZOW

@@ -4,13 +4,10 @@ from __future__ import annotations
 
 import re
 
-from gnb.ui.widoki import BladPola
 from gnb.ui.widoki_zrodel import (
     BrakujacyPlikDoWidoku,
     ZrodloDoWidoku,
-    czy_potwierdzenie_poprawne,
     sekcje_zrodel,
-    strona_potwierdzenia_usuniecia,
 )
 
 _TOKEN = "token-testowy"
@@ -34,9 +31,9 @@ def test_kazdy_formularz_ma_token_csrf_i_metode_post() -> None:
     html = sekcje_zrodel("Projekt", [_zrodlo()], [], _TOKEN)
 
     formularze = re.findall(r"<form[^>]*>", html)
-    assert len(formularze) == 2
+    assert len(formularze) == 3
     assert all('method="post"' in formularz for formularz in formularze)
-    assert html.count(f'value="{_TOKEN}"') == 2
+    assert html.count(f'value="{_TOKEN}"') == 3
 
 
 def test_pole_pliku_ma_etykiete_a_przyciski_opisuja_sie_naglowkiem_zrodla() -> None:
@@ -47,7 +44,7 @@ def test_pole_pliku_ma_etykiete_a_przyciski_opisuja_sie_naglowkiem_zrodla() -> N
     assert 'id="zrodlo-strona_www-abc123-opis"' in html
     assert html.count('aria-describedby="zrodlo-strona_www-abc123-opis"') == 4
     assert "<h3" in html
-    assert "Usuń źródło z projektu</a>" in html
+    assert "Usuń źródło z projektu</button>" in html
 
 
 def test_zrodlo_bez_uwag_nie_ma_przycisku_weryfikacji() -> None:
@@ -116,39 +113,18 @@ def test_bez_zrodel_i_bez_brakujacych_plikow_sekcje_sa_puste() -> None:
     assert sekcje_zrodel("Projekt", [], [], _TOKEN) == ""
 
 
-def test_potwierdzenie_usuniecia_ma_etykiete_pole_i_odnosnik_anulowania() -> None:
-    html = strona_potwierdzenia_usuniecia(
-        nazwa_projektu="Projekt", zrodlo=_zrodlo(grupa="Grupa"), token_csrf=_TOKEN
-    )
+def test_usuniecie_to_przycisk_formularza_bez_pola_potwierdzenia() -> None:
+    html = sekcje_zrodel("Projekt", [_zrodlo()], [], _TOKEN)
 
-    assert "<h1>Usunąć źródło z projektu?</h1>" in html
-    assert 'for="potwierdzenie"' in html and 'id="potwierdzenie"' in html
-    assert "wpisz słowo USUŃ" in html
-    assert 'method="post"' in html
-    assert f'value="{_TOKEN}"' in html
-    assert "Anuluj i wróć do projektu" in html
-    assert "Pozostałe źródła tej grupy zostaną spakowane od nowa" in html
-    assert "aria-invalid" not in html
+    assert 'action="/projekt/Projekt/zrodlo/' in html and '/usun"' in html
+    assert "Usuń źródło z projektu</button>" in html
+    assert 'name="potwierdzenie"' not in html
+    assert "wpisz słowo" not in html
 
 
-def test_potwierdzenie_z_bledem_wiaze_pole_z_komunikatem() -> None:
-    html = strona_potwierdzenia_usuniecia(
-        nazwa_projektu="Projekt",
-        zrodlo=_zrodlo(),
-        token_csrf=_TOKEN,
-        bledy=[BladPola("potwierdzenie", "Źródło nie zostało usunięte.")],
-    )
+def test_adres_w_pochodzeniu_zrodla_jest_klikalny_bez_znaku_konca_zdania() -> None:
+    zrodlo = _zrodlo(pochodzenie="Zobacz https://przyklad.pl/a.")
 
-    assert 'aria-invalid="true"' in html
-    assert 'aria-describedby="potwierdzenie-blad"' in html
-    assert 'id="potwierdzenie-blad"' in html
-    assert 'id="bledy-formularza"' in html
+    html = sekcje_zrodel("Projekt", [zrodlo], [], _TOKEN)
 
-
-def test_czy_potwierdzenie_poprawne_toleruje_wielkosc_liter_i_brak_polskich_znakow() -> None:
-    assert czy_potwierdzenie_poprawne("USUŃ")
-    assert czy_potwierdzenie_poprawne("  usuń ")
-    assert czy_potwierdzenie_poprawne("usun")
-    assert not czy_potwierdzenie_poprawne("")
-    assert not czy_potwierdzenie_poprawne("tak")
-    assert not czy_potwierdzenie_poprawne("usuń to")
+    assert '<a href="https://przyklad.pl/a" target="_blank"' in html

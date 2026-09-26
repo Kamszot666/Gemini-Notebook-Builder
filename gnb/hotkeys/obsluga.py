@@ -28,6 +28,7 @@ if sys.platform == "win32":
     from gnb.hotkeys.kolejka import KolejkaSkrotu
     from gnb.hotkeys.model import InformacjeOOknie, TypDodania
     from gnb.hotkeys.rozpoznanie import PorazkaRozpoznania, rozpoznaj
+    from gnb.hotkeys.stale import NAZWA_DOMYSLNEGO_PROJEKTU_SKROTU
     from gnb.ingestion.wejscie import przyjmij_plik, przyjmij_url
     from gnb.logging_pl.dziennik import (
         NAZWA_LOGU_SZCZEGOLOWEGO,
@@ -154,10 +155,11 @@ if sys.platform == "win32":
         def _obsluz_nacisniecie(self) -> None:
             nazwa_projektu = self._aktywny_projekt.aktualny()
             if nazwa_projektu is None:
-                self._zglos_porazke(
-                    "Brak aktywnego projektu skrótu. Wybierz projekt na jego stronie."
-                )
-                return
+                # Jawny wybór projektu nadal ma pierwszeństwo. Bez niego źródła
+                # trafiają do jednego, wyraźnie nazwanego projektu, żeby skrót
+                # działał także zaraz po starcie serwera.
+                nazwa_projektu = NAZWA_DOMYSLNEGO_PROJEKTU_SKROTU
+                self._aktywny_projekt.ustaw(nazwa_projektu)
 
             okno = _win32.informacje_o_aktywnym_oknie()
             if okno is None:

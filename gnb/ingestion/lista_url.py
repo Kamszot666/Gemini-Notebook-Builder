@@ -126,6 +126,30 @@ def wczytaj_liste_z_pliku(
     return zbierz_adresy(tekst, dodatkowe_parametry_sledzace)
 
 
+def rozpoznaj_liste_adresow_w_pliku(
+    sciezka: Path, dodatkowe_parametry_sledzace: Iterable[str] = ()
+) -> PodsumowanieListyUrl | None:
+    """Zwraca podsumowanie, gdy plik TXT jest wyłącznie listą adresów, a inaczej nic.
+
+    Plik uznajemy za listę źródeł podaną przez użytkownika tylko wtedy, gdy
+    każdy jego wpis jest poprawnym adresem albo powtórzeniem wcześniejszego,
+    a poprawny adres jest choć jeden. Zwykły tekst z pojedynczym adresem w środku
+    zdania zostaje tekstem: adresy znalezione w treści innego źródła nie
+    korzystają z wyjątku od ``robots.txt`` i nie są pobierane samoczynnie.
+    Plik nieczytelny albo niebędący listą daje ``None``, a nie błąd, bo wtedy
+    trafia do zwykłej ścieżki plików.
+    """
+    if sciezka.suffix.lower() != ".txt":
+        return None
+    try:
+        podsumowanie = wczytaj_liste_z_pliku(sciezka, dodatkowe_parametry_sledzace)
+    except BladTrwaly:
+        return None
+    if podsumowanie.liczba_poprawnych == 0 or podsumowanie.liczba_odrzuconych > 0:
+        return None
+    return podsumowanie
+
+
 def opis_podsumowania(podsumowanie: PodsumowanieListyUrl) -> str:
     """Buduje opis podsumowania czytelny liniowo, bez tabel i znaków sterujących.
 

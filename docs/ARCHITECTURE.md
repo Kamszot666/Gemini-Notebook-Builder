@@ -428,7 +428,7 @@ istniejący potok z żądaniem HTTP przez semantyczny, dostępny HTML.
   POST wymaga zgodnego tokenu CSRF, a po udanym POST serwer przekierowuje kodem
   303. Nieobsłużony wyjątek staje się stroną 500.
 - `gnb/ui/widoki_zrodel.py` — wykaz źródeł projektu z działaniami, sekcja
-  brakujących plików wynikowych i strona potwierdzenia usunięcia. Zależy od
+  brakujących plików wynikowych. Zależy od
   `widoki.py`, a nie odwrotnie: gotowy fragment jest przekazywany do strony
   projektu jako napis. Sekcja brakujących plików tylko pokazuje rozbieżność.
 - `gnb/ui/server.py` — punkt wejścia `python -m gnb.ui.server`. Nazwa pliku jest

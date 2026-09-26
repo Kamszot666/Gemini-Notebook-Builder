@@ -16,13 +16,12 @@ napisu do HTML.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from urllib.parse import quote
 
 from gnb.persistence.pola_notatnika import PolaNotatnika
 from gnb.ui.csrf import NAZWA_POLA_FORMULARZA
-from gnb.ui.html import escapuj
+from gnb.ui.html import escapuj, tekst_z_odnosnikami
 from gnb.ui.projekty import ProjektNaLiscie
 from gnb.ui.stan_skrotu import KomunikatSkrotu
 from gnb.ui.zadania import InformacjaOZadaniu, StanZadania
@@ -154,34 +153,6 @@ def _pole_csrf(token_csrf: str) -> str:
     )
 
 
-_WZORZEC_ADRESU_HTTP = re.compile(r"https?://\S+")
-
-
-def _tekst_z_odnosnikami(tekst: str) -> str:
-    """Zamienia adresy http i https w tekście na odnośniki otwierane w nowej karcie.
-
-    Adres innego schematu, na przykład ``javascript:``, nigdy nie staje się
-    odnośnikiem — wzorzec dopasowuje wyłącznie ``http://`` i ``https://``.
-    Bezpieczeństwo nie zależy jednak od tego, co adres zawiera: cały dopasowany
-    fragment przechodzi przez ``escapuj`` zarówno w atrybucie ``href``, jak
-    i w widocznym tekście, więc nawet adres ze sztucznie doklejonym cudzysłowem
-    albo nawiasem ostrym nie wyrywa się z atrybutu ani nie wstawia własnego
-    znacznika — zostaje po prostu dziwnie wyglądającym, nieszkodliwym tekstem.
-    """
-    fragmenty: list[str] = []
-    pozycja = 0
-    for dopasowanie in _WZORZEC_ADRESU_HTTP.finditer(tekst):
-        fragmenty.append(escapuj(tekst[pozycja : dopasowanie.start()]))
-        adres = escapuj(dopasowanie.group(0))
-        fragmenty.append(
-            f'<a href="{adres}" target="_blank" rel="noopener noreferrer">'
-            f"{adres} (otwiera się w nowej karcie)</a>"
-        )
-        pozycja = dopasowanie.end()
-    fragmenty.append(escapuj(tekst[pozycja:]))
-    return "".join(fragmenty)
-
-
 def sciezka_projektu(nazwa: str) -> str:
     """Buduje ścieżkę adresu strony projektu, z nazwą zakodowaną do postaci bezpiecznej w URL."""
     return "/projekt/" + quote(nazwa, safe="")
@@ -257,7 +228,8 @@ def _akapit_ostatniego_komunikatu(komunikat: KomunikatSkrotu | None) -> str:
     if komunikat is None:
         return ""
     wynik = "powodzenie" if komunikat.sukces else "porażka"
-    return f'<p class="pomoc">Ostatnie zdarzenie skrótu ({wynik}): {escapuj(komunikat.tekst)}</p>'
+    tekst = tekst_z_odnosnikami(komunikat.tekst)
+    return f'<p class="pomoc">Ostatnie zdarzenie skrótu ({wynik}): {tekst}</p>'
 
 
 def _sekcja_niedokonczone(projekty: list[ProjektNaLiscie], token_csrf: str) -> str:
@@ -271,7 +243,7 @@ def _sekcja_niedokonczone(projekty: list[ProjektNaLiscie], token_csrf: str) -> s
     for projekt in projekty:
         sciezka = sciezka_projektu(projekt.nazwa)
         opis_bledu = (
-            f'<p class="pomoc">Uwaga: {escapuj(projekt.komunikat_bledu)}</p>'
+            f'<p class="pomoc">Uwaga: {tekst_z_odnosnikami(projekt.komunikat_bledu)}</p>'
             if projekt.komunikat_bledu
             else ""
         )
@@ -392,7 +364,7 @@ def _sekcja_raportu(raport: str) -> str:
     """Blok raportu końcowego z adresami http i https jako klikalnymi odnośnikami."""
     return (
         '<div class="blok">\n<h2>Raport końcowy</h2>\n'
-        f"<pre>{_tekst_z_odnosnikami(raport)}</pre>\n</div>"
+        f"<pre>{tekst_z_odnosnikami(raport)}</pre>\n</div>"
     )
 
 
@@ -451,9 +423,9 @@ def _sekcja_postepu(sciezka: str, informacja: InformacjaOZadaniu | None) -> str:
         StanZadania.ZAKONCZONE: "zakończone",
         StanZadania.BLAD: "zakończone błędem",
     }[informacja.stan]
-    tresc = escapuj(informacja.komunikat_postepu or "Przygotowanie do pracy.")
+    tresc = tekst_z_odnosnikami(informacja.komunikat_postepu or "Przygotowanie do pracy.")
     blad = (
-        f'<p class="pomoc">Powód błędu: {escapuj(informacja.komunikat_bledu)}</p>'
+        f'<p class="pomoc">Powód błędu: {tekst_z_odnosnikami(informacja.komunikat_bledu)}</p>'
         if informacja.komunikat_bledu
         else ""
     )
@@ -581,7 +553,7 @@ def strona_bledu(*, kod: int, tytul: str, komunikat: str) -> str:
         f"Błąd {kod}",
         f"""<h1>{escapuj(tytul)}</h1>
 <div class="blok">
-<p>{escapuj(komunikat)}</p>
+<p>{tekst_z_odnosnikami(komunikat)}</p>
 </div>
 <p><a href="/">Wróć do strony głównej</a></p>""",
     )

@@ -48,6 +48,13 @@ Adres można podać na trzy sposoby: pojedynczo, kilka adresów rozdzielonych
 spacjami oraz kilka adresów w osobnych wierszach. To samo dotyczy importowanego
 pliku TXT z listą adresów. Wiersz zaczynający się od krzyżyka jest komentarzem.
 
+Plik TXT wysłany w interfejsie WWW, który składa się wyłącznie z adresów, jest
+traktowany jak lista źródeł: aplikacja pobiera każdą wskazaną stronę, a sam
+plik z listą nie trafia do notatnika jako treść. Plik ze zwykłym tekstem, w
+którym adres stoi w środku zdania, pozostaje tekstem i jego adresów nie
+pobiera. Adres zaczynający się od „www.”, bez schematu, dostaje https
+automatycznie; inny adres bez schematu jest odrzucany.
+
 Zanim cokolwiek zostanie pobrane, aplikacja pokazuje podsumowanie: ile adresów
 wykryto, ile jest poprawnych, ile pominięto jako duplikat i ile wpisów odrzucono
 wraz z powodem. To jest najtańszy moment na wychwycenie pomyłki.

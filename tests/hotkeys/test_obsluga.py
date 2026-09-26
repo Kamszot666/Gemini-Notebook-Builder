@@ -102,19 +102,19 @@ def _obsluga(
     return instancja, dzwieki, ostatni_komunikat, fikcyjny_rejestr, aktywny_projekt
 
 
-def test_brak_aktywnego_projektu_gra_porazke_i_nie_dotyka_rozpoznania(
+def test_brak_aktywnego_projektu_uzywa_projektu_domyslnego(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    instancja, dzwieki, ostatni_komunikat, _rejestr, _aktywny = _obsluga(monkeypatch, okno=_okno())
-    # Aktywny projekt nie jest ustawiony.
+    okno = _okno(nazwa_procesu="chrome", tytul="Przykładowa strona")
+    instancja, dzwieki, _komunikat, _rejestr, aktywny = _obsluga(
+        monkeypatch, okno=okno, adres_paska="przyklad.pl/artykul"
+    )
+    assert aktywny.aktualny() is None
 
     instancja._obsluz_nacisniecie()
 
-    assert dzwieki == ["porazka"]
-    komunikat = ostatni_komunikat.aktualny()
-    assert komunikat is not None
-    assert komunikat.sukces is False
-    assert "Brak aktywnego projektu skrótu" in komunikat.tekst
+    assert dzwieki == ["sukces"]
+    assert aktywny.aktualny() == "Adresy ze skrótu"
 
 
 def test_adres_z_przegladarki_trafia_do_kolejki_i_gra_sukces(

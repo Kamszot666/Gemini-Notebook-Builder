@@ -88,11 +88,15 @@ def waliduj_adres(adres: str) -> str:
     Adres bez schematu, ze schematem innym niż HTTP lub HTTPS albo bez nazwy
     hosta kończy się błędem trwałym z komunikatem po polsku. Nie zgadujemy
     brakującego schematu, ponieważ dopisanie ``https`` do przypadkowego tekstu
-    zamieniłoby literówkę w pozornie poprawne źródło.
+    zamieniłoby literówkę w pozornie poprawne źródło. Jedynym wyjątkiem jest
+    adres zaczynający się od ``www.``, który przeglądarki pokazują bez schematu:
+    ten przedrostek jest na tyle jednoznaczny, że dostaje ``https://``.
     """
     oczyszczony = adres.strip()
     if not oczyszczony:
         raise BladTrwaly("Adres jest pusty.")
+    if "://" not in oczyszczony and oczyszczony.lower().startswith("www."):
+        oczyszczony = f"https://{oczyszczony}"
 
     czesci = urlsplit(oczyszczony)
     if czesci.scheme.lower() not in SCHEMATY_DOZWOLONE:

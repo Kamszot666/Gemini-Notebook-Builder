@@ -28,6 +28,7 @@ from gnb.core.konfiguracja import Konfiguracja
 from gnb.core.nazwy import sanityzuj_nazwe_projektu
 from gnb.core.postep import WywolanieZwrotnePostepu
 from gnb.core.wyjatki import BladGnb
+from gnb.ingestion.lista_url import rozpoznaj_liste_adresow_w_pliku
 from gnb.ingestion.wejscie import (
     PozycjaWejsciowa,
     przyjmij_plik,
@@ -60,9 +61,7 @@ from gnb.ui.widoki import BladPola, DaneFormularzaProjektu, PodsumowanieWyniku, 
 from gnb.ui.widoki_zrodel import (
     BrakujacyPlikDoWidoku,
     ZrodloDoWidoku,
-    czy_potwierdzenie_poprawne,
     sekcje_zrodel,
-    strona_potwierdzenia_usuniecia,
 )
 from gnb.ui.zadania import RejestrZadan, StanZadania, ZadanieJuzTrwa
 
@@ -225,12 +224,6 @@ class _Handler(BaseHTTPRequestHandler):
             self._pokaz_strone_glowna()
         elif sciezka == widoki.SCIEZKA_POSTEPU:
             self._pokaz_postep()
-        elif (adres_zrodla := self._rozbij_adres_zrodla(sciezka)) is not None:
-            nazwa, identyfikator, akcja = adres_zrodla
-            if akcja == "usun":
-                self._pokaz_potwierdzenie_usuniecia(nazwa, identyfikator)
-            else:
-                self._blad(404, "Nie znaleziono", "Pod tym adresem nie ma żadnej strony.")
         elif sciezka.startswith("/projekt/") and sciezka.endswith("/prompt"):
             self._pokaz_prompt(self._nazwa_z_url(sciezka[len("/projekt/") : -len("/prompt")]))
         elif sciezka.startswith("/projekt/"):
@@ -463,7 +456,23 @@ class _Handler(BaseHTTPRequestHandler):
         utworz_katalogi(uklad, z_materialami_zrodlowymi=konfiguracja.zachowuj_oryginaly)
         for plik in pliki:
             sciezka = self._zapisz_plik_wejsciowy(uklad.pliki_wejsciowe, plik)
-            pozycje.append(przyjmij_plik(sciezka, moment, grupa=grupa))
+            lista = rozpoznaj_liste_adresow_w_pliku(
+                sciezka, konfiguracja.dodatkowe_parametry_sledzace
+            )
+            if lista is None:
+                pozycje.append(przyjmij_plik(sciezka, moment, grupa=grupa))
+                continue
+            # Plik złożony wyłącznie z adresów jest listą źródeł: pobieramy strony,
+            # a sama lista nie trafia do notatnika jako treść.
+            for wpis in lista.adresy:
+                pozycje.append(
+                    przyjmij_url(
+                        wpis.podany,
+                        moment,
+                        konfiguracja.dodatkowe_parametry_sledzace,
+                        grupa=grupa,
+                    )
+                )
 
         def praca(postep: WywolanieZwrotnePostepu) -> WynikPrzetwarzania:
             return przetworz_projekt(pozycje, konfiguracja, nazwa_projektu=nazwa, postep=postep)
@@ -683,26 +692,6 @@ class _Handler(BaseHTTPRequestHandler):
             return
         self._przekieruj(sciezka_projektu(uklad.nazwa_projektu))
 
-    def _pokaz_potwierdzenie_usuniecia(
-        self,
-        nazwa: str,
-        identyfikator: str,
-        *,
-        kod: int = 200,
-        bledy: list[BladPola] | None = None,
-    ) -> None:
-        uklad = self._uklad_istniejacego_projektu(nazwa)
-        if uklad is None:
-            return
-        zrodlo = self._zrodlo_do_widoku_lub_blad(uklad, identyfikator)
-        if zrodlo is None:
-            return
-        token = self._token_sesji()
-        html = strona_potwierdzenia_usuniecia(
-            nazwa_projektu=uklad.nazwa_projektu, zrodlo=zrodlo, token_csrf=token, bledy=bledy
-        )
-        self._wyslij_html(kod, html, token=token)
-
     def _usun_zrodlo(self, nazwa: str, identyfikator: str) -> None:
         wynik_formularza = self._parsuj_formularz()
         if wynik_formularza is None:
@@ -711,19 +700,6 @@ class _Handler(BaseHTTPRequestHandler):
             return
         uklad = self._uklad_istniejacego_projektu(nazwa)
         if uklad is None:
-            return
-        if not czy_potwierdzenie_poprawne(wynik_formularza.pole("potwierdzenie")):
-            self._pokaz_potwierdzenie_usuniecia(
-                nazwa,
-                identyfikator,
-                kod=400,
-                bledy=[
-                    BladPola(
-                        "potwierdzenie",
-                        "Źródło nie zostało usunięte. Wpisz słowo USUŃ w polu potwierdzenia.",
-                    )
-                ],
-            )
             return
         try:
             with self._serwer.rejestr.wylacznie():

@@ -543,10 +543,13 @@ na stronie głównej albo stronie projektu wyjaśnia dlaczego.
 
 Przyczyna i co zrobić, według treści komunikatu:
 
-1. „Brak aktywnego projektu skrótu” — żaden projekt nie został jeszcze
-   ustawiony jako aktywny w tej sesji serwera, albo serwer został od tego
-   czasu uruchomiony ponownie i wybór się wyczyścił. Otwórz stronę projektu
-   i aktywuj przycisk „Ustaw jako aktywny projekt skrótu”.
+1. Skrót milczy albo gra dźwięk porażki po ponownym uruchomieniu serwera.
+   Bez wybranego projektu skrót dodaje źródła do projektu „Adresy ze skrótu”,
+   więc jego brak nie jest już powodem porażki. Sprawdź, czy nie działa drugi,
+   stary serwer: trzyma zarejestrowany skrót i nowy serwer nie może go zająć
+   (w logu jest wtedy kod błędu 1409). Zamknij wszystkie procesy
+   `python -m gnb.ui.server` i uruchom jeden. Inny projekt wybierzesz
+   przyciskiem „Ustaw jako aktywny projekt skrótu”.
 2. „Nie udało się odczytać paska adresu” — okno przeglądarki jest aktywne, ale
    UI Automation nie znalazło w nim kontrolki paska adresu, na przykład bo
    pasek jest w trakcie przejścia w tryb pełnoekranowy. Wróć do zwykłego

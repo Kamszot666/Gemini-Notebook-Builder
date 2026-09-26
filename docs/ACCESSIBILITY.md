@@ -130,8 +130,8 @@ samo, bez pola nazwy — nazwa jest już znana z adresu strony. Pole grupy jest
 polem tekstowym z listą podpowiedzi zawierającą grupy, które projekt już zna,
 i jest domyślnie wypełnione ostatnią z nich, więc kolejne źródło trafia do
 istniejącego pliku grupy bez przepisywania nazwy. Adres bez schematu http lub
-https jest zgłaszany jako błąd walidacji przy polu adresów; program nie
-zgaduje brakującego schematu. Wysłanie tego formularza uruchamia
+https jest zgłaszany jako błąd walidacji przy polu adresów; jedynym wyjątkiem
+jest adres zaczynający się od „www.”, który dostaje https automatycznie. Wysłanie tego formularza uruchamia
 kolejny przebieg w tym samym projekcie, tą samą ścieżką co formularz strony
 głównej z nazwą już istniejącego projektu; błędy walidacji wracają na tę samą
 stronę projektu, powiązane z polem tak samo jak w formularzu strony głównej.
@@ -205,12 +205,8 @@ etykiecie „Oznacz jako zweryfikowane” czyta jako opis nazwę źródła.
    pusta albo nie da się jej odczytać, dotychczasowy stan źródła zostaje bez
    zmian, a powód jest w raporcie w sekcji „Zastąpienia treści, które się nie
    powiodły”.
-3. „Usuń źródło z projektu” — odnośnik, a nie przycisk, bo prowadzi na osobną
-   stronę. Strona pyta „Usunąć źródło z projektu?”, opisuje skutki i prosi
-   o wpisanie słowa USUŃ w polu z etykietą. Wielkość liter i brak polskiego
-   znaku nie mają znaczenia. Błędne potwierdzenie zwraca tę samą stronę z listą
-   błędów, z polem oznaczonym `aria-invalid` i powiązanym z komunikatem.
-   Usunięte źródło znika z projektu, z manifestu i z raportu, a jego pliki
+3. „Usuń źródło z projektu” — przycisk, który od razu usuwa źródło, bez strony
+   pytającej i bez wpisywania słowa potwierdzenia. Usunięte źródło znika z projektu, z manifestu i z raportu, a jego pliki
    wynikowe z dysku. Zachowane oryginały i wysłane pliki zostają na dysku.
 
 Każde z tych działań jest osobnym formularzem, wymaga metody POST i tokenu
@@ -261,8 +257,9 @@ aktywnego projektu skrótu:
 
 ### Aktywny projekt skrótu
 
-Skrót dodaje materiał do jednego, jawnie wybranego projektu, nigdy do „ostatnio
-otwartego”. Wybierasz go przyciskiem „Ustaw jako aktywny projekt skrótu” na
+Skrót dodaje materiał do jednego projektu, nigdy do „ostatnio otwartego”. Jeżeli
+nie wybrałeś żadnego, trafia on do projektu „Adresy ze skrótu”, który staje się
+wtedy aktywnym projektem skrótu. Wybierasz go przyciskiem „Ustaw jako aktywny projekt skrótu” na
 stronie danego projektu. Strona główna i strona każdego projektu pokazują
 tekst „Aktywny projekt skrótu: nazwa” albo „Brak aktywnego projektu skrótu” —
 region ten sam, co reszta stanu skrótu, więc czytnik ekranu odczyta go razem

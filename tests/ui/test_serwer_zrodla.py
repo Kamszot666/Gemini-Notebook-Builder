@@ -276,45 +276,31 @@ def test_dzialanie_na_zrodle_jest_odrzucane_w_trakcie_przetwarzania(
     assert _checkpoint(konfiguracja).zrodla[identyfikator].zweryfikowane_recznie is False
 
 
-def test_potwierdzenie_usuniecia_jest_strona_bez_zmiany_stanu(
+def test_usuniecie_nie_wymaga_wpisywania_potwierdzenia(
     srodowisko: tuple[_Klient, RejestrZadan, Konfiguracja],
 ) -> None:
     klient, rejestr, konfiguracja = srodowisko
     _utworz_projekt(klient, rejestr, _TEKST_A)
     identyfikator = _pierwsze_zrodlo(konfiguracja)
 
-    odpowiedz, strona = klient.get(_adres(identyfikator, "usun"))
+    odpowiedz, _ = klient.post(_adres(identyfikator, "usun"), {"token_csrf": klient.token()})
 
-    assert odpowiedz.status == 200
-    assert "<h1>Usunąć źródło z projektu?</h1>" in strona
-    assert 'for="potwierdzenie"' in strona and 'id="potwierdzenie"' in strona
-    assert "Anuluj i wróć do projektu" in strona
-    assert identyfikator in _checkpoint(konfiguracja).zrodla
-
-
-def test_usuniecie_wymaga_wpisanego_potwierdzenia(
-    srodowisko: tuple[_Klient, RejestrZadan, Konfiguracja],
-) -> None:
-    klient, rejestr, konfiguracja = srodowisko
-    _utworz_projekt(klient, rejestr, _TEKST_A)
-    identyfikator = _pierwsze_zrodlo(konfiguracja)
-
-    zle, strona = klient.post(
-        _adres(identyfikator, "usun"), {"token_csrf": klient.token(), "potwierdzenie": "nie"}
-    )
-
-    assert zle.status == 400
-    assert "Źródło nie zostało usunięte." in strona
-    assert 'aria-invalid="true"' in strona
-    assert identyfikator in _checkpoint(konfiguracja).zrodla
-
-    dobre, _ = klient.post(
-        _adres(identyfikator, "usun"), {"token_csrf": klient.token(), "potwierdzenie": " usuń "}
-    )
-
-    assert dobre.status == 303
+    assert odpowiedz.status == 303
     assert identyfikator not in _checkpoint(konfiguracja).zrodla
     assert not list(_uklad(konfiguracja).pliki_wynikowe.glob("*.txt"))
+
+
+def test_usuniecie_bez_tokenu_csrf_jest_odrzucone(
+    srodowisko: tuple[_Klient, RejestrZadan, Konfiguracja],
+) -> None:
+    klient, rejestr, konfiguracja = srodowisko
+    _utworz_projekt(klient, rejestr, _TEKST_A)
+    identyfikator = _pierwsze_zrodlo(konfiguracja)
+
+    odpowiedz, _ = klient.post(_adres(identyfikator, "usun"), {})
+
+    assert odpowiedz.status == 403
+    assert identyfikator in _checkpoint(konfiguracja).zrodla
 
 
 def test_usuniecie_zrodla_z_grupy_uruchamia_przepakowanie(
@@ -326,9 +312,7 @@ def test_usuniecie_zrodla_z_grupy_uruchamia_przepakowanie(
     (stary_plik,) = _uklad(konfiguracja).pliki_wynikowe.glob("*.txt")
     identyfikator = _pierwsze_zrodlo(konfiguracja)
 
-    odpowiedz, _ = klient.post(
-        _adres(identyfikator, "usun"), {"token_csrf": klient.token(), "potwierdzenie": "USUŃ"}
-    )
+    odpowiedz, _ = klient.post(_adres(identyfikator, "usun"), {"token_csrf": klient.token()})
     assert odpowiedz.status == 303
     _czekaj(rejestr)
 
@@ -402,12 +386,12 @@ def test_dosylanie_adresu_bez_schematu_daje_blad_walidacji_a_nie_500(
 
     odpowiedz, strona = klient.post(
         f"/projekt/{quote(_NAZWA, safe='')}/dosylanie",
-        {"token_csrf": klient.token(), "adresy": "www.wp.pl", "grupa": "G"},
+        {"token_csrf": klient.token(), "adresy": "wp.pl/artykul", "grupa": "G"},
     )
 
     assert odpowiedz.status == 400
     assert "nie zaczyna się od http albo https" in strona
-    assert "www.wp.pl" in strona
+    assert "wp.pl/artykul" in strona
 
 
 def test_dosylanie_pliku_z_dysku_dodaje_zrodlo(
@@ -468,7 +452,7 @@ def test_adres_bez_schematu_w_nowym_projekcie_nie_tworzy_katalogu(
         {
             "token_csrf": klient.token(),
             "nazwa_projektu": _NAZWA,
-            "adresy": "www.wp.pl",
+            "adresy": "wp.pl/artykul",
             "grupa": "G",
         },
     )

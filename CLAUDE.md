@@ -400,7 +400,7 @@ Pełny zapis każdej pozycji, z objawem, przyczyną i propozycją, jest w `docs/
 5. Grupa rozłożona na kilka plików nie jest zestawiona z pozostałym budżetem `limit_zrodel`; czeka na zgłoszenie z realnego przebiegu.
 6. Rozszerzenie przeglądarki do odczytu zaznaczonego tekstu wymagałoby nowego punktu końcowego na `127.0.0.1` z własnym uwierzytelnieniem; odłożone.
 7. Kolejka globalnego skrótu żyje tylko w pamięci procesu serwera; utrata przy zamknięciu w trakcie przetwarzania jest logowana, ale nieodzyskiwana.
-8. Źródła dosłane w kolejnym przebiegu nie przechodzą deduplikacji, bo znacznik `deduplikacja.wykonana` nigdy nie jest zerowany. Stwierdzone eksperymentem, niezmienione; wymaga osobnej decyzji.
+8. Zamknięte, naprawa `naprawa-deduplikacja-zrodel-doslanych`: źródła dosłane w kolejnym przebiegu są porównywane z już spakowanymi, decyduje lista `deduplikacja.porownane`.
 
 ## 19. Kryterium ukończenia funkcji
 

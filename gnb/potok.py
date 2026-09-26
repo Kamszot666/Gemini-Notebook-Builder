@@ -1375,6 +1375,7 @@ class _Wykonanie:
                 identyfikator, _SUFIKS_TEKST_WERSJI_TXT, przygotowane.tekst_txt
             )
 
+        self._uniewaznij_porownanie(identyfikator)
         self._checkpoint.zrodla[identyfikator] = StanZrodla(
             identyfikator=identyfikator,
             typ=zrodlo.typ_zrodla.value,
@@ -1410,32 +1411,48 @@ class _Wykonanie:
     def deduplikuj(self) -> None:
         """Druga faza potoku: porównuje znormalizowane źródła i oznacza duplikaty.
 
-        Faza jest wykonywana raz. Po wznowieniu pracy, gdy przerwanie nastąpiło
-        już po deduplikacji, znacznik w checkpoincie pozwala ją pominąć, żeby
-        istniejące decyzje się nie powtórzyły ani nie zmieniły.
-        """
-        if self._checkpoint.deduplikacja.wykonana:
-            self._loguj(
-                logging.INFO, "-", "Deduplikacja była już wykonana w tym projekcie, pomijam."
-            )
-            return
+        Faza działa w każdym przebiegu. Porównywane są źródła nowe, czyli
+        znormalizowane i jeszcze niezapisane na liście `porownane`. Zestawia się
+        je między sobą oraz z każdym źródłem już rozstrzygniętym: spakowanym
+        w wcześniejszym przebiegu albo porównanym, a jeszcze niespakowanym.
+        Gdy nowe źródło okazuje się duplikatem, duplikatem zostaje nowe, bo
+        użytkownik mógł już wgrać plik starszego do notatnika.
 
-        kandydaci = [
-            ZrodloDoDeduplikacji(
-                identyfikator=stan.identyfikator,
-                tekst=self._wczytaj_tekst_posredni(stan.identyfikator, _SUFIKS_TEKST_ZNORMALIZOWANY)
-                or "",
-                liczba_slow=stan.liczba_slow or 0,
-            )
+        Po wznowieniu pracy źródła z listy `porownane` nie są porównywane
+        ponownie, więc zapisane decyzje się nie powtarzają ani nie zmieniają.
+        """
+        stan_dedup = self._checkpoint.deduplikacja
+        porownane = set(stan_dedup.porownane)
+        nowe = [
+            stan
             for stan in self._checkpoint.zrodla.values()
             if stan.status == StatusZrodla.ZNORMALIZOWANE.value
+            and stan.identyfikator not in porownane
         ]
+        if not nowe:
+            self._loguj(logging.INFO, "-", "Brak nowych źródeł do deduplikacji, pomijam.")
+            return
 
-        wynik = deduplikuj(kandydaci, self._ustawienia_deduplikacji())
+        bazowe = [
+            self._zrodlo_do_deduplikacji(stan)
+            for stan in self._checkpoint.zrodla.values()
+            if stan.status == StatusZrodla.SPAKOWANE.value
+            or (
+                stan.status == StatusZrodla.ZNORMALIZOWANE.value and stan.identyfikator in porownane
+            )
+        ]
+        kandydaci = [self._zrodlo_do_deduplikacji(stan) for stan in nowe]
+
+        wynik = deduplikuj(kandydaci, self._ustawienia_deduplikacji(), bazowe=bazowe)
         self._zastosuj_wynik_deduplikacji(wynik)
 
-        self._checkpoint.deduplikacja.wykonana = True
-        self._checkpoint.deduplikacja.decyzje = [
+        stan_dedup.wykonana = True
+        stan_dedup.porownane = sorted(porownane | {zrodlo.identyfikator for zrodlo in kandydaci})
+        zapisane = {
+            (decyzja.identyfikator_zrodla_glownego, decyzja.identyfikator_duplikatu)
+            for decyzja in stan_dedup.decyzje
+        }
+        stan_dedup.decyzje += [
             DecyzjaDeduplikacjiZapis(
                 identyfikator_zrodla_glownego=decyzja.identyfikator_zrodla_glownego,
                 identyfikator_duplikatu=decyzja.identyfikator_duplikatu,
@@ -1446,6 +1463,8 @@ class _Wykonanie:
                 zachowane_fragmenty_unikalne=list(decyzja.zachowane_fragmenty_unikalne),
             )
             for decyzja in wynik.decyzje
+            if (decyzja.identyfikator_zrodla_glownego, decyzja.identyfikator_duplikatu)
+            not in zapisane
         ]
         self._zapisz_checkpoint()
 
@@ -1458,8 +1477,34 @@ class _Wykonanie:
         self._loguj(
             logging.INFO,
             "-",
-            f"Deduplikacja zakończona: {len(kandydaci)} źródeł porównanych, "
+            f"Deduplikacja zakończona: {len(kandydaci)} nowych źródeł porównanych "
+            f"z {len(bazowe)} już rozstrzygniętymi, "
             f"{liczba_pewnych} pewnych duplikatów, {liczba_do_przegladu} do rozstrzygnięcia.",
+        )
+
+    def _uniewaznij_porownanie(self, identyfikator: str) -> None:
+        """Wycofuje wcześniejsze porównanie źródła przetwarzanego od nowa.
+
+        Źródło pobrane albo wyekstrahowane ponownie ma nową treść, więc jego
+        stare decyzje w roli duplikatu przestają być prawdą, a samo źródło musi
+        przejść porównanie jeszcze raz.
+        """
+        stan_dedup = self._checkpoint.deduplikacja
+        if identyfikator in stan_dedup.porownane:
+            stan_dedup.porownane.remove(identyfikator)
+        stan_dedup.decyzje = [
+            decyzja
+            for decyzja in stan_dedup.decyzje
+            if decyzja.identyfikator_duplikatu != identyfikator
+        ]
+
+    def _zrodlo_do_deduplikacji(self, stan: StanZrodla) -> ZrodloDoDeduplikacji:
+        """Buduje wejście deduplikacji z zapisanego tekstu znormalizowanego źródła."""
+        return ZrodloDoDeduplikacji(
+            identyfikator=stan.identyfikator,
+            tekst=self._wczytaj_tekst_posredni(stan.identyfikator, _SUFIKS_TEKST_ZNORMALIZOWANY)
+            or "",
+            liczba_slow=stan.liczba_slow or 0,
         )
 
     def _zastosuj_wynik_deduplikacji(self, wynik: WynikDeduplikacjiZbioru) -> None:

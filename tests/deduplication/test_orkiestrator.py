@@ -116,3 +116,29 @@ def test_wylaczenie_tylko_hasza_pozostawia_wykrycie_kosmetyczne() -> None:
     assert wynik.identyfikatory_duplikatow == frozenset({"b"})
     (decyzja,) = wynik.decyzje
     assert decyzja.metoda == "porównanie kosmetyczne"
+
+
+def test_zrodlo_bazowe_nigdy_nie_zostaje_duplikatem_nawet_z_nizszym_identyfikatorem() -> None:
+    """Nowe źródło o identyfikatorze niższym niż bazowe i tak samo zostaje duplikatem."""
+    wynik = deduplikuj([_zrodlo("a", _DLUGI)], bazowe=[_zrodlo("z", _DLUGI)])
+
+    assert wynik.identyfikatory_duplikatow == frozenset({"a"})
+    (decyzja,) = wynik.decyzje
+    assert decyzja.identyfikator_zrodla_glownego == "z"
+    assert decyzja.identyfikator_duplikatu == "a"
+
+
+def test_zrodla_bazowe_nie_sa_porownywane_miedzy_soba() -> None:
+    wynik = deduplikuj([], bazowe=[_zrodlo("a", _DLUGI), _zrodlo("b", _DLUGI)])
+
+    assert wynik.decyzje == ()
+    assert wynik.identyfikatory_duplikatow == frozenset()
+
+
+def test_pasmo_srodkowe_wobec_zrodla_bazowego_niczego_nie_usuwa() -> None:
+    ustawienia = UstawieniaDeduplikacji(prog_duplikatu=0.99, prog_do_przegladu=0.5)
+    lekko_inny = _DLUGI.replace("asystenta sztucznej inteligencji", "asystenta")
+    wynik = deduplikuj([_zrodlo("b", lekko_inny)], ustawienia, bazowe=[_zrodlo("a", _DLUGI)])
+
+    assert wynik.identyfikatory_duplikatow == frozenset()
+    assert wynik.identyfikatory_do_przegladu == frozenset({"b"})

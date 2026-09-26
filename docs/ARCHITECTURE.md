@@ -1,4 +1,4 @@
-# Architektura — stan po etapie czternastym
+# Architektura — stan po etapie czternastym i naprawie deduplikacji dosyłanych źródeł
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
 zakończeniu etapu czternastego. Pełny docelowy podział na pakiety opisuje
@@ -45,8 +45,14 @@ fazy w `_Wykonanie`:
 2. Faza deduplikacji — `deduplikuj` zestawia znormalizowane teksty, oznacza pewne
    duplikaty statusem `duplikat`, a pary o średnim podobieństwie zostawia w całości
    i wpisuje do materiałów do sprawdzenia. Decyzje trafiają do checkpointu,
-   manifestu i raportu. Faza wykonuje się raz, co zapisuje znacznik
-   `deduplikacja.wykonana` w checkpoincie.
+   manifestu i raportu. Faza działa w każdym przebiegu: porównuje źródła nowe,
+   czyli jeszcze niezapisane na liście `deduplikacja.porownane` w checkpoincie,
+   między sobą oraz z każdym źródłem już rozstrzygniętym, w tym spakowanym
+   w wcześniejszym przebiegu. Duplikatem zostaje zawsze źródło nowe, bo
+   starsze mogło już trafić do notatnika. Źródło z listy `porownane` nie jest
+   porównywane ponownie, więc wznowienie nie powtarza decyzji; ponowne
+   przetworzenie źródła wycofuje jego wpis z listy i stare decyzje z jego
+   udziałem jako duplikatu.
 3. Faza pakowania i zapisu — dla każdego źródła, które przeżyło deduplikację:
    źródło mieszczące się w limicie i bez nazwy grupy dostaje jeden plik TXT
    i warunkowo MD; źródło przekraczające bezpieczny limit słów albo rozmiaru

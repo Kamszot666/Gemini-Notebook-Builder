@@ -137,6 +137,7 @@ from gnb.logging_pl.dziennik import (
     ZDARZENIE_PROJEKT_ZAKONCZONY,
     ZDARZENIE_ZRODLO_BLAD,
     ZDARZENIE_ZRODLO_DUPLIKAT,
+    ZDARZENIE_ZRODLO_JUZ_W_PROJEKCIE,
     ZDARZENIE_ZRODLO_PODZIELONE,
     ZDARZENIE_ZRODLO_POMINIETE,
     ZDARZENIE_ZRODLO_PRZYJETE,
@@ -179,6 +180,7 @@ from gnb.output.ocena_jakosci import OCENA_PODEJRZANA, OcenaJakosci, ocen_jakosc
 from gnb.output.raport import (
     MaterialDoSprawdzenia,
     PodsumowanieProjektu,
+    ZrodloJuzWProjekcie,
     ZrodloNieprzetworzone,
     zapisz_raport,
     zbuduj_raport,
@@ -607,6 +609,7 @@ def przetworz_projekt(
             checkpoint=checkpoint,
             limit_zrodel=konfiguracja.limit_zrodel,
             czas_pracy_sekundy=(zegar() - czas_startu).total_seconds(),
+            zrodla_juz_w_projekcie=tuple(wykonanie.zrodla_juz_w_projekcie),
         )
         zapisz_raport(uklad.raport, zbuduj_raport(uklad.nazwa_projektu, podsumowanie))
         dziennik_wazny.zapisz(ZDARZENIE_PROJEKT_ZAKONCZONY)
@@ -665,6 +668,12 @@ class _Wykonanie:
         # a nie liczbę źródeł — ta druga miara nie widzi źródeł już podzielonych
         # na kilka plików we wcześniejszym uruchomieniu.
         self._sloty_pakowania_zajete = 0
+        # Wejścia bieżącego przebiegu, które okazały się źródłami już obecnymi
+        # w projekcie z wcześniejszego przebiegu — pozycja piąta listy zmian
+        # etapu czternastego. Bez tego wykazu ponowne dodanie znanego adresu
+        # wygląda, jak gdyby nic się nie stało: trafia tylko do logu
+        # szczegółowego, nigdy do raportu ani do log_wazne.txt.
+        self.zrodla_juz_w_projekcie: list[ZrodloJuzWProjekcie] = []
 
     def przetworz(self, pozycja: PozycjaWejsciowa) -> None:
         """Przetwarza jedno wejście, aktualizując checkpoint i logi."""
@@ -677,11 +686,13 @@ class _Wykonanie:
         identyfikator = zrodlo.identyfikator_zrodla
         istniejacy = self._checkpoint.zrodla.get(identyfikator)
         if istniejacy is not None and istniejacy.status in _STATUSY_KONCOWE:
+            self._odnotuj_zrodlo_juz_w_projekcie(istniejacy)
             self._loguj(
                 logging.INFO, identyfikator, f"Pomijam już przetworzone źródło {identyfikator}."
             )
             return
         if istniejacy is not None and istniejacy.status == StatusZrodla.DUPLIKAT.value:
+            self._odnotuj_zrodlo_juz_w_projekcie(istniejacy)
             self._loguj(
                 logging.INFO,
                 identyfikator,
@@ -693,6 +704,7 @@ class _Wykonanie:
             and istniejacy.status == StatusZrodla.ZNORMALIZOWANE.value
             and self._ma_tekst_posredni(identyfikator)
         ):
+            self._odnotuj_zrodlo_juz_w_projekcie(istniejacy)
             self._loguj(
                 logging.INFO,
                 identyfikator,
@@ -741,6 +753,23 @@ class _Wykonanie:
             self._pomin(zrodlo, pozycja, blad.komunikat)
         except BladGnb as blad:
             self._zapisz_blad_zrodla(zrodlo, pozycja, blad)
+
+    def _odnotuj_zrodlo_juz_w_projekcie(self, stan: StanZrodla) -> None:
+        """Zapisuje w wykazie i w logu ważnym, że wejście jest źródłem już obecnym w projekcie.
+
+        Bez tego wpisu ponowne podanie znanego adresu albo pliku kończy się po
+        cichu: checkpoint pomija już gotowe źródło, a użytkownik nie ma jak się
+        o tym dowiedzieć poza logiem szczegółowym, którego nie czyta na bieżąco.
+        """
+        self.zrodla_juz_w_projekcie.append(
+            ZrodloJuzWProjekcie(
+                identyfikator=stan.identyfikator,
+                pochodzenie=stan.pochodzenie,
+                status=stan.status,
+                pliki_wynikowe=_nazwy_plikow_wynikowych(stan),
+            )
+        )
+        self._dziennik_wazny.zapisz(f"{ZDARZENIE_ZRODLO_JUZ_W_PROJEKCIE}: {stan.pochodzenie}")
 
     def _przetworz_zrodlo(self, pozycja: PozycjaWejsciowa, zrodlo: Zrodlo) -> None:
         """Doprowadza jedno źródło od treści do zapisanych plików wynikowych."""
@@ -2622,6 +2651,7 @@ def _zbuduj_podsumowanie(
     checkpoint: Checkpoint,
     limit_zrodel: int,
     czas_pracy_sekundy: float,
+    zrodla_juz_w_projekcie: tuple[ZrodloJuzWProjekcie, ...] = (),
 ) -> PodsumowanieProjektu:
     poprawne = _policz_status(checkpoint, StatusZrodla.SPAKOWANE)
     pominiete = _policz_status(checkpoint, StatusZrodla.POMINIETE)
@@ -2671,6 +2701,7 @@ def _zbuduj_podsumowanie(
         czas_pracy_sekundy=czas_pracy_sekundy,
         zrodla_nieprzetworzone=_zrodla_nieprzetworzone(checkpoint),
         materialy_do_sprawdzenia=_materialy_do_sprawdzenia(checkpoint),
+        zrodla_juz_w_projekcie=zrodla_juz_w_projekcie,
         liczba_nut_poza_grupami=nut_poza_grupami,
     )
 
@@ -2688,6 +2719,15 @@ def _zrodla_nieprzetworzone(checkpoint: Checkpoint) -> tuple[ZrodloNieprzetworzo
         for stan in checkpoint.zrodla.values()
         if stan.status in statusy_nieprzetworzone
     )
+
+
+def _nazwy_plikow_wynikowych(stan: StanZrodla) -> tuple[str, ...]:
+    """Zwraca nazwy plików wynikowych źródła, bez powtórzeń, w kolejności zapisu."""
+    widziane: list[str] = []
+    for wynik in stan.wyniki:
+        if wynik.sciezka_wzgledna not in widziane:
+            widziane.append(wynik.sciezka_wzgledna)
+    return tuple(widziane)
 
 
 def _materialy_do_sprawdzenia(checkpoint: Checkpoint) -> tuple[MaterialDoSprawdzenia, ...]:
@@ -2708,6 +2748,7 @@ def _materialy_do_sprawdzenia(checkpoint: Checkpoint) -> tuple[MaterialDoSprawdz
             ostrzezenia=tuple(stan.ostrzezenia),
             mozliwe_duplikaty=mozliwe_duplikaty.get(stan.identyfikator, ()),
             ostrzezenia_pakowania=tuple(stan.ostrzezenia_pakowania),
+            pliki_wynikowe=_nazwy_plikow_wynikowych(stan),
         )
         for stan in checkpoint.zrodla.values()
         if stan.ocena_jakosci == OCENA_PODEJRZANA

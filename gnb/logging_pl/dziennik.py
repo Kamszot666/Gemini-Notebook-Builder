@@ -51,6 +51,7 @@ ZDARZENIE_ZRODLO_PODZIELONE = "Źródło podzielone na części"
 ZDARZENIE_GRUPA_SPAKOWANA = "Grupa źródeł spakowana do wspólnego pliku"
 ZDARZENIE_OSTRZEZENIE_PODZIALU = "Uwaga, kompromis przy podziale źródła"
 ZDARZENIE_KOLEJKA_SKROTU_UTRACONA = "Uwaga, zamknięcie serwera utraciło pozycje z kolejki skrótu"
+ZDARZENIE_ZRODLO_JUZ_W_PROJEKCIE = "Źródło już obecne w projekcie"
 
 _FORMAT_LOGU_SZCZEGOLOWEGO = (
     "%(asctime)s|%(levelname)s|%(name)s|%(identyfikator_zrodla)s|%(message)s"

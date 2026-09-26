@@ -1,9 +1,11 @@
-# Dostępność interfejsu WWW — stan po etapie dwunastym
+# Dostępność interfejsu WWW — stan po etapie czternastym
 
 Ten dokument opisuje, jak obsługiwać interfejs Gemini Notebook Builder
 z klawiatury i z czytnikiem ekranu, oraz co interfejs ogłasza i jak często.
 Dotyczy stanu po etapie siódmym, z dopełnieniem o globalny skrót klawiszowy
-z etapu jedenastego, część A.
+z etapu jedenastego, część A, oraz o poprawki interfejsu z pull requestu
+pierwszego etapu czternastego, wynikłe z pierwszego prawdziwego użycia
+aplikacji.
 
 Dokument jest pisany pod odczyt liniowy. Nie ma w nim tabel ani ozdobników,
 a polecenia do wpisania są w osobnych blokach.
@@ -83,20 +85,45 @@ ekranu ogłasza jego zmiany, ale nie przerywa tego, co właśnie czytasz.
 
 Komunikaty postępu są dławione. Region zmienia treść najwyżej raz na cztery
 sekundy, a komunikat identyczny z poprzednim nie jest powtarzany. Typowy
-komunikat to podsumowanie w rodzaju „Przetworzono 12 z 40 źródeł”. Pojedyncze
-zdarzenia nie są ogłaszane.
+komunikat to podsumowanie w rodzaju „Postęp: 30 procent, pobrano 3 z 11
+źródeł” — procent liczony jest proporcjonalnie do liczby zgłoszonych kroków
+całego przebiegu, zaokrąglany w dół do pełnej dziesiątki, i rośnie tylko
+w górę, nigdy się nie cofa. Pojedyncze zdarzenia nie są ogłaszane.
 
-Gdy w przeglądarce działa JavaScript, region odświeża się sam co cztery sekundy.
-Gdy przetwarzanie się skończy, region prosi o aktywowanie odnośnika „Odśwież
-stan”. Strona nie przeładowuje się sama, ponieważ przeładowanie przeniosłoby
-fokus na początek dokumentu.
+Gdy w przeglądarce działa JavaScript, region odpytuje stan od razu po
+wczytaniu strony, a potem co cztery sekundy — dzięki temu krótki przebieg,
+trwający kilka sekund, zdąża pokazać choć jeden pośredni komunikat postępu,
+zamiast milczeć aż do zakończenia. Gdy przetwarzanie się skończy, region
+ogłasza jedno zdanie: „Przetwarzanie zakończone. Raport jest poniżej, pod
+nagłówkiem Raport końcowy.”, a podsumowanie liczbowe, pełna treść raportu
+i formularz dosyłania kolejnych źródeł pojawiają się pod nim od razu, bez
+przeładowania strony i bez przeniesienia fokusu. Nagłówek „Stan przetwarzania”
+zmienia się razem z regionem, więc nie zostaje nieaktualny do czasu ręcznego
+odświeżenia.
 
 Gdy JavaScript jest wyłączony, region pokazuje stan z chwili wczytania strony.
 Aktualny stan sprawdzasz, aktywując odnośnik „Odśwież stan”, który jest zwykłym
 odnośnikiem do tej samej strony.
 
 Po zakończeniu przetwarzania na stronie pojawia się podsumowanie liczbowe oraz
-pełna treść raportu końcowego.
+pełna treść raportu końcowego. Każdy adres zaczynający się od `http://` albo
+`https://` w treści raportu jest klikalnym odnośnikiem, otwieranym w nowej
+karcie, z dopiskiem „(otwiera się w nowej karcie)” dla czytnika ekranu — żeby
+otwarcie karty nie było zaskoczeniem. Adres innego schematu, na przykład
+`javascript:`, nigdy nie staje się odnośnikiem.
+
+Pod raportem jest formularz „Dodaj kolejne źródła do tego projektu” z tymi
+samymi polami co formularz nowego projektu na stronie głównej, bez pola nazwy
+— nazwa jest już znana z adresu strony. Pole grupy tematycznej jest domyślnie
+wypełnione nazwą grupy ostatniego wysłania. Wysłanie tego formularza uruchamia
+kolejny przebieg w tym samym projekcie, tą samą ścieżką co formularz strony
+głównej z nazwą już istniejącego projektu; błędy walidacji wracają na tę samą
+stronę projektu, powiązane z polem tak samo jak w formularzu strony głównej.
+
+Wejście, które okazało się źródłem już obecnym w projekcie z wcześniejszego
+przebiegu — na przykład ten sam adres podany po raz drugi — dostaje osobny
+wiersz w raporcie bieżącego przebiegu, z jego statusem i nazwą pliku
+wynikowego, w którym jest jego treść, żeby nie wyglądało to jak brak reakcji.
 
 ### Pola notatnika
 

@@ -147,6 +147,126 @@ def test_pelny_przebieg_tworzenia_projektu_z_tekstem(
     assert strona.status == 200
 
 
+def _wielloczesciowe(granica: str, pola: dict[str, str]) -> bytes:
+    czesci = "".join(
+        f'--{granica}\r\nContent-Disposition: form-data; name="{nazwa}"\r\n\r\n{wartosc}\r\n'
+        for nazwa, wartosc in pola.items()
+    )
+    return (czesci + f"--{granica}--\r\n").encode("utf-8")
+
+
+def _czekaj_na_zakonczenie(rejestr: RejestrZadan) -> None:
+    for _ in range(300):
+        informacja = rejestr.informacja()
+        if informacja is not None and informacja.stan.value != "trwa":
+            return
+        time.sleep(0.02)
+
+
+def test_dosylanie_zrodel_dodaje_je_do_istniejacego_projektu(
+    serwer: tuple[str, int, RejestrZadan],
+) -> None:
+    """Pozycja czwarta listy zmian etapu czternastego.
+
+    Formularz dosyłania pod raportem idzie tą samą ścieżką co formularz strony
+    głównej z nazwą istniejącego projektu: dodaje wejście do tego samego
+    checkpointu, zamiast zakładać nowy projekt.
+    """
+    host, port, rejestr = serwer
+    klient = _Klient(host, port)
+    klient.get("/")
+    granica = "----TestGranica"
+
+    pierwsze = klient.post(
+        "/projekt/nowy",
+        _wielloczesciowe(
+            granica,
+            {
+                "token_csrf": _token(klient),
+                "nazwa_projektu": "Projekt Dosylania",
+                "tekst": "Pierwszy tekst wklejony do testu dosyłania.",
+            },
+        ),
+        f"multipart/form-data; boundary={granica}",
+    )
+    assert pierwsze.status == 303
+    _czekaj_na_zakonczenie(rejestr)
+
+    drugie = klient.post(
+        "/projekt/Projekt%20Dosylania/dosylanie",
+        _wielloczesciowe(
+            granica,
+            {
+                "token_csrf": _token(klient),
+                "tekst": "Drugi tekst dosłany pod raportem.",
+                "grupa": "Wiedza",
+            },
+        ),
+        f"multipart/form-data; boundary={granica}",
+    )
+    assert drugie.status == 303
+    assert drugie.getheader("Location") == "/projekt/Projekt%20Dosylania"
+    _czekaj_na_zakonczenie(rejestr)
+
+    informacja = rejestr.informacja()
+    assert informacja is not None
+    assert informacja.stan.value == "zakonczone"
+    assert informacja.wynik is not None
+    assert informacja.wynik.wznowiono is True
+
+    _, tekst = klient.get_tekst("/projekt/Projekt%20Dosylania")
+    assert "Liczba wejść: 2" in tekst
+    assert "Liczba źródeł poprawnych: 2" in tekst
+
+
+def test_dosylanie_zrodel_bez_tokenu_csrf_jest_odrzucane(
+    serwer: tuple[str, int, RejestrZadan],
+) -> None:
+    host, port, _ = serwer
+    klient = _Klient(host, port)
+    klient.get("/")
+
+    odpowiedz = klient.post(
+        "/projekt/Nieistniejacy/dosylanie", b"tekst=cos", "application/x-www-form-urlencoded"
+    )
+    assert odpowiedz.status == 403
+
+
+def test_dosylanie_zrodel_bez_zadnego_zrodla_wraca_na_strone_projektu_z_bledem(
+    serwer: tuple[str, int, RejestrZadan],
+) -> None:
+    host, port, rejestr = serwer
+    klient = _Klient(host, port)
+    klient.get("/")
+    granica = "----TestGranica"
+
+    klient.post(
+        "/projekt/nowy",
+        _wielloczesciowe(
+            granica,
+            {
+                "token_csrf": _token(klient),
+                "nazwa_projektu": "Projekt Pusty",
+                "tekst": "Materiał startowy projektu.",
+            },
+        ),
+        f"multipart/form-data; boundary={granica}",
+    )
+    _czekaj_na_zakonczenie(rejestr)
+
+    odpowiedz, tekst = klient.get_tekst("/postep")  # tylko po to, by ciasteczko było świeże
+    assert odpowiedz.status == 200
+
+    odpowiedz = klient.post(
+        "/projekt/Projekt%20Pusty/dosylanie",
+        _wielloczesciowe(granica, {"token_csrf": _token(klient)}),
+        f"multipart/form-data; boundary={granica}",
+    )
+    # Błąd wraca na stronę PROJEKTU, nie na stronę główną — inaczej użytkownik,
+    # który wysłał formularz spod raportu, trafiłby w nieoczekiwane miejsce.
+    assert odpowiedz.status == 400
+
+
 def test_postep_zwraca_json(serwer: tuple[str, int, RejestrZadan]) -> None:
     host, port, _ = serwer
     odpowiedz = _Klient(host, port).get("/postep")

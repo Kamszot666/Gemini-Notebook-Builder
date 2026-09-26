@@ -1,4 +1,4 @@
-# Obsługiwane formaty — stan po etapie czternastym i limicie adresów z pliku
+# Obsługiwane formaty — stan po etapie czternastym i naprawach po nim
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
 Etap czternasty dodał formaty biurowe ODT, ODS, ODP, PPTX, XLSX, XLS, RTF, DOC
@@ -48,9 +48,13 @@ Adres można podać na trzy sposoby: pojedynczo, kilka adresów rozdzielonych
 spacjami oraz kilka adresów w osobnych wierszach. To samo dotyczy importowanego
 pliku TXT z listą adresów. Wiersz zaczynający się od krzyżyka jest komentarzem.
 
-Plik TXT wysłany w interfejsie WWW, który składa się wyłącznie z adresów, jest
-traktowany jak lista źródeł: aplikacja pobiera każdą wskazaną stronę, a sam
-plik z listą nie trafia do notatnika jako treść. Plik TXT lub MD ze zwykłym tekstem
+Plik TXT, MD albo DOCX, który składa się wyłącznie z adresów, jest traktowany
+jak lista źródeł: aplikacja pobiera każdą wskazaną stronę, a sam plik z listą
+nie trafia do notatnika jako treść. Dotyczy to interfejsu WWW i polecenia
+`python -m gnb.cli przetworz --plik`. Tekst pliku DOCX jest czytany tym samym
+sposobem co w ekstraktorze DOCX: akapity, listy i tabele.
+
+Plik TXT, MD lub DOCX ze zwykłym tekstem
 pozostaje źródłem tekstowym, a adresy http i https znalezione w jego treści są
 dodatkowo pobierane jako osobne źródła, jeśli jest ich nie więcej niż wynosi
 ustawienie `limit_adresow_z_pliku` (domyślnie 200, liczone bez powtórzeń). Przy
@@ -60,6 +64,16 @@ manifestu i raportu. Takie adresy nie zostały podane wprost,
 więc podlegają kontroli robots.txt, także gdy wyjątek dla źródeł jawnych jest
 włączony. Adres zaczynający się od „www.”, bez schematu, dostaje https
 automatycznie; inny adres bez schematu jest odrzucany.
+
+Automatycznie pobierane są wyłącznie adresy jawne, czyli zapisane w widocznym
+tekście i zaczynające się od http:// albo https://. Odnośnik ukryty pod innym
+tekstem, na przykład słowa „strona gminy” w pliku DOCX albo zapis
+`[strona gminy](adres)` w pliku MD, jest pomijany: jego cel nie jest brany za
+adres do pobrania. Program nie czyta celów odnośników z relacji dokumentu DOCX
+ani z pól HYPERLINK. Jeśli widoczny tekst odnośnika jest sam adresem, jest
+jawny i zostaje pobrany. Z plików HTML, HTM, XHTML, MHTML i MHT adresy nie są
+pobierane automatycznie w ogóle. Sposób pracy ze stronami wymagającymi
+zalogowania, czyli zapis strony z przeglądarki jako pliku HTML, opisuje `ACCESSIBILITY.md`.
 
 Zanim cokolwiek zostanie pobrane, aplikacja pokazuje podsumowanie: ile adresów
 wykryto, ile jest poprawnych, ile pominięto jako duplikat i ile wpisów odrzucono

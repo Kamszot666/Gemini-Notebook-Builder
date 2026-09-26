@@ -120,17 +120,16 @@ def wczytaj_liste_z_pliku(
     if not sciezka.is_file():
         raise BladTrwaly(f"Ścieżka listy adresów nie wskazuje zwykłego pliku: {sciezka}.")
     try:
-        dane = sciezka.read_bytes()
+        tekst = _odczytaj_tekst_jawny(sciezka)
     except OSError as blad:
         raise BladTrwaly(f"Nie udało się odczytać listy adresów {sciezka}: {blad}") from blad
-    tekst, _ = zdekoduj(dane)
     return zbierz_adresy(tekst, dodatkowe_parametry_sledzace)
 
 
 def rozpoznaj_liste_adresow_w_pliku(
     sciezka: Path, dodatkowe_parametry_sledzace: Iterable[str] = ()
 ) -> PodsumowanieListyUrl | None:
-    """Zwraca podsumowanie, gdy plik TXT jest wyłącznie listą adresów, a inaczej nic.
+    """Zwraca podsumowanie, gdy plik TXT, MD albo DOCX jest wyłącznie listą adresów.
 
     Plik uznajemy za listę źródeł podaną przez użytkownika tylko wtedy, gdy
     każdy jego wpis jest poprawnym adresem albo powtórzeniem wcześniejszego,
@@ -141,7 +140,7 @@ def rozpoznaj_liste_adresow_w_pliku(
     Plik nieczytelny albo niebędący listą daje ``None``, a nie błąd, bo wtedy
     trafia do zwykłej ścieżki plików.
     """
-    if sciezka.suffix.lower() != ".txt":
+    if sciezka.suffix.lower() not in _ROZSZERZENIA_TEKSTOWE:
         return None
     try:
         podsumowanie = wczytaj_liste_z_pliku(sciezka, dodatkowe_parametry_sledzace)
@@ -154,16 +153,49 @@ def rozpoznaj_liste_adresow_w_pliku(
 
 _WZORZEC_ADRESU_W_TEKSCIE = re.compile(r"https?://[^\s<>\"]+")
 _ZNAKI_KONCA_ZDANIA = ".,;:!?)]}»”'"
-_ROZSZERZENIA_TEKSTOWE = frozenset({".txt", ".md"})
+_ROZSZERZENIA_TEKSTOWE = frozenset({".txt", ".md", ".docx"})
+_WZORZEC_ODNOSNIKA_MARKDOWN = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
+_WZORZEC_DEFINICJI_ODNOSNIKA_MARKDOWN = re.compile(r"^ {0,3}\[[^\]]+\]:[ \t]*\S+.*$", re.MULTILINE)
+
+
+def _odczytaj_tekst_jawny(sciezka: Path) -> str:
+    """Zwraca widoczny tekst pliku TXT, MD albo DOCX.
+
+    Plik DOCX jest czytany tym samym ekstraktorem, którego używa potok, więc
+    tekst obejmuje akapity, listy i tabele, ale nie cele odnośników: adres
+    ukryty pod innym tekstem nie jest widoczny, więc nie jest tu zwracany.
+    Nieczytelny DOCX kończy się błędem trwałym, a błąd odczytu wyjątkiem systemowym.
+    """
+    dane = sciezka.read_bytes()
+    if sciezka.suffix.lower() == ".docx":
+        from gnb.extractors.plik_docx import EkstraktorDocx
+
+        dokument = EkstraktorDocx().wyekstrahuj("adresy_z_pliku", dane)
+        return "\n\n".join(blok.tresc for blok in dokument.bloki)
+    tekst, _ = zdekoduj(dane)
+    return tekst
+
+
+def _bez_ukrytych_odnosnikow_markdown(tekst: str) -> str:
+    """Usuwa z Markdown cele odnośników ukryte pod innym tekstem.
+
+    Odnośnik ``[strona gminy](https://...)`` zostaje samym widocznym tekstem,
+    a definicje odnośników w wierszach ``[etykieta]: adres`` znikają. Adres
+    zapisany wprost, także jako tekst odnośnika, pozostaje jawny.
+    """
+    bez_definicji = _WZORZEC_DEFINICJI_ODNOSNIKA_MARKDOWN.sub("", tekst)
+    return _WZORZEC_ODNOSNIKA_MARKDOWN.sub(r"\1", bez_definicji)
 
 
 def adresy_znalezione_w_pliku(
     sciezka: Path, dodatkowe_parametry_sledzace: Iterable[str] = ()
 ) -> tuple[AdresWejsciowy, ...]:
-    """Zwraca poprawne, niepowtarzalne adresy http i https znalezione w pliku TXT lub MD.
+    """Zwraca poprawne, niepowtarzalne adresy http i https znalezione w pliku TXT, MD lub DOCX.
 
-    Adresy są wyłuskiwane z treści zwykłego tekstu; interpunkcja doklejona na
-    końcu zdania jest odcinana. Wywołujący dodaje je jako źródła niewskazane
+    Wyłuskiwane są wyłącznie adresy jawne, czyli zapisane w widocznym tekście
+    zaczynającym się od http:// albo https://; interpunkcja doklejona na końcu
+    zdania jest odcinana. Odnośnik ukryty pod innym tekstem jest pomijany.
+    Wywołujący dodaje je jako źródła niewskazane
     wprost, więc podlegają kontroli ``robots.txt``. Plik nieczytelny albo o innym
     rozszerzeniu daje pustą krotkę: treść pliku jest danymi i nigdy nie powoduje
     błędu.
@@ -171,9 +203,11 @@ def adresy_znalezione_w_pliku(
     if sciezka.suffix.lower() not in _ROZSZERZENIA_TEKSTOWE:
         return ()
     try:
-        tekst, _ = zdekoduj(sciezka.read_bytes())
-    except OSError:
+        tekst = _odczytaj_tekst_jawny(sciezka)
+    except (OSError, BladTrwaly):
         return ()
+    if sciezka.suffix.lower() == ".md":
+        tekst = _bez_ukrytych_odnosnikow_markdown(tekst)
     kandydaci: list[str] = []
     for dopasowanie in _WZORZEC_ADRESU_W_TEKSCIE.finditer(tekst):
         adres = dopasowanie.group(0).rstrip(_ZNAKI_KONCA_ZDANIA)

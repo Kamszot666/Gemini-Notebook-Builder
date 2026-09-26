@@ -1,4 +1,4 @@
-# Konfiguracja — stan po etapie czternastym
+# Konfiguracja — stan po etapie czternastym i limicie adresów z pliku
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
 obsługuje po etapie trzynastym. Z listy w sekcji jedenastej a pliku
@@ -358,7 +358,15 @@ Interfejs uruchamiasz poleceniem `python -m gnb.ui.server`.
 4. `maksymalny_rozmiar_wysylki_mb`, zmienna `GNB_MAKSYMALNY_ROZMIAR_WYSYLKI_MB`.
    Bezpieczny limit rozmiaru pliku wysyłanego przez formularz interfejsu.
    Domyślnie 190. Żądanie z większą treścią jest odrzucane, a nie obcinane.
-5. `globalny_skrot_wlaczony`, zmienna `GNB_GLOBALNY_SKROT_WLACZONY`. Włączenie
+5. `limit_adresow_z_pliku`, zmienna `GNB_LIMIT_ADRESOW_Z_PLIKU`. Największa
+   liczba różnych adresów, jaką program wyłuska z treści jednego zwykłego pliku
+   TXT albo MD wysłanego w interfejsie WWW. Domyślnie 200. Liczą się adresy po
+   usunięciu powtórzeń. Gdy jest ich więcej, żaden nie zostaje dodany jako
+   źródło, a sam plik jest przetwarzany normalnie; komunikat z liczbą znalezionych
+   adresów i limitem trafia do logów, manifestu i raportu. Limit nie dotyczy
+   pliku złożonego w całości z adresów, bo to jawna lista źródeł, a jej wielkość
+   ogranicza limit liczby źródeł notatnika.
+6. `globalny_skrot_wlaczony`, zmienna `GNB_GLOBALNY_SKROT_WLACZONY`. Włączenie
    globalnego skrótu klawiszowego Control plus Shift plus F12 z etapu
    jedenastego, część A. Domyślnie włączony. Skrót działa wyłącznie na Windows
    i wyłącznie, gdy jest uruchomiony serwer interfejsu poleceniem `python -m
@@ -419,6 +427,7 @@ Poniższy blok to zawartość przykładowego pliku `konfiguracja.toml`.
 ```toml
 katalog_wynikow = "D:/Dokumenty/Gemini Notebook Builder"
 limit_zrodel = 100
+limit_adresow_z_pliku = 200
 bezpieczny_limit_slow = 480000
 bezpieczny_limit_mb = 190
 formaty_wynikowe = ["txt", "md"]

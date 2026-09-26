@@ -1360,7 +1360,7 @@ class _Wykonanie:
             self._pomin(zrodlo, pozycja, KOMUNIKAT_PLIK_BEZ_TRESCI)
             return
 
-        ostrzezenia = self._zbierz_ostrzezenia(zrodlo, dokument)
+        ostrzezenia = self._zbierz_ostrzezenia(zrodlo, dokument, pozycja.ostrzezenia_wejscia)
         decyzja = regula_md.ocen(dokument)
         nazwa_bazowa = nazwa_pliku_wynikowego(dokument.tytul, identyfikator)
         naglowek = self._naglowek(
@@ -2127,7 +2127,12 @@ class _Wykonanie:
         cel = self._uklad.wyniki_posrednie / f"{identyfikator}.{_SUFIKS_TEKST_ZNORMALIZOWANY}"
         return cel.is_file()
 
-    def _zbierz_ostrzezenia(self, zrodlo: Zrodlo, dokument: DokumentWyekstrahowany) -> list[str]:
+    def _zbierz_ostrzezenia(
+        self,
+        zrodlo: Zrodlo,
+        dokument: DokumentWyekstrahowany,
+        ostrzezenia_wejscia: tuple[str, ...] = (),
+    ) -> list[str]:
         """Zbiera ostrzeżenia zgłoszone przez ekstraktor i odnotowuje je w obu logach.
 
         Źródło bez żadnej znormalizowanej treści, dla formatu celowo wyłączonego
@@ -2136,10 +2141,12 @@ class _Wykonanie:
         tekstowej, dociera tutaj nawet z pustą treścią, bo jego pusty wynik
         obsługuje ocena jakości, a nie to miejsce.
 
+        Ostrzeżenia ustalone przy przyjęciu wejścia dochodzą do tej samej listy.
+
         Ostrzeżenie nie zmienia statusu źródła. Źródło jest zapisywane normalnie,
         a ostrzeżenie trafia do checkpointu, a stąd do manifestu i do raportu.
         """
-        ostrzezenia = list(dokument.ostrzezenia)
+        ostrzezenia = [*dokument.ostrzezenia, *ostrzezenia_wejscia]
         if not ostrzezenia:
             return []
 

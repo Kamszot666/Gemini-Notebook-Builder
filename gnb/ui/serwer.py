@@ -18,6 +18,7 @@ import logging
 import socket
 import sys
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -29,8 +30,9 @@ from gnb.core.nazwy import sanityzuj_nazwe_projektu
 from gnb.core.postep import WywolanieZwrotnePostepu
 from gnb.core.wyjatki import BladGnb
 from gnb.ingestion.lista_url import (
+    KOMUNIKAT_LIMIT_ADRESOW_Z_PLIKU,
     AdresWejsciowy,
-    adresy_znalezione_w_pliku,
+    adresy_z_pliku_z_limitem,
     rozpoznaj_liste_adresow_w_pliku,
 )
 from gnb.ingestion.wejscie import (
@@ -467,10 +469,23 @@ class _Handler(BaseHTTPRequestHandler):
                 sciezka, konfiguracja.dodatkowe_parametry_sledzace
             )
             if lista is None:
-                pozycje.append(przyjmij_plik(sciezka, moment, grupa=grupa))
-                znalezione.extend(
-                    adresy_znalezione_w_pliku(sciezka, konfiguracja.dodatkowe_parametry_sledzace)
+                z_pliku = adresy_z_pliku_z_limitem(
+                    sciezka,
+                    konfiguracja.limit_adresow_z_pliku,
+                    konfiguracja.dodatkowe_parametry_sledzace,
                 )
+                pozycja_pliku = przyjmij_plik(sciezka, moment, grupa=grupa)
+                if z_pliku.przekroczono_limit:
+                    pozycja_pliku = replace(
+                        pozycja_pliku,
+                        ostrzezenia_wejscia=(
+                            KOMUNIKAT_LIMIT_ADRESOW_Z_PLIKU.format(
+                                znaleziono=z_pliku.liczba_znalezionych, limit=z_pliku.limit
+                            ),
+                        ),
+                    )
+                pozycje.append(pozycja_pliku)
+                znalezione.extend(z_pliku.adresy)
                 continue
             # Plik złożony wyłącznie z adresów jest listą źródeł: pobieramy strony,
             # a sama lista nie trafia do notatnika jako treść.

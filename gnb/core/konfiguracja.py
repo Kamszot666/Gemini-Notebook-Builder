@@ -51,6 +51,7 @@ from pathlib import Path
 from gnb.core.wyjatki import BladTrwaly
 
 DOMYSLNY_LIMIT_ZRODEL = 100
+DOMYSLNY_LIMIT_ADRESOW_Z_PLIKU = 200
 DOMYSLNY_BEZPIECZNY_LIMIT_SLOW = 480_000
 DOMYSLNY_BEZPIECZNY_LIMIT_MB = 190
 DOMYSLNE_FORMATY_WYNIKOWE: tuple[str, ...] = ("txt", "md")
@@ -232,6 +233,7 @@ _WARTOSCI_FALSZU = frozenset({"0", "nie", "false", "falsz", "fałsz", "off"})
 _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
     PREFIKS_ZMIENNYCH + "KATALOG_WYNIKOW": "katalog_wynikow",
     PREFIKS_ZMIENNYCH + "LIMIT_ZRODEL": "limit_zrodel",
+    PREFIKS_ZMIENNYCH + "LIMIT_ADRESOW_Z_PLIKU": "limit_adresow_z_pliku",
     PREFIKS_ZMIENNYCH + "BEZPIECZNY_LIMIT_SLOW": "bezpieczny_limit_slow",
     PREFIKS_ZMIENNYCH + "BEZPIECZNY_LIMIT_MB": "bezpieczny_limit_mb",
     PREFIKS_ZMIENNYCH + "FORMATY_WYNIKOWE": "formaty_wynikowe",
@@ -326,6 +328,7 @@ class Konfiguracja:
 
     katalog_wynikow: Path = field(default_factory=_domyslny_katalog_wynikow)
     limit_zrodel: int = DOMYSLNY_LIMIT_ZRODEL
+    limit_adresow_z_pliku: int = DOMYSLNY_LIMIT_ADRESOW_Z_PLIKU
     bezpieczny_limit_slow: int = DOMYSLNY_BEZPIECZNY_LIMIT_SLOW
     bezpieczny_limit_mb: int = DOMYSLNY_BEZPIECZNY_LIMIT_MB
     formaty_wynikowe: tuple[str, ...] = DOMYSLNE_FORMATY_WYNIKOWE
@@ -432,6 +435,9 @@ def wczytaj_konfiguracje(
             else domyslna.katalog_wynikow
         ),
         limit_zrodel=_jako_liczba(scalone, "limit_zrodel", domyslna.limit_zrodel),
+        limit_adresow_z_pliku=_jako_liczba(
+            scalone, "limit_adresow_z_pliku", domyslna.limit_adresow_z_pliku
+        ),
         bezpieczny_limit_slow=_jako_liczba(
             scalone, "bezpieczny_limit_slow", domyslna.bezpieczny_limit_slow
         ),

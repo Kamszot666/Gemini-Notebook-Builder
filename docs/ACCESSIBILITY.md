@@ -196,7 +196,10 @@ etykiecie „Oznacz jako zweryfikowane” czyta jako opis nazwę źródła.
    sprawdzenia. Po użyciu źródło znika z sekcji „Materiały do sprawdzenia”
    w raporcie, ale zostaje w osobnej sekcji „Źródła zweryfikowane ręcznie”,
    razem z powodami, które je tam pierwotnie umieściły. Ocena jakości
-   w manifeście się nie zmienia.
+   w manifeście się nie zmienia. Jeżeli źródło pochodzi z sieci, czyli jest
+   stroną albo filmem, aplikacja po oznaczeniu pobiera je jeszcze raz i
+   uruchamia kolejny przebieg; nowo pobrane źródło od razu ma znacznik
+   weryfikacji.
 2. „Zastąp treść plikiem” — pole wyboru pliku z etykietą „Plik z ręcznie
    zapisaną treścią tego źródła” oraz przycisk. Przydaje się przy stronie za
    logowaniem: zapisujesz stronę w przeglądarce do pliku i podstawiasz ją za

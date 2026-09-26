@@ -50,9 +50,11 @@ pliku TXT z listą adresów. Wiersz zaczynający się od krzyżyka jest komentar
 
 Plik TXT wysłany w interfejsie WWW, który składa się wyłącznie z adresów, jest
 traktowany jak lista źródeł: aplikacja pobiera każdą wskazaną stronę, a sam
-plik z listą nie trafia do notatnika jako treść. Plik ze zwykłym tekstem, w
-którym adres stoi w środku zdania, pozostaje tekstem i jego adresów nie
-pobiera. Adres zaczynający się od „www.”, bez schematu, dostaje https
+plik z listą nie trafia do notatnika jako treść. Plik TXT lub MD ze zwykłym tekstem
+pozostaje źródłem tekstowym, a adresy http i https znalezione w jego treści są
+dodatkowo pobierane jako osobne źródła. Takie adresy nie zostały podane wprost,
+więc podlegają kontroli robots.txt, także gdy wyjątek dla źródeł jawnych jest
+włączony. Adres zaczynający się od „www.”, bez schematu, dostaje https
 automatycznie; inny adres bez schematu jest odrzucany.
 
 Zanim cokolwiek zostanie pobrane, aplikacja pokazuje podsumowanie: ile adresów

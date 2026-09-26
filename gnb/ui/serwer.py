@@ -28,7 +28,11 @@ from gnb.core.konfiguracja import Konfiguracja
 from gnb.core.nazwy import sanityzuj_nazwe_projektu
 from gnb.core.postep import WywolanieZwrotnePostepu
 from gnb.core.wyjatki import BladGnb
-from gnb.ingestion.lista_url import rozpoznaj_liste_adresow_w_pliku
+from gnb.ingestion.lista_url import (
+    AdresWejsciowy,
+    adresy_znalezione_w_pliku,
+    rozpoznaj_liste_adresow_w_pliku,
+)
 from gnb.ingestion.wejscie import (
     PozycjaWejsciowa,
     przyjmij_plik,
@@ -38,13 +42,14 @@ from gnb.ingestion.wejscie import (
 from gnb.operacje_projektu import (
     STATUSY_Z_ZASTAPIENIEM_TRESCI,
     oznacz_jako_zweryfikowane,
+    przygotuj_ponowne_pobranie,
     sprawdz_mozliwosc_zastapienia,
     usun_zrodlo_z_projektu,
     wczytaj_checkpoint_projektu,
     zapisz_plik_zastepczy,
 )
 from gnb.persistence import pola_notatnika
-from gnb.persistence.checkpoint import Checkpoint, wczytaj
+from gnb.persistence.checkpoint import Checkpoint, WejscieZapis, wczytaj
 from gnb.persistence.pliki_wynikowe import znajdz_brakujace_pliki
 from gnb.persistence.pola_notatnika import PolaNotatnika, PrzekroczonoLimitZnakow
 from gnb.persistence.projekt import UkladProjektu, ustal_uklad, utworz_katalogi
@@ -52,6 +57,7 @@ from gnb.potok import (
     WynikPrzetwarzania,
     identyfikatory_materialow_do_sprawdzenia,
     odtworz_wejscia,
+    pozycja_z_wejscia,
     przetworz_projekt,
 )
 from gnb.ui import csrf, formularze, widoki
@@ -454,6 +460,7 @@ class _Handler(BaseHTTPRequestHandler):
             )
         uklad = ustal_uklad(konfiguracja.katalog_wynikow, nazwa)
         utworz_katalogi(uklad, z_materialami_zrodlowymi=konfiguracja.zachowuj_oryginaly)
+        znalezione: list[AdresWejsciowy] = []
         for plik in pliki:
             sciezka = self._zapisz_plik_wejsciowy(uklad.pliki_wejsciowe, plik)
             lista = rozpoznaj_liste_adresow_w_pliku(
@@ -461,6 +468,9 @@ class _Handler(BaseHTTPRequestHandler):
             )
             if lista is None:
                 pozycje.append(przyjmij_plik(sciezka, moment, grupa=grupa))
+                znalezione.extend(
+                    adresy_znalezione_w_pliku(sciezka, konfiguracja.dodatkowe_parametry_sledzace)
+                )
                 continue
             # Plik złożony wyłącznie z adresów jest listą źródeł: pobieramy strony,
             # a sama lista nie trafia do notatnika jako treść.
@@ -473,6 +483,24 @@ class _Handler(BaseHTTPRequestHandler):
                         grupa=grupa,
                     )
                 )
+
+        # Adresy znalezione w treści plików są dodawane na końcu i bez wyjątku od
+        # robots.txt, bo nie wskazał ich użytkownik wprost. Adres, który już jest
+        # na liście jawnych, nie jest dodawany drugi raz.
+        znane = {pozycja.adres_kanoniczny for pozycja in pozycje if pozycja.adres_kanoniczny}
+        for wpis in znalezione:
+            if wpis.kanoniczny in znane:
+                continue
+            znane.add(wpis.kanoniczny)
+            pozycje.append(
+                przyjmij_url(
+                    wpis.podany,
+                    moment,
+                    konfiguracja.dodatkowe_parametry_sledzace,
+                    grupa=grupa,
+                    wskazane_jawnie=False,
+                )
+            )
 
         def praca(postep: WywolanieZwrotnePostepu) -> WynikPrzetwarzania:
             return przetworz_projekt(pozycje, konfiguracja, nazwa_projektu=nazwa, postep=postep)
@@ -690,6 +718,21 @@ class _Handler(BaseHTTPRequestHandler):
         except BladGnb as blad:
             self._blad(400, "Nie można oznaczyć źródła", blad.komunikat)
             return
+        # Po weryfikacji źródło z sieci jest pobierane od nowa. Sama etykieta nie
+        # wystarcza, gdy użytkownik oczekuje, że aplikacja zajmie się materiałem.
+        try:
+            with self._serwer.rejestr.wylacznie():
+                wycofane = przygotuj_ponowne_pobranie(uklad, self._konfiguracja, identyfikator)
+        except ZadanieJuzTrwa as blad:
+            self._blad(409, "Inne przetwarzanie w toku", str(blad))
+            return
+        except BladGnb as blad:
+            self._blad(400, "Nie można pobrać źródła ponownie", blad.komunikat)
+            return
+        if wycofane is not None and not self._uruchom_zapisane_wejscia(
+            uklad, {}, dodatkowe_wejscia=(wycofane[0],)
+        ):
+            return
         self._przekieruj(sciezka_projektu(uklad.nazwa_projektu))
 
     def _usun_zrodlo(self, nazwa: str, identyfikator: str) -> None:
@@ -746,7 +789,10 @@ class _Handler(BaseHTTPRequestHandler):
         self._przekieruj(sciezka_projektu(uklad.nazwa_projektu))
 
     def _uruchom_zapisane_wejscia(
-        self, uklad: UkladProjektu, zastepcze_tresci: dict[str, Path]
+        self,
+        uklad: UkladProjektu,
+        zastepcze_tresci: dict[str, Path],
+        dodatkowe_wejscia: tuple[WejscieZapis, ...] = (),
     ) -> bool:
         """Uruchamia przebieg z zapisanych wejść projektu; zwraca fałsz po wysłaniu strony błędu.
 
@@ -757,6 +803,11 @@ class _Handler(BaseHTTPRequestHandler):
         """
         konfiguracja = self._konfiguracja
         pozycje = odtworz_wejscia(wczytaj_checkpoint_projektu(uklad), konfiguracja)
+        moment = datetime.now(UTC)
+        for wejscie in dodatkowe_wejscia:
+            pozycja = pozycja_z_wejscia(wejscie, konfiguracja, moment)
+            if pozycja is not None:
+                pozycje.append(pozycja)
         nazwa_projektu = uklad.nazwa_projektu
 
         def praca(postep: WywolanieZwrotnePostepu) -> WynikPrzetwarzania:

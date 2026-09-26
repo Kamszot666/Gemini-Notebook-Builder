@@ -246,6 +246,7 @@ def przyjmij_url(
     dodatkowe_parametry_sledzace: tuple[str, ...] = (),
     *,
     grupa: str | None = None,
+    wskazane_jawnie: bool = True,
 ) -> PozycjaWejsciowa:
     """Tworzy pozycję wejściową z adresu strony internetowej albo filmu.
 
@@ -281,6 +282,7 @@ def przyjmij_url(
         wejscie=wejscie,
         format_zrodla=format_zrodla,
         adres_kanoniczny=kanoniczny,
+        wskazane_jawnie=wskazane_jawnie,
         grupa=_grupa_znormalizowana(grupa),
     )
 

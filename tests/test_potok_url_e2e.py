@@ -741,3 +741,28 @@ def test_strona_z_fraza_logowania_trafia_do_materialow_do_sprawdzenia(tmp_path: 
     raport = wynik.sciezka_raportu.read_text(encoding="utf-8")
     assert "Materiały do sprawdzenia, liczba: 1" in raport
     assert _ADRES_ARTYKULU in raport
+
+
+def test_adres_znaleziony_w_pliku_podlega_robots_a_jawny_nie(tmp_path: Path) -> None:
+    serwer = _Serwer({"/robots.txt": httpx.Response(200, text="User-agent: *\nDisallow: /ukryte")})
+    pozycje = [
+        przyjmij_url("https://przyklad.pl/jawny/ukryte", _MOMENT),
+        przyjmij_url("https://przyklad.pl/ukryte/znaleziony", _MOMENT, wskazane_jawnie=False),
+    ]
+
+    wynik = przetworz_projekt(
+        pozycje,
+        _konfiguracja(tmp_path, respektuj_robots=True, wyjatek_robots_dla_zrodel_jawnych=True),
+        nazwa_projektu="Test znalezionych",
+        zegar=_zegar_krokowy(),
+        transport_http=serwer.transport(),
+    )
+
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    statusy = {zrodlo["pochodzenie"]: zrodlo["status"] for zrodlo in manifest["zrodla"]}
+    assert statusy["https://przyklad.pl/ukryte/znaleziony"] == "pominiete"
+    assert statusy["https://przyklad.pl/jawny/ukryte"] != "pominiete"
+    zapisane = json.loads((wynik.katalog_projektu / "checkpoint.json").read_text(encoding="utf-8"))
+    flagi = {wejscie["wartosc"]: wejscie["wskazane_jawnie"] for wejscie in zapisane["wejscia"]}
+    assert flagi["https://przyklad.pl/ukryte/znaleziony"] is False
+    assert flagi["https://przyklad.pl/jawny/ukryte"] is True

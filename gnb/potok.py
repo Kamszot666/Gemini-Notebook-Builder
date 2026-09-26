@@ -1397,6 +1397,7 @@ class _Wykonanie:
             grupa_pakowania=pozycja.grupa,
             tresc_zastapiona_plikiem=przygotowane.zastapiona_plikiem,
             archiwum=pozycja.archiwum,
+            zweryfikowane_recznie=identyfikator in self._checkpoint.zweryfikowane_wstepnie,
         )
         self._zapisz_checkpoint()
         self._loguj(
@@ -2748,7 +2749,11 @@ def _zadania_do_pobrania(
         zadania.append(
             (
                 identyfikator,
-                Zadanie(adres_pobierania=pozycja.wejscie.wartosc, klucz_kanoniczny=kanoniczny),
+                Zadanie(
+                    adres_pobierania=pozycja.wejscie.wartosc,
+                    klucz_kanoniczny=kanoniczny,
+                    wskazany_jawnie=pozycja.wskazane_jawnie,
+                ),
             )
         )
     return zadania
@@ -3051,24 +3056,30 @@ def _zapamietaj_wejscia(checkpoint: Checkpoint, pozycje: Sequence[PozycjaWejscio
     czternasta punkt trzeci CLAUDE.md, a z czego korzysta wznowienie z interfejsu
     WWW.
     """
-    widziane = {(wejscie.typ_wejscia, wejscie.wartosc) for wejscie in checkpoint.wejscia}
+    zapisane = {(wejscie.typ_wejscia, wejscie.wartosc): wejscie for wejscie in checkpoint.wejscia}
+    widziane = set(zapisane)
     for pozycja in pozycje:
         klucz = (pozycja.wejscie.typ_wejscia.value, pozycja.wejscie.wartosc)
         if klucz in widziane:
+            # Ten sam adres podany wprost i znaleziony w pliku jest źródłem
+            # jawnym, więc wyjątek od robots.txt nie może zależeć od kolejności.
+            if pozycja.wskazane_jawnie:
+                zapisane[klucz].wskazane_jawnie = True
             continue
         widziane.add(klucz)
-        checkpoint.wejscia.append(
-            WejscieZapis(
-                typ_wejscia=pozycja.wejscie.typ_wejscia.value,
-                wartosc=pozycja.wejscie.wartosc,
-                format_zrodla=pozycja.format_zrodla,
-                moment_dodania=pozycja.wejscie.moment_dodania.isoformat(),
-                grupa=pozycja.grupa,
-                wymus_nuty=pozycja.wymus_nuty,
-                archiwum=pozycja.archiwum,
-                sciezka_w_archiwum=pozycja.sciezka_w_archiwum,
-            )
+        nowe = WejscieZapis(
+            typ_wejscia=pozycja.wejscie.typ_wejscia.value,
+            wartosc=pozycja.wejscie.wartosc,
+            format_zrodla=pozycja.format_zrodla,
+            moment_dodania=pozycja.wejscie.moment_dodania.isoformat(),
+            grupa=pozycja.grupa,
+            wymus_nuty=pozycja.wymus_nuty,
+            wskazane_jawnie=pozycja.wskazane_jawnie,
+            archiwum=pozycja.archiwum,
+            sciezka_w_archiwum=pozycja.sciezka_w_archiwum,
         )
+        zapisane[klucz] = nowe
+        checkpoint.wejscia.append(nowe)
 
 
 def odtworz_wejscia(checkpoint: Checkpoint, konfiguracja: Konfiguracja) -> list[PozycjaWejsciowa]:
@@ -3105,6 +3116,7 @@ def pozycja_z_wejscia(
             moment,
             konfiguracja.dodatkowe_parametry_sledzace,
             grupa=wejscie.grupa,
+            wskazane_jawnie=wejscie.wskazane_jawnie,
         )
     if wejscie.typ_wejscia == TypWejscia.PLIK.value:
         return replace(

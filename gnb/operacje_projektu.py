@@ -38,7 +38,7 @@ from gnb.logging_pl.dziennik import (
     DziennikWazny,
     teraz_lokalny,
 )
-from gnb.persistence.checkpoint import Checkpoint, StanZrodla, wczytaj, zapisz
+from gnb.persistence.checkpoint import Checkpoint, StanZrodla, WejscieZapis, wczytaj, zapisz
 from gnb.persistence.pliki_wynikowe import (
     czlonkowie_grupy,
     usun_pliki_zrodla,
@@ -198,6 +198,58 @@ def usun_zrodlo_z_projektu(
         usuniete_pliki=tuple(usuniete),
         wymaga_przepakowania=wymaga_przepakowania,
     )
+
+
+TYPY_ZRODEL_SIECIOWYCH = frozenset({TypZrodla.STRONA_WWW.value, TypZrodla.YOUTUBE.value})
+
+
+def przygotuj_ponowne_pobranie(
+    uklad: UkladProjektu,
+    konfiguracja: Konfiguracja,
+    identyfikator: str,
+    *,
+    zegar_lokalny: Callable[[], datetime] = teraz_lokalny,
+) -> tuple[WejscieZapis, WynikUsuniecia] | None:
+    """Wycofuje zweryfikowane źródło sieciowe tak, by kolejny przebieg pobrał je od nowa.
+
+    Źródło jest usuwane z projektu tą samą drogą co przy ręcznym usunięciu, a jego
+    zapisane wejście wraca do wywołującego, który dodaje je do kolejnego przebiegu
+    jako ponownie podany adres. Identyfikator trafia do listy
+    `zweryfikowane_wstepnie`, więc nowo utworzone źródło od razu nosi znacznik
+    ręcznej weryfikacji i nie wraca do materiałów do sprawdzenia. Źródło, które
+    nie pochodzi z sieci, albo bez zapisanego wejścia daje ``None`` i nic nie
+    zmienia: jego treść nie ma skąd być pobrana ponownie.
+    """
+    checkpoint = wczytaj_checkpoint_projektu(uklad)
+    stan = checkpoint.zrodla.get(identyfikator)
+    if stan is None or stan.typ not in TYPY_ZRODEL_SIECIOWYCH:
+        return None
+    wejscie = _wejscie_zrodla(checkpoint, konfiguracja, identyfikator)
+    if wejscie is None:
+        return None
+    if identyfikator not in checkpoint.zweryfikowane_wstepnie:
+        checkpoint.zweryfikowane_wstepnie.append(identyfikator)
+    zapisz(uklad.checkpoint, checkpoint)
+    wynik = usun_zrodlo_z_projektu(uklad, konfiguracja, identyfikator, zegar_lokalny=zegar_lokalny)
+    return wejscie, wynik
+
+
+def _wejscie_zrodla(
+    checkpoint: Checkpoint, konfiguracja: Konfiguracja, identyfikator: str
+) -> WejscieZapis | None:
+    """Zwraca zapisane wejście, które prowadzi do źródła o podanym identyfikatorze."""
+    moment = datetime.now(UTC)
+    for wejscie in checkpoint.wejscia:
+        pozycja = pozycja_z_wejscia(wejscie, konfiguracja, moment)
+        if pozycja is None:
+            continue
+        try:
+            id_wejscia = waliduj_i_utworz_zrodlo(pozycja, konfiguracja, moment).identyfikator_zrodla
+        except BladGnb:
+            continue
+        if id_wejscia == identyfikator:
+            return wejscie
+    return None
 
 
 def _usun_wejscia_zrodla(

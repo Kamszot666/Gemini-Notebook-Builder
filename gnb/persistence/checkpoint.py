@@ -251,6 +251,10 @@ class WejscieZapis:
     # obraz ma być ponownie potraktowany jako materiał nutowy. Pole addytywne
     # z bezpieczną wartością domyślną, więc nie podnosi numeru schematu.
     wymus_nuty: bool = False
+    # Fałsz oznacza adres znaleziony w treści wysłanego pliku, a nie podany wprost
+    # przez użytkownika: dla takiego adresu obowiązuje kontrola robots.txt. Pole
+    # addytywne z bezpieczną wartością domyślną, więc nie podnosi numeru schematu.
+    wskazane_jawnie: bool = True
     # Wypełnione dla pliku rozpakowanego z archiwum ZIP: nazwa głównego archiwum
     # i droga pliku w nim. Pola addytywne z bezpieczną wartością domyślną.
     archiwum: str | None = None
@@ -279,6 +283,10 @@ class Checkpoint:
     wejscia: list[WejscieZapis] = field(default_factory=list)
     zastapione_pliki_grup: list[ZastapionyPlikGrupy] = field(default_factory=list)
     archiwa: list[StanArchiwum] = field(default_factory=list)
+    # Identyfikatory źródeł sieciowych, które użytkownik zweryfikował ręcznie przed
+    # ponownym pobraniem. Nowo utworzony stan takiego źródła dostaje od razu
+    # znacznik weryfikacji. Pole addytywne z pustą wartością domyślną.
+    zweryfikowane_wstepnie: list[str] = field(default_factory=list)
 
 
 def zapisz(sciezka: Path, checkpoint: Checkpoint) -> None:
@@ -475,6 +483,7 @@ def _checkpoint_do_slownika(checkpoint: Checkpoint) -> dict[str, Any]:
         "deduplikacja": _deduplikacja_do_slownika(checkpoint.deduplikacja),
         "wejscia": [_wejscie_do_slownika(wejscie) for wejscie in checkpoint.wejscia],
         "archiwa": [_archiwum_do_slownika(archiwum) for archiwum in checkpoint.archiwa],
+        "zweryfikowane_wstepnie": list(checkpoint.zweryfikowane_wstepnie),
         "zastapione_pliki_grup": [
             {"stara_nazwa": wpis.stara_nazwa, "nowa_nazwa": wpis.nowa_nazwa, "grupa": wpis.grupa}
             for wpis in checkpoint.zastapione_pliki_grup
@@ -491,6 +500,7 @@ def _wejscie_do_slownika(wejscie: WejscieZapis) -> dict[str, Any]:
         "moment_dodania": wejscie.moment_dodania,
         "grupa": wejscie.grupa,
         "wymus_nuty": wejscie.wymus_nuty,
+        "wskazane_jawnie": wejscie.wskazane_jawnie,
         "archiwum": wejscie.archiwum,
         "sciezka_w_archiwum": wejscie.sciezka_w_archiwum,
     }
@@ -618,6 +628,9 @@ def _checkpoint_ze_slownika(dane: dict[str, Any]) -> Checkpoint:
         wejscia=_wejscia_ze_slownika(dane.get("wejscia")),
         zastapione_pliki_grup=_zastapione_pliki_ze_slownika(dane.get("zastapione_pliki_grup")),
         archiwa=_archiwa_ze_slownika(dane.get("archiwa")),
+        zweryfikowane_wstepnie=[
+            wpis for wpis in (dane.get("zweryfikowane_wstepnie") or []) if isinstance(wpis, str)
+        ],
     )
 
 
@@ -696,6 +709,7 @@ def _wejscia_ze_slownika(dane: Any) -> list[WejscieZapis]:
                 moment_dodania=str(element.get("moment_dodania", "")),
                 grupa=_opcjonalny_tekst(element.get("grupa")),
                 wymus_nuty=bool(element.get("wymus_nuty", False)),
+                wskazane_jawnie=bool(element.get("wskazane_jawnie", True)),
                 archiwum=_opcjonalny_tekst(element.get("archiwum")),
                 sciezka_w_archiwum=_opcjonalny_tekst(element.get("sciezka_w_archiwum")),
             )

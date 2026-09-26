@@ -286,3 +286,69 @@ def test_zapis_pliku_zastepczego_nie_nadpisuje_wczesniejszego(tmp_path: Path) ->
     assert drugi.name == "strona_1.html"
     assert pierwszy.read_bytes() == b"pierwszy"
     assert drugi.read_bytes() == b"drugi"
+
+
+def test_ponowne_pobranie_wycofuje_zrodlo_sieciowe_i_zachowuje_weryfikacje(
+    tmp_path: Path,
+) -> None:
+    import httpx
+
+    from gnb.ingestion.wejscie import przyjmij_url
+    from gnb.operacje_projektu import przygotuj_ponowne_pobranie
+    from gnb.potok import pozycja_z_wejscia
+
+    zadania: list[str] = []
+    tresc = (Path(__file__).resolve().parent / "dane" / "artykul_oryginal.html").read_bytes()
+
+    def obsluz(zadanie: httpx.Request) -> httpx.Response:
+        zadania.append(zadanie.url.path)
+        if zadanie.url.path == "/robots.txt":
+            return httpx.Response(404)
+        return httpx.Response(200, content=tresc, headers={"content-type": "text/html"})
+
+    konfiguracja = Konfiguracja(
+        katalog_wynikow=tmp_path / "wyniki",
+        sciezka_cache=tmp_path / "cache.sqlite3",
+        uzywaj_cache=False,
+        respektuj_robots=False,
+        odstep_miedzy_zadaniami_sekundy=0.0,
+        liczba_ponowien=0,
+    )
+    transport = httpx.MockTransport(obsluz)
+    przetworz_projekt(
+        [przyjmij_url("https://przyklad.pl/artykul", _MOMENT)],
+        konfiguracja,
+        nazwa_projektu=_NAZWA,
+        zegar=_zegar_krokowy(),
+        transport_http=transport,
+    )
+    uklad = ustal_uklad(konfiguracja.katalog_wynikow, _NAZWA)
+    (identyfikator,) = wczytaj_checkpoint_projektu(uklad).zrodla
+
+    wycofane = przygotuj_ponowne_pobranie(uklad, konfiguracja, identyfikator)
+
+    assert wycofane is not None
+    assert identyfikator not in wczytaj_checkpoint_projektu(uklad).zrodla
+    pozycja = pozycja_z_wejscia(wycofane[0], konfiguracja, _MOMENT)
+    assert pozycja is not None
+    przetworz_projekt(
+        [*odtworz_wejscia(wczytaj_checkpoint_projektu(uklad), konfiguracja), pozycja],
+        konfiguracja,
+        nazwa_projektu=_NAZWA,
+        zegar=_zegar_krokowy(),
+        transport_http=transport,
+    )
+    stan = wczytaj_checkpoint_projektu(uklad).zrodla[identyfikator]
+    assert stan.zweryfikowane_recznie is True
+    assert zadania.count("/artykul") == 2
+
+
+def test_ponowne_pobranie_nie_dotyczy_tekstu_wklejonego(tmp_path: Path) -> None:
+    from gnb.operacje_projektu import przygotuj_ponowne_pobranie
+
+    _przetworz(tmp_path, _pozycje(_TEKST_A))
+    uklad = _uklad(tmp_path)
+    (identyfikator,) = wczytaj_checkpoint_projektu(uklad).zrodla
+
+    assert przygotuj_ponowne_pobranie(uklad, _konfiguracja(tmp_path), identyfikator) is None
+    assert identyfikator in wczytaj_checkpoint_projektu(uklad).zrodla

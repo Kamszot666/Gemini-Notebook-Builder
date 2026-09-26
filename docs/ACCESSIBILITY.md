@@ -102,12 +102,12 @@ Gdy w przeglądarce działa JavaScript, region odpytuje stan od razu po
 wczytaniu strony, a potem co cztery sekundy — dzięki temu krótki przebieg,
 trwający kilka sekund, zdąża pokazać choć jeden pośredni komunikat postępu,
 zamiast milczeć aż do zakończenia. Gdy przetwarzanie się skończy, region
-ogłasza jedno zdanie: „Przetwarzanie zakończone. Raport jest poniżej, pod
-nagłówkiem Raport końcowy.”, a podsumowanie liczbowe, pełna treść raportu
-i formularz dosyłania kolejnych źródeł pojawiają się pod nim od razu, bez
-przeładowania strony i bez przeniesienia fokusu. Nagłówek „Stan przetwarzania”
-zmienia się razem z regionem, więc nie zostaje nieaktualny do czasu ręcznego
-odświeżenia.
+ogłasza jedno zdanie: „Przetwarzanie zakończone. Aktywuj odnośnik „Pokaż wyniki
+przetwarzania”.”, a odnośnik o tej nazwie pojawia się pod regionem. Strona
+niczego więcej nie przebudowuje w miejscu, bo wstawianie całego raportu przy
+działającym NVDA przenosiło fokus w nieprzewidywalne miejsca; wyniki pokazuje
+dopiero ponowne wczytanie strony po aktywowaniu odnośnika. Nagłówek „Stan
+przetwarzania” zmienia się razem z regionem.
 
 Gdy JavaScript jest wyłączony, region pokazuje stan z chwili wczytania strony.
 Aktualny stan sprawdzasz, aktywując odnośnik „Odśwież stan”, który jest zwykłym
@@ -120,10 +120,18 @@ karcie, z dopiskiem „(otwiera się w nowej karcie)” dla czytnika ekranu — 
 otwarcie karty nie było zaskoczeniem. Adres innego schematu, na przykład
 `javascript:`, nigdy nie staje się odnośnikiem.
 
-Pod raportem jest formularz „Dodaj kolejne źródła do tego projektu” z tymi
-samymi polami co formularz nowego projektu na stronie głównej, bez pola nazwy
-— nazwa jest już znana z adresu strony. Pole grupy tematycznej jest domyślnie
-wypełnione nazwą grupy ostatniego wysłania. Wysłanie tego formularza uruchamia
+Na stronie głównej pola nazwy projektu, tekstu i grupy nie mają osobnych
+etykiet nad polem: opis jest podpowiedzią wewnątrz pola („Nazwa projektu
+(wymagana)”, „tutaj wklej tekst”, „Nazwa grupy tematycznej (wymagana)”), a nazwę
+dla czytnika ekranu niesie atrybut aria-label. Nazwa grupy jest wymagana.
+
+Pod raportem jest formularz „Dodaj kolejne źródła” z polami zbudowanymi tak
+samo, bez pola nazwy — nazwa jest już znana z adresu strony. Pole grupy jest
+polem tekstowym z listą podpowiedzi zawierającą grupy, które projekt już zna,
+i jest domyślnie wypełnione ostatnią z nich, więc kolejne źródło trafia do
+istniejącego pliku grupy bez przepisywania nazwy. Adres bez schematu http lub
+https jest zgłaszany jako błąd walidacji przy polu adresów; program nie
+zgaduje brakującego schematu. Wysłanie tego formularza uruchamia
 kolejny przebieg w tym samym projekcie, tą samą ścieżką co formularz strony
 głównej z nazwą już istniejącego projektu; błędy walidacji wracają na tę samą
 stronę projektu, powiązane z polem tak samo jak w formularzu strony głównej.

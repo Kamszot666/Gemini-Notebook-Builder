@@ -42,7 +42,7 @@ def test_kazdy_formularz_ma_token_csrf_i_metode_post() -> None:
 def test_pole_pliku_ma_etykiete_a_przyciski_opisuja_sie_naglowkiem_zrodla() -> None:
     html = sekcje_zrodel("Projekt", [_zrodlo()], [], _TOKEN)
 
-    assert 'for="zastap-strona_www-abc123"' in html
+    assert 'aria-label="Plik z ręcznie zapisaną treścią tego źródła"' in html
     assert 'id="zastap-strona_www-abc123"' in html
     assert 'id="zrodlo-strona_www-abc123-opis"' in html
     assert html.count('aria-describedby="zrodlo-strona_www-abc123-opis"') == 4

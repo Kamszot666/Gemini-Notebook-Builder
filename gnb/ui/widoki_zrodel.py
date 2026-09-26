@@ -190,8 +190,7 @@ def _sekcja_zrodel(sciezka: str, zrodla: Sequence[ZrodloDoWidoku], token_csrf: s
     return (
         '<div class="blok" id="zrodla-projektu">\n'
         "<h2>Źródła projektu</h2>\n"
-        f"<p>Liczba źródeł: {len(zrodla)}. Przy każdym źródle są jego działania: "
-        "oznaczenie jako zweryfikowane, zastąpienie treści plikiem i usunięcie z projektu.</p>\n"
+        f"<p>Liczba źródeł: {len(zrodla)}.</p>\n"
         f'<ul class="zrodla">\n{pozycje}\n</ul>\n</div>'
     )
 
@@ -239,8 +238,8 @@ def _pozycja_zrodla(sciezka: str, zrodlo: ZrodloDoWidoku, token_csrf: str) -> st
             f'<form method="post" action="{escapuj(adres_zrodla)}/zastap" '
             'enctype="multipart/form-data">\n'
             f"{_pole_csrf(token_csrf)}\n"
-            f'<label for="zastap-{id_el}">Plik z ręcznie zapisaną treścią tego źródła</label>\n'
             f'<input type="file" id="zastap-{id_el}" name="plik" required '
+            'aria-label="Plik z ręcznie zapisaną treścią tego źródła" '
             f'aria-describedby="{id_opisu}">\n'
             f'<button type="submit" aria-describedby="{id_opisu}">'
             "Zastąp treść plikiem</button>\n</form>"

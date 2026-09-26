@@ -58,7 +58,12 @@ class _Klient:
         return self._wyslij("GET", sciezka)
 
     def post(
-        self, sciezka: str, pola: dict[str, str], *, plik: tuple[str, bytes] | None = None
+        self,
+        sciezka: str,
+        pola: dict[str, str],
+        *,
+        plik: tuple[str, bytes] | None = None,
+        pole_pliku: str = "plik",
     ) -> tuple[http.client.HTTPResponse, str]:
         czesci = "".join(
             f'--{_GRANICA}\r\nContent-Disposition: form-data; name="{nazwa}"\r\n\r\n{wartosc}\r\n'
@@ -108,7 +113,7 @@ def _czekaj(rejestr: RejestrZadan) -> None:
     raise AssertionError("przetwarzanie nie zakończyło się w oczekiwanym czasie")
 
 
-def _utworz_projekt(klient: _Klient, rejestr: RejestrZadan, tresc: str, grupa: str = "") -> None:
+def _utworz_projekt(klient: _Klient, rejestr: RejestrZadan, tresc: str, grupa: str = "G") -> None:
     odpowiedz, _ = klient.post(
         "/projekt/nowy",
         {
@@ -167,7 +172,7 @@ def test_strona_projektu_pokazuje_zrodla_z_dzialaniami_powiazanymi_z_nazwa_zrodl
     opis = f"zrodlo-{identyfikator}-opis"
     assert f'id="{opis}"' in strona
     assert strona.count(f'aria-describedby="{opis}"') >= 3
-    assert 'for="zastap-' in strona and 'id="zastap-' in strona
+    assert 'aria-label="Plik z ręcznie zapisaną treścią tego źródła"' in strona
 
 
 def test_nazwa_zrodla_jest_escapowana_w_wykazie(
@@ -387,3 +392,87 @@ def test_nieznane_dzialanie_i_nieznane_zrodlo_daja_404(
 
     assert nieznane_dzialanie.status == 404
     assert nieznane_zrodlo.status == 404
+
+
+def test_dosylanie_adresu_bez_schematu_daje_blad_walidacji_a_nie_500(
+    srodowisko: tuple[_Klient, RejestrZadan, Konfiguracja],
+) -> None:
+    klient, rejestr, _ = srodowisko
+    _utworz_projekt(klient, rejestr, _TEKST_A)
+
+    odpowiedz, strona = klient.post(
+        f"/projekt/{quote(_NAZWA, safe='')}/dosylanie",
+        {"token_csrf": klient.token(), "adresy": "www.wp.pl", "grupa": "G"},
+    )
+
+    assert odpowiedz.status == 400
+    assert "nie zaczyna się od http albo https" in strona
+    assert "www.wp.pl" in strona
+
+
+def test_dosylanie_pliku_z_dysku_dodaje_zrodlo(
+    srodowisko: tuple[_Klient, RejestrZadan, Konfiguracja],
+) -> None:
+    klient, rejestr, konfiguracja = srodowisko
+    _utworz_projekt(klient, rejestr, _TEKST_A)
+
+    odpowiedz, _ = klient.post(
+        f"/projekt/{quote(_NAZWA, safe='')}/dosylanie",
+        {"token_csrf": klient.token(), "grupa": "G"},
+        plik=("dodatkowy.txt", "Treść dodatkowego pliku z dysku.".encode()),
+        pole_pliku="pliki",
+    )
+    assert odpowiedz.status == 303
+    _czekaj(rejestr)
+
+    pochodzenia = {stan.pochodzenie for stan in _checkpoint(konfiguracja).zrodla.values()}
+    assert "dodatkowy.txt" in pochodzenia
+
+
+def test_nowy_projekt_bez_nazwy_grupy_daje_blad_walidacji(
+    srodowisko: tuple[_Klient, RejestrZadan, Konfiguracja],
+) -> None:
+    klient, _, _ = srodowisko
+
+    odpowiedz, strona = klient.post(
+        "/projekt/nowy",
+        {"token_csrf": klient.token(), "nazwa_projektu": _NAZWA, "tekst": _TEKST_A, "grupa": ""},
+    )
+
+    assert odpowiedz.status == 400
+    assert "Nazwa grupy tematycznej jest wymagana." in strona
+
+
+def test_dosylanie_bez_nazwy_grupy_daje_blad_walidacji(
+    srodowisko: tuple[_Klient, RejestrZadan, Konfiguracja],
+) -> None:
+    klient, rejestr, _ = srodowisko
+    _utworz_projekt(klient, rejestr, _TEKST_A)
+
+    odpowiedz, strona = klient.post(
+        f"/projekt/{quote(_NAZWA, safe='')}/dosylanie",
+        {"token_csrf": klient.token(), "tekst": "Drugi tekst.", "grupa": ""},
+    )
+
+    assert odpowiedz.status == 400
+    assert "Nazwa grupy tematycznej jest wymagana." in strona
+
+
+def test_adres_bez_schematu_w_nowym_projekcie_nie_tworzy_katalogu(
+    srodowisko: tuple[_Klient, RejestrZadan, Konfiguracja],
+) -> None:
+    klient, _, konfiguracja = srodowisko
+
+    odpowiedz, strona = klient.post(
+        "/projekt/nowy",
+        {
+            "token_csrf": klient.token(),
+            "nazwa_projektu": _NAZWA,
+            "adresy": "www.wp.pl",
+            "grupa": "G",
+        },
+    )
+
+    assert odpowiedz.status == 400
+    assert "nie zaczyna się od http albo https" in strona
+    assert not _uklad(konfiguracja).katalog_projektu.exists()

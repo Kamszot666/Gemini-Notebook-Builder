@@ -325,26 +325,30 @@ class _Handler(BaseHTTPRequestHandler):
             bledy=bledy,
             aktywny_projekt_skrotu=self._serwer.aktywny_projekt_skrotu.aktualny(),
             ostatni_komunikat_skrotu=self._serwer.ostatni_komunikat_skrotu.aktualny(),
-            grupa_ostatniego_wyslania=self._grupa_ostatniego_wyslania(uklad),
+            grupy_projektu=self._grupy_projektu(uklad),
             dane_dosylania=dane_dosylania,
             bledy_dosylania=bledy_dosylania,
             zrodla_html=self._zrodla_html(uklad, token),
         )
         self._wyslij_html(kod, html, token=token)
 
-    def _grupa_ostatniego_wyslania(self, uklad: UkladProjektu) -> str:
-        """Nazwa grupy tematycznej ostatniego wejścia zapisanego w checkpoincie.
+    def _grupy_projektu(self, uklad: UkladProjektu) -> list[str]:
+        """Nazwy grup tematycznych znanych projektowi, w kolejności pierwszego użycia.
 
-        Wypełnia nią domyślnie pole formularza dosyłania kolejnych źródeł, żeby
-        trafiały do tego samego pliku grupy bez przepisywania nazwy — pozycja
-        czwarta listy zmian etapu czternastego.
+        Trafiają na listę podpowiedzi pola grupy w formularzu dosyłania, a ostatnia
+        z nich jest wartością domyślną tego pola, żeby kolejne źródła trafiały do
+        tego samego pliku grupy bez przepisywania nazwy.
         """
         if not uklad.checkpoint.is_file():
-            return ""
+            return []
         checkpoint = wczytaj(uklad.checkpoint)
-        if checkpoint is None or not checkpoint.wejscia:
-            return ""
-        return checkpoint.wejscia[-1].grupa or ""
+        if checkpoint is None:
+            return []
+        grupy: list[str] = []
+        for wejscie in checkpoint.wejscia:
+            if wejscie.grupa and wejscie.grupa not in grupy:
+                grupy.append(wejscie.grupa)
+        return grupy
 
     def _pokaz_prompt(self, nazwa: str) -> None:
         uklad = ustal_uklad(self._konfiguracja.katalog_wynikow, nazwa)
@@ -359,10 +363,9 @@ class _Handler(BaseHTTPRequestHandler):
     def _pokaz_postep(self) -> None:
         """Zwraca stan bieżącego zadania jako JSON, odpytywane przez skrypt strony projektu.
 
-        Gdy zadanie właśnie się zakończyło, odpowiedź niesie dodatkowo gotowy
-        fragment HTML z podsumowaniem, raportem i formularzem dosyłania —
-        pozycja pierwsza listy zmian etapu czternastego: strona wstawia go pod
-        regionem stanu bez przeładowania i bez przenoszenia fokusu.
+        Odpowiedź niesie tylko krótkie zdania stanu. Strona niczego przy tym nie
+        przebudowuje, żeby nie przenosić fokusu czytnika ekranu; po zakończeniu
+        dodaje jedynie odnośnik do ponownego wczytania strony z wynikami.
         """
         informacja = self._serwer.rejestr.informacja()
         if informacja is None:
@@ -373,26 +376,10 @@ class _Handler(BaseHTTPRequestHandler):
         dane = {"komunikat": informacja.komunikat_postepu, "stan": informacja.stan.value}
         if informacja.stan is StanZadania.ZAKONCZONE and informacja.wynik is not None:
             uklad = ustal_uklad(self._konfiguracja.katalog_wynikow, informacja.nazwa_projektu)
-            raport = _odczytaj_tekst(uklad.raport)
-            if raport is not None:
-                podsumowanie = PodsumowanieWyniku(
-                    liczba_przetworzonych=informacja.wynik.liczba_przetworzonych,
-                    liczba_pominietych=informacja.wynik.liczba_pominietych,
-                    liczba_bledow=informacja.wynik.liczba_bledow,
-                    katalog_projektu=str(informacja.wynik.katalog_projektu),
-                    wznowiono=informacja.wynik.wznowiono,
-                )
+            if _odczytaj_tekst(uklad.raport) is not None:
                 dane["naglowek"] = "Stan przetwarzania: zakończone"
                 dane["komunikat"] = (
-                    "Przetwarzanie zakończone. Raport jest poniżej, pod nagłówkiem Raport końcowy."
-                )
-                dane["fragment"] = widoki.fragment_po_zakonczeniu(
-                    podsumowanie,
-                    raport,
-                    sciezka_projektu(informacja.nazwa_projektu),
-                    self._grupa_ostatniego_wyslania(uklad),
-                    self._token_sesji(),
-                    self._zrodla_html(uklad, self._token_sesji()),
+                    "Przetwarzanie zakończone. Aktywuj odnośnik „Pokaż wyniki przetwarzania”."
                 )
         elif informacja.stan is StanZadania.BLAD:
             dane["naglowek"] = "Stan przetwarzania: zakończone błędem"
@@ -419,6 +406,8 @@ class _Handler(BaseHTTPRequestHandler):
         bledy: list[BladPola] = []
         if not dane.nazwa_projektu:
             bledy.append(BladPola("nazwa_projektu", "Nazwa projektu jest wymagana."))
+        if not dane.grupa:
+            bledy.append(BladPola("grupa", "Nazwa grupy tematycznej jest wymagana."))
 
         adresy = [wiersz.strip() for wiersz in dane.adresy.splitlines() if wiersz.strip()]
         pliki = [plik for plik in wynik_formularza.pliki if plik.zawartosc]
@@ -438,12 +427,16 @@ class _Handler(BaseHTTPRequestHandler):
             self._pokaz_strone_glowna(kod=400, dane=dane, bledy=bledy)
             return
 
-        grupa = dane.grupa or None
         try:
-            self._uruchom_nowy_projekt(nazwa_bezpieczna, dane, adresy, pliki, grupa)
+            self._uruchom_nowy_projekt(nazwa_bezpieczna, dane, adresy, pliki, dane.grupa)
         except ZadanieJuzTrwa as blad:
             self._pokaz_strone_glowna(
                 kod=409, dane=dane, bledy=[BladPola("nazwa_projektu", str(blad))]
+            )
+            return
+        except BladGnb as blad:
+            self._pokaz_strone_glowna(
+                kod=400, dane=dane, bledy=[BladPola("adresy", blad.komunikat)]
             )
             return
         self._przekieruj(sciezka_projektu(nazwa_bezpieczna))
@@ -454,12 +447,10 @@ class _Handler(BaseHTTPRequestHandler):
         dane: DaneFormularzaProjektu,
         adresy: list[str],
         pliki: list[formularze.PlikFormularza],
-        grupa: str | None,
+        grupa: str,
     ) -> None:
+        """Przyjmuje wejścia i uruchamia przebieg; błędny adres kończy się przed katalogiem."""
         konfiguracja = self._konfiguracja
-        uklad = ustal_uklad(konfiguracja.katalog_wynikow, nazwa)
-        utworz_katalogi(uklad, z_materialami_zrodlowymi=konfiguracja.zachowuj_oryginaly)
-
         moment = datetime.now(UTC)
         pozycje: list[PozycjaWejsciowa] = []
         if dane.tekst.strip():
@@ -468,6 +459,8 @@ class _Handler(BaseHTTPRequestHandler):
             pozycje.append(
                 przyjmij_url(adres, moment, konfiguracja.dodatkowe_parametry_sledzace, grupa=grupa)
             )
+        uklad = ustal_uklad(konfiguracja.katalog_wynikow, nazwa)
+        utworz_katalogi(uklad, z_materialami_zrodlowymi=konfiguracja.zachowuj_oryginaly)
         for plik in pliki:
             sciezka = self._zapisz_plik_wejsciowy(uklad.pliki_wejsciowe, plik)
             pozycje.append(przyjmij_plik(sciezka, moment, grupa=grupa))
@@ -513,21 +506,30 @@ class _Handler(BaseHTTPRequestHandler):
                     "dosylanie-tekst", "Podaj przynajmniej jedno źródło: tekst, adres albo plik."
                 )
             )
+        if not dane.grupa:
+            bledy.append(BladPola("dosylanie-grupa", "Nazwa grupy tematycznej jest wymagana."))
         if bledy:
             self._pokaz_projekt(
                 uklad.nazwa_projektu, kod=400, dane_dosylania=dane, bledy_dosylania=bledy
             )
             return
 
-        grupa = dane.grupa or None
         try:
-            self._uruchom_nowy_projekt(uklad.nazwa_projektu, dane, adresy, pliki, grupa)
+            self._uruchom_nowy_projekt(uklad.nazwa_projektu, dane, adresy, pliki, dane.grupa)
         except ZadanieJuzTrwa as blad:
             self._pokaz_projekt(
                 uklad.nazwa_projektu,
                 kod=409,
                 dane_dosylania=dane,
                 bledy_dosylania=[BladPola("dosylanie-tekst", str(blad))],
+            )
+            return
+        except BladGnb as blad:
+            self._pokaz_projekt(
+                uklad.nazwa_projektu,
+                kod=400,
+                dane_dosylania=dane,
+                bledy_dosylania=[BladPola("dosylanie-adresy", blad.komunikat)],
             )
             return
         self._przekieruj(sciezka_projektu(uklad.nazwa_projektu))

@@ -402,6 +402,8 @@ Pełny zapis każdej pozycji, z objawem, przyczyną i propozycją, jest w `docs/
 7. Kolejka globalnego skrótu żyje tylko w pamięci procesu serwera; utrata przy zamknięciu w trakcie przetwarzania jest logowana, ale nieodzyskiwana.
 8. Zamknięte, naprawa `naprawa-deduplikacja-zrodel-doslanych`: źródła dosłane w kolejnym przebiegu są porównywane z już spakowanymi, decyduje lista `deduplikacja.porownane`.
 
+9. Brak danych językowych Tesseracta (`pol.traineddata`) daje źródłu status `blad`, nie `pominiete`, choć brak narzędzia opcjonalnego jest od pull requestu 30 pominięciem. Niezmienione; szczegóły w `docs/DECYZJE_I_ZAGADNIENIA.md`, punkt 9.
+
 ## 19. Kryterium ukończenia funkcji
 
 Funkcja jest ukończona, gdy jednocześnie: jest zaimplementowana, ma testy sprawdzające rzeczywiste działanie oraz jest opisana w dokumentacji. Dokumentacja nie może opisywać funkcji, których aplikacja nie posiada.

@@ -310,7 +310,9 @@ def test_uszkodzone_archiwum_nie_zatrzymuje_pozostalych_zrodel(tmp_path: Path) -
     assert _zrodla(wynik)["zwykly.txt"]["status"] == "spakowane"
 
 
-def test_obrazy_z_archiwum_trafiaja_do_wspolnego_tematycznego_pliku_pdf(tmp_path: Path) -> None:
+def test_obrazy_z_archiwum_trafiaja_do_wspolnego_tematycznego_pliku_pdf(
+    tmp_path: Path, wymaga_ocr_pol: None
+) -> None:
     """Obraz z archiwum dostaje domyślną grupę obrazów jak każdy obraz podany bez grupy."""
     katalog_danych = Path(__file__).resolve().parent / "dane"
     archiwum = _zip(

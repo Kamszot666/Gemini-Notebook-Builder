@@ -100,16 +100,26 @@ class _Profil:
 def deduplikuj(
     zrodla: Sequence[ZrodloDoDeduplikacji],
     ustawienia: UstawieniaDeduplikacji | None = None,
+    bazowe: Sequence[ZrodloDoDeduplikacji] = (),
 ) -> WynikDeduplikacjiZbioru:
     """Porównuje wszystkie źródła i zwraca komplet decyzji deduplikacji.
 
     Wynik jest deterministyczny: źródła są przetwarzane w kolejności rosnących
     identyfikatorów, a pierwsze źródło z grupy podobnych zostaje reprezentantem.
+
+    Źródła bazowe to te, które zostały już wcześniej rozstrzygnięte i mogły
+    trafić do użytkownika, na przykład spakowane w poprzednim przebiegu. Są
+    z góry reprezentantami: nowe źródło jest z nimi porównywane, ale bazowe
+    nigdy nie zostaje duplikatem, nawet gdy ma niższy identyfikator. Między
+    sobą źródła bazowe nie są porównywane.
     """
     ustawienia = ustawienia or UstawieniaDeduplikacji()
     uporzadkowane = sorted(zrodla, key=lambda zrodlo: zrodlo.identyfikator)
 
-    reprezentanci: list[_Profil] = []
+    reprezentanci: list[_Profil] = [
+        _zbuduj_profil(zrodlo, ustawienia)
+        for zrodlo in sorted(bazowe, key=lambda zrodlo: zrodlo.identyfikator)
+    ]
     decyzje: list[DecyzjaDeduplikacji] = []
     duplikaty: set[str] = set()
     do_przegladu: set[str] = set()

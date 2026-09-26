@@ -245,3 +245,87 @@ def test_tekst_wklejony_i_plik_o_tej_samej_tresci_sa_duplikatem(tmp_path: Path) 
     assert wynik.liczba_przetworzonych == 1
     manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
     assert sorted(z["status"] for z in manifest["zrodla"]) == ["duplikat", "spakowane"]
+
+
+_TRESC_BAZOWA = (
+    "Baza wiedzy dla asystenta AI jest lepsza, gdy zawiera mniej powtorzen. "
+    "Najczestszym bledem jest wrzucanie do jednego zbioru wszystkiego naraz. "
+    "Drugim bledem jest usuwanie materialow tylko dlatego, ze sa podobne."
+)
+
+
+def _pozycja_z_pliku(katalog: Path, nazwa: str, tresc: str) -> PozycjaWejsciowa:
+    katalog.mkdir(exist_ok=True)
+    (katalog / nazwa).write_text(tresc, encoding="utf-8")
+    return przyjmij_plik(katalog / nazwa, datetime(2026, 8, 29, 9, 0, tzinfo=UTC))
+
+
+def test_duplikat_doslany_w_kolejnym_przebiegu_jest_wykrywany(tmp_path: Path) -> None:
+    """Źródło dosłane później jest porównywane z już spakowanymi, a duplikatem zostaje nowe."""
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path / "wyniki")
+    katalog = tmp_path / "wejscia"
+
+    pierwsze = przetworz_projekt(
+        [_pozycja_z_pliku(katalog, "wersja_a.txt", _TRESC_BAZOWA)],
+        konfiguracja,
+        nazwa_projektu="Test dosyłania",
+        zegar=_zegar_krokowy(),
+    )
+    drugie = przetworz_projekt(
+        [_pozycja_z_pliku(katalog, "wersja_b.txt", f"  {_TRESC_BAZOWA.upper()}  \n\n")],
+        konfiguracja,
+        nazwa_projektu="Test dosyłania",
+        zegar=_zegar_krokowy(),
+    )
+
+    assert drugie.wznowiono is True
+    manifest = json.loads(drugie.sciezka_manifestu.read_text(encoding="utf-8"))
+    statusy = {
+        z["pochodzenie"].rsplit("/", 1)[-1].rsplit("\\", 1)[-1]: z for z in manifest["zrodla"]
+    }
+    assert statusy["wersja_a.txt"]["status"] == "spakowane"
+    assert statusy["wersja_b.txt"]["status"] == "duplikat"
+
+    pliki = list((drugie.katalog_projektu / "pliki_wynikowe").glob("*.txt"))
+    assert len(pliki) == 1
+    assert pierwsze.katalog_projektu == drugie.katalog_projektu
+
+    raport = drugie.sciezka_raportu.read_text(encoding="utf-8")
+    assert "Liczba wykrytych duplikatów: 1" in raport
+
+
+def test_trzeci_przebieg_nie_powtarza_decyzji_z_drugiego(tmp_path: Path) -> None:
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path / "wyniki")
+    katalog = tmp_path / "wejscia"
+    nazwa = "Test powtórzeń decyzji"
+
+    przetworz_projekt(
+        [_pozycja_z_pliku(katalog, "wersja_a.txt", _TRESC_BAZOWA)],
+        konfiguracja,
+        nazwa_projektu=nazwa,
+        zegar=_zegar_krokowy(),
+    )
+    przetworz_projekt(
+        [_pozycja_z_pliku(katalog, "wersja_b.txt", f"  {_TRESC_BAZOWA.upper()}  \n\n")],
+        konfiguracja,
+        nazwa_projektu=nazwa,
+        zegar=_zegar_krokowy(),
+    )
+    trzecie = przetworz_projekt(
+        [
+            _pozycja_z_pliku(
+                katalog, "osobny.txt", "Zupelnie inny tekst o pogodzie, mgle nad rzeka i rzece."
+            )
+        ],
+        konfiguracja,
+        nazwa_projektu=nazwa,
+        zegar=_zegar_krokowy(),
+    )
+
+    manifest = json.loads(trzecie.sciezka_manifestu.read_text(encoding="utf-8"))
+    assert len(manifest["deduplikacja"]) == 1
+    assert sorted(z["status"] for z in manifest["zrodla"]) == [
+        "duplikat",
+        "spakowane",
+        "spakowane",
+    ]

@@ -581,3 +581,22 @@ def test_uszkodzony_wpis_zastapionego_pliku_jest_pomijany_a_nie_wywraca_odczytu(
 
     assert odczytany is not None
     assert [wpis.stara_nazwa for wpis in odczytany.zastapione_pliki_grup] == ["a.txt"]
+
+
+def test_plik_ze_stanem_deduplikacji_bez_listy_porownanych_wczytuje_sie_z_pusta_lista(
+    tmp_path: Path,
+) -> None:
+    """Lista porównanych źródeł jest polem addytywnym; starszy plik jej nie ma.
+
+    Tekst jest wpisany ręcznie, tak jak zapisywała go wersja sprzed dodania pola.
+    """
+    dane = json.loads(_CHECKPOINT_W_WERSJI_TRZECIEJ)
+    dane["deduplikacja"] = {"wykonana": True, "decyzje": []}
+    sciezka = tmp_path / "checkpoint.json"
+    sciezka.write_text(json.dumps(dane, ensure_ascii=False), encoding="utf-8")
+
+    odczytany = wczytaj(sciezka)
+
+    assert odczytany is not None
+    assert odczytany.deduplikacja.wykonana is True
+    assert odczytany.deduplikacja.porownane == []

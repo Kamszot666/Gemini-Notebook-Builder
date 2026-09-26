@@ -218,10 +218,20 @@ class StanDeduplikacji:
 
     `wykonana` pozwala pominąć powtórne porównanie po wznowieniu pracy, gdy
     przerwanie nastąpiło już po deduplikacji, a przed zapisem plików wynikowych.
+    Od naprawy dosyłania znaczy tylko „wykonana co najmniej raz”: o tym, czy
+    dane źródło było już porównane, decyduje lista `porownane`.
+
+    `porownane` to identyfikatory źródeł, które przeszły porównanie w którymś
+    z przebiegów. Źródło dosłane w kolejnym przebiegu tam nie występuje, więc
+    jest porównywane z pozostałymi; źródło porównane już raz nie jest
+    porównywane ponownie, dzięki czemu wznowienie nie powtarza decyzji. Pole
+    ma pustą wartość domyślną, więc starszy plik wczytuje się bez zmiany
+    numeru schematu.
     """
 
     wykonana: bool = False
     decyzje: list[DecyzjaDeduplikacjiZapis] = field(default_factory=list)
+    porownane: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -531,6 +541,7 @@ def _archiwum_do_slownika(archiwum: StanArchiwum) -> dict[str, Any]:
 def _deduplikacja_do_slownika(stan: StanDeduplikacji) -> dict[str, Any]:
     return {
         "wykonana": stan.wykonana,
+        "porownane": list(stan.porownane),
         "decyzje": [
             {
                 "identyfikator_zrodla_glownego": decyzja.identyfikator_zrodla_glownego,
@@ -731,7 +742,13 @@ def _deduplikacja_ze_slownika(dane: Any) -> StanDeduplikacji:
         for element in surowe_decyzje
         if isinstance(element, dict)
     ]
-    return StanDeduplikacji(wykonana=bool(dane.get("wykonana", False)), decyzje=decyzje)
+    return StanDeduplikacji(
+        wykonana=bool(dane.get("wykonana", False)),
+        decyzje=decyzje,
+        porownane=[
+            element for element in (dane.get("porownane") or []) if isinstance(element, str)
+        ],
+    )
 
 
 def _decyzja_deduplikacji_ze_slownika(dane: dict[str, Any]) -> DecyzjaDeduplikacjiZapis:

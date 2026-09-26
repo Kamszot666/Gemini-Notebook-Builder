@@ -200,4 +200,4 @@ def test_przyjecie_pliku_ponad_limit_nie_dodaje_adresow_i_niesie_ostrzezenie(
     assert przyjecie.adresy_znalezione == ()
     assert przyjecie.ostrzezenie is not None
     assert "limit_adresow_z_pliku" in przyjecie.ostrzezenie
-    assert przyjecie.pozycje[0].ostrzezenia_wejscia == (przyjecie.ostrzezenie,)
+    assert len(przyjecie.pozycje) == 1

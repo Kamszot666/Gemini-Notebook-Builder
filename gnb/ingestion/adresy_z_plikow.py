@@ -13,15 +13,15 @@ wyłącznie adresy zapisane w widocznej treści.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 from gnb.core.konfiguracja import Konfiguracja
 from gnb.ingestion.lista_url import (
-    KOMUNIKAT_LIMIT_ADRESOW_Z_PLIKU,
     AdresWejsciowy,
     adresy_z_pliku_z_limitem,
+    ostrzezenie_o_limicie_adresow,
     rozpoznaj_liste_adresow_w_pliku,
 )
 from gnb.ingestion.wejscie import PozycjaWejsciowa, przyjmij_plik, przyjmij_url
@@ -35,7 +35,9 @@ class PrzyjeciePliku:
     a `jest_lista_adresow` jest prawdą. Dla zwykłego pliku `pozycje` zawiera sam
     plik, a `adresy_znalezione` adresy jawne z jego treści, które wywołujący
     dołącza funkcją `dolacz_adresy_znalezione`. Pole `ostrzezenie` jest
-    ustawione po przekroczeniu limitu adresów z jednego pliku.
+    ustawione po przekroczeniu limitu adresów z jednego pliku i służy tylko do
+    wypisania komunikatu; do raportu ostrzeżenie trafia z potoku, który ustala je
+    z zawartości pliku podczas przetwarzania.
     """
 
     pozycje: tuple[PozycjaWejsciowa, ...]
@@ -69,15 +71,11 @@ def przyjmij_plik_z_adresami(
     z_pliku = adresy_z_pliku_z_limitem(
         sciezka, konfiguracja.limit_adresow_z_pliku, konfiguracja.dodatkowe_parametry_sledzace
     )
-    pozycja_pliku = przyjmij_plik(sciezka, moment, grupa=grupa, nuty=nuty)
-    ostrzezenie: str | None = None
-    if z_pliku.przekroczono_limit:
-        ostrzezenie = KOMUNIKAT_LIMIT_ADRESOW_Z_PLIKU.format(
-            znaleziono=z_pliku.liczba_znalezionych, limit=z_pliku.limit
-        )
-        pozycja_pliku = replace(pozycja_pliku, ostrzezenia_wejscia=(ostrzezenie,))
+    ostrzezenie = ostrzezenie_o_limicie_adresow(
+        sciezka, konfiguracja.limit_adresow_z_pliku, konfiguracja.dodatkowe_parametry_sledzace
+    )
     return PrzyjeciePliku(
-        pozycje=(pozycja_pliku,),
+        pozycje=(przyjmij_plik(sciezka, moment, grupa=grupa, nuty=nuty),),
         adresy_znalezione=z_pliku.adresy,
         liczba_znalezionych=z_pliku.liczba_znalezionych,
         ostrzezenie=ostrzezenie,

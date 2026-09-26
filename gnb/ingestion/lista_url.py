@@ -258,6 +258,22 @@ def adresy_z_pliku_z_limitem(
     return AdresyZPliku(adresy=adresy, liczba_znalezionych=len(adresy), limit=limit)
 
 
+def ostrzezenie_o_limicie_adresow(
+    sciezka: Path, limit: int, dodatkowe_parametry_sledzace: Iterable[str] = ()
+) -> str | None:
+    """Zwraca komunikat o przekroczeniu limitu adresów z pliku albo ``None``.
+
+    Komunikat jest ustalany z zawartości pliku, więc można go wyliczyć w każdej
+    chwili, także po wznowieniu przerwanego przebiegu, bez zapisywania go osobno.
+    """
+    z_pliku = adresy_z_pliku_z_limitem(sciezka, limit, dodatkowe_parametry_sledzace)
+    if not z_pliku.przekroczono_limit:
+        return None
+    return KOMUNIKAT_LIMIT_ADRESOW_Z_PLIKU.format(
+        znaleziono=z_pliku.liczba_znalezionych, limit=z_pliku.limit
+    )
+
+
 def opis_podsumowania(podsumowanie: PodsumowanieListyUrl) -> str:
     """Buduje opis podsumowania czytelny liniowo, bez tabel i znaków sterujących.
 

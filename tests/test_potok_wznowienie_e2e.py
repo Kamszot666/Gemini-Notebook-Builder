@@ -176,3 +176,55 @@ def test_ponowne_dodanie_juz_gotowego_zrodla_trafia_do_raportu_i_logu_waznego(
 
     log_wazny = (drugie.katalog_projektu / "logi" / "log_wazne.txt").read_text(encoding="utf-8")
     assert "Źródło już obecne w projekcie:" in log_wazny
+
+
+def test_ostrzezenie_o_limicie_adresow_przezywa_wznowienie_przerwane_przed_plikiem(
+    tmp_path: Path,
+) -> None:
+    """Ostrzeżenie o przekroczonym limicie adresów nie może zginąć po przerwaniu.
+
+    Checkpoint jest cofnięty ręcznie do stanu sprzed przetworzenia pliku: wejście
+    jest zapisane, ale źródło jeszcze nie istnieje. Wznowienie wyłącznie z listy
+    wejść musi mimo to pokazać w raporcie ostrzeżenie o przekroczonym limicie,
+    bo potok ustala je z zawartości pliku w chwili jego przetwarzania.
+    """
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path / "wyniki", limit_adresow_z_pliku=3)
+    plik = tmp_path / "wiele.md"
+    plik.write_text(
+        "# Notatka"
+        + chr(10)
+        + chr(10)
+        + "Zobacz "
+        + " ".join(f"https://przyklad.pl/s{n}" for n in range(4))
+        + chr(10),
+        encoding="utf-8",
+    )
+    moment = datetime(2026, 9, 2, 9, 0, tzinfo=UTC)
+    pierwsze = przetworz_projekt(
+        [przyjmij_plik(plik, moment, grupa="Wiedza")],
+        konfiguracja,
+        nazwa_projektu="Test ostrzeżenia",
+        zegar=_zegar_krokowy(),
+    )
+    assert "limit wynosi 3" in pierwsze.sciezka_raportu.read_text(encoding="utf-8")
+
+    sciezka_checkpointu = pierwsze.katalog_projektu / "checkpoint.json"
+    dane = json.loads(sciezka_checkpointu.read_text(encoding="utf-8"))
+    dane["zakonczony"] = False
+    dane["zrodla"] = {}
+    dane["deduplikacja"] = {"wykonana": False, "decyzje": []}
+    sciezka_checkpointu.write_text(json.dumps(dane, ensure_ascii=False), encoding="utf-8")
+    for wynik_pliku in (pierwsze.katalog_projektu / "pliki_wynikowe").iterdir():
+        wynik_pliku.unlink()
+
+    checkpoint = wczytaj(sciezka_checkpointu)
+    assert checkpoint is not None
+    drugie = przetworz_projekt(
+        odtworz_wejscia(checkpoint, konfiguracja),
+        konfiguracja,
+        nazwa_projektu="Test ostrzeżenia",
+        zegar=_zegar_krokowy(),
+    )
+
+    assert drugie.wznowiono is True
+    assert "limit wynosi 3" in drugie.sciezka_raportu.read_text(encoding="utf-8")

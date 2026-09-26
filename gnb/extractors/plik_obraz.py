@@ -32,15 +32,14 @@ from PIL.ExifTags import Base as EtykietaExif
 
 from gnb.core.model import DokumentWyekstrahowany
 from gnb.core.stale import PoziomPewnosciStruktury, TypZrodla
-from gnb.core.wyjatki import BrakNarzedzia, FormatNieobslugiwany
+from gnb.core.wyjatki import FormatNieobslugiwany
 from gnb.extractors.bazowy import PostepEkstrakcji
 from gnb.images.ocena_ocr import OcenaOcr, ocen_ocr
 from gnb.images.opis import BRAK_OPISU, MaterialDoOpisu, zbuduj_opis
 from gnb.images.tesseract import (
     UstawieniaOcr,
-    czy_dostepny,
     rozpoznaj_tekst,
-    wymagaj_danych_jezykowych,
+    wymagaj_ocr,
 )
 
 METODA_EKSTRAKCJI = "obraz"
@@ -61,10 +60,6 @@ KOMUNIKAT_BRAK_PILLOW_HEIF = (
     "Obsługa formatów HEIC i HEIF wymaga biblioteki opcjonalnej pillow-heif. "
     "Zainstaluj ją poleceniem „pip install gnb[obrazy-heic]” albo przekonwertuj "
     "obraz do formatu JPG lub PNG."
-)
-OSTRZEZENIE_OCR_BEZ_TESSERACTA = (
-    "OCR jest włączony, ale nie znaleziono programu Tesseract, więc obraz "
-    "zapisano bez rozpoznanego tekstu."
 )
 OSTRZEZENIE_KLATKA_ANIMOWANEGO_GIF = (
     "Plik GIF jest animowany. Do przetworzenia wzięto wyłącznie pierwszą klatkę."
@@ -112,7 +107,7 @@ class EkstraktorObrazu:
         wymiary = (obraz.width, obraz.height)
         metadane_obrazu = _metadane_z_obrazu(obraz)
 
-        tekst_ocr, ocr_wykonany = self._rozpoznaj(identyfikator_zrodla, obraz, ostrzezenia)
+        tekst_ocr, ocr_wykonany = self._rozpoznaj(identyfikator_zrodla, obraz)
         if ocr_wykonany:
             ocena = ocen_ocr(tekst_ocr)
             if ocena.czy_wymaga_sprawdzenia:
@@ -159,25 +154,21 @@ class EkstraktorObrazu:
             raise FormatNieobslugiwany(KOMUNIKAT_USZKODZONY_OBRAZ, identyfikator_zrodla) from blad
         return obraz, (obraz.format or "").lower()
 
-    def _rozpoznaj(
-        self, identyfikator_zrodla: str, obraz: Image.Image, ostrzezenia: list[str]
-    ) -> tuple[str, bool]:
-        """Zwraca rozpoznany tekst i informację, czy OCR faktycznie się wykonał."""
+    def _rozpoznaj(self, identyfikator_zrodla: str, obraz: Image.Image) -> tuple[str, bool]:
+        """Zwraca rozpoznany tekst i informację, czy OCR faktycznie się wykonał.
+
+        Przy włączonym OCR brak Tesseracta albo jego danych językowych zgłasza
+        `BrakNarzedzia`, co kończy się pominięciem źródła. Przy wyłączonym OCR
+        obraz jest opisywany bez rozpoznanego tekstu i nic się nie zmienia.
+        """
         if not self._ocr_wlaczony:
             return "", False
-        if not czy_dostepny(self._ustawienia_ocr.sciezka_tesseract):
-            ostrzezenia.append(OSTRZEZENIE_OCR_BEZ_TESSERACTA)
-            return "", False
-        wymagaj_danych_jezykowych(self._ustawienia_ocr, identyfikator_zrodla)
-        try:
-            tekst = rozpoznaj_tekst(
-                _do_png(obraz),
-                self._ustawienia_ocr,
-                identyfikator_zrodla=identyfikator_zrodla,
-            )
-        except BrakNarzedzia:
-            ostrzezenia.append(OSTRZEZENIE_OCR_BEZ_TESSERACTA)
-            return "", False
+        wymagaj_ocr(self._ustawienia_ocr, identyfikator_zrodla)
+        tekst = rozpoznaj_tekst(
+            _do_png(obraz),
+            self._ustawienia_ocr,
+            identyfikator_zrodla=identyfikator_zrodla,
+        )
         return tekst.strip(), True
 
 

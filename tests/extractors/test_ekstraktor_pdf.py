@@ -17,7 +17,6 @@ from pypdf import PdfWriter
 
 from gnb.core.stale import PoziomPewnosciStruktury, TypZrodla
 from gnb.core.wyjatki import BladTrwaly, BrakNarzedzia
-from gnb.extractors import plik_pdf
 from gnb.extractors.plik_pdf import METODA_EKSTRAKCJI_OCR, OSTRZEZENIE_TEKST_Z_OCR, EkstraktorPdf
 from gnb.images import tesseract
 from gnb.images.tesseract import UstawieniaOcr
@@ -167,21 +166,37 @@ def test_pdf_z_warstwa_tekstowa_nie_uruchamia_ocr(wymaga_ocr_pol: None) -> None:
     assert OSTRZEZENIE_TEKST_Z_OCR not in dokument.ostrzezenia
 
 
-def test_skan_z_ocr_ale_bez_tesseracta_daje_ostrzezenie(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(plik_pdf, "czy_dostepny", lambda _sciezka="": False)
+def test_skan_z_ocr_ale_bez_tesseracta_zglasza_brak_narzedzia(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tesseract, "czy_dostepny", lambda _sciezka="": False)
     dane = (KATALOG_DANYCH / "pdf_skan.pdf").read_bytes()
 
-    ekstraktor = EkstraktorPdf(UstawieniaOcr(), ocr_wlaczony=True)
-    dokument = ekstraktor.wyekstrahuj("plik_dokument-11", dane)
+    with pytest.raises(BrakNarzedzia) as informacja:
+        EkstraktorPdf(UstawieniaOcr(), ocr_wlaczony=True).wyekstrahuj("plik_dokument-11", dane)
 
-    assert dokument.tekst == ""
-    assert any("Tesseract" in ostrzezenie for ostrzezenie in dokument.ostrzezenia)
+    assert "Pobierz i zainstaluj Tesseract" in informacja.value.komunikat
+
+
+def test_pdf_z_warstwa_tekstowa_dziala_bez_tesseracta_i_bez_pominiecia(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PDF z tekstem nie potrzebuje OCR, więc brak Tesseracta go nie dotyczy."""
+    monkeypatch.setattr(tesseract, "czy_dostepny", lambda _sciezka="": False)
+    dane = (KATALOG_DANYCH / "pdf_tekstowy.pdf").read_bytes()
+
+    dokument = EkstraktorPdf(UstawieniaOcr(), ocr_wlaczony=True).wyekstrahuj(
+        "plik_dokument-13", dane
+    )
+
+    assert dokument.tekst.strip()
+    assert dokument.metoda_ekstrakcji == "pdf"
 
 
 def test_skan_z_ocr_bez_danych_jezyka_zglasza_brak_narzedzia(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(plik_pdf, "czy_dostepny", lambda _sciezka="": True)
+    monkeypatch.setattr(tesseract, "czy_dostepny", lambda _sciezka="": True)
     monkeypatch.setattr(tesseract, "dostepne_jezyki", lambda _sciezka="": ("eng",))
     dane = (KATALOG_DANYCH / "pdf_skan.pdf").read_bytes()
 

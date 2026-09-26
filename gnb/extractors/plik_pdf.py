@@ -43,15 +43,14 @@ from pypdf.errors import PdfReadError
 
 from gnb.core.model import DokumentWyekstrahowany
 from gnb.core.stale import PoziomPewnosciStruktury, TypZrodla
-from gnb.core.wyjatki import BladTrwaly, BrakNarzedzia
+from gnb.core.wyjatki import BladTrwaly
 from gnb.extractors.bazowy import PostepEkstrakcji
 from gnb.images.ocena_ocr import ocen_ocr
 from gnb.images.rasteryzacja import rasteryzuj_strony
 from gnb.images.tesseract import (
     UstawieniaOcr,
-    czy_dostepny,
     rozpoznaj_wiele,
-    wymagaj_danych_jezykowych,
+    wymagaj_ocr,
 )
 
 METODA_EKSTRAKCJI = "pdf"
@@ -67,10 +66,6 @@ NAGLOWEK_STRONY_OCR = "Strona {numer}:"
 OSTRZEZENIE_TEKST_Z_OCR = (
     "Tekst tego pliku PDF pochodzi z OCR skanu, więc może zawierać błędy "
     "rozpoznania. Warto porównać go z oryginałem przed wgraniem do notatnika."
-)
-OSTRZEZENIE_OCR_BEZ_TESSERACTA = (
-    "Plik PDF nie ma warstwy tekstowej, a OCR jest włączony, ale nie znaleziono "
-    "programu Tesseract. Skan zapisano bez rozpoznanego tekstu."
 )
 
 # Liczba wierszy od początku strony sprawdzanych pod kątem powtarzalnego
@@ -160,31 +155,31 @@ class EkstraktorPdf:
         tytul: str | None,
         postep: PostepEkstrakcji | None,
     ) -> DokumentWyekstrahowany:
-        """Rasteryzuje strony skanu i rozpoznaje z nich tekst, gdy OCR jest włączony."""
+        """Rasteryzuje strony skanu i rozpoznaje z nich tekst, gdy OCR jest włączony.
+
+        Przy włączonym OCR brak Tesseracta albo jego danych językowych zgłasza
+        `BrakNarzedzia`, co kończy się pominięciem źródła. Przy wyłączonym OCR
+        skan jest zapisywany z ostrzeżeniem, bez zmiany zachowania.
+        """
 
         def pusty(ostrzezenie: str) -> DokumentWyekstrahowany:
             return _pusty_skan(identyfikator_zrodla, metadane, tytul, ostrzezenie)
 
         if not self._ocr_wlaczony:
             return pusty(KOMUNIKAT_BEZ_WARSTWY_TEKSTOWEJ)
-        if not czy_dostepny(self._ustawienia_ocr.sciezka_tesseract):
-            return pusty(OSTRZEZENIE_OCR_BEZ_TESSERACTA)
-        wymagaj_danych_jezykowych(self._ustawienia_ocr, identyfikator_zrodla)
+        wymagaj_ocr(self._ustawienia_ocr, identyfikator_zrodla)
 
         strony_png = rasteryzuj_strony(
             bajty,
             rozdzielczosc_dpi=self._ustawienia_ocr.rozdzielczosc_pdf_dpi,
             identyfikator_zrodla=identyfikator_zrodla,
         )
-        try:
-            teksty_stron = rozpoznaj_wiele(
-                strony_png,
-                self._ustawienia_ocr,
-                przy_postepie=postep,
-                identyfikator_zrodla=identyfikator_zrodla,
-            )
-        except BrakNarzedzia:
-            return pusty(OSTRZEZENIE_OCR_BEZ_TESSERACTA)
+        teksty_stron = rozpoznaj_wiele(
+            strony_png,
+            self._ustawienia_ocr,
+            przy_postepie=postep,
+            identyfikator_zrodla=identyfikator_zrodla,
+        )
 
         tekst = _zloz_strony_skanu(teksty_stron)
         if not tekst.strip():

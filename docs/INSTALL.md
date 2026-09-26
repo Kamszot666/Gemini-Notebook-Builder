@@ -1,4 +1,4 @@
-# Instalacja — stan po etapie czternastym i naprawie danych językowych OCR
+# Instalacja — stan po etapie czternastym i naprawach po nim
 
 Ten dokument opisuje przygotowanie środowiska do pracy z aplikacją: Pythona,
 środowiska wirtualnego, zależności oraz narzędzi zewnętrznych. Narzędzia
@@ -132,8 +132,10 @@ dla konkretnych rodzajów materiału.
 ### Etap ósmy: Tesseract — OCR obrazów i skanów
 
 Tesseract rozpoznaje tekst na obrazach oraz na skanowanych plikach PDF bez
-warstwy tekstowej. Bez niego takie pliki są zapisywane bez rozpoznanego tekstu,
-z ostrzeżeniem w raporcie.
+warstwy tekstowej. Przy włączonym OCR bez niego takie pliki są pomijane
+z komunikatem w raporcie, że trzeba pobrać i zainstalować Tesseract. Przy
+wyłączonym OCR obraz jest opisywany bez tekstu, a PDF z warstwą tekstową działa
+normalnie.
 
 Instalacja przez `winget`:
 

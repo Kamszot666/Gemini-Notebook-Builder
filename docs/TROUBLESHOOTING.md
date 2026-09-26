@@ -1,4 +1,4 @@
-# Rozwiązywanie problemów — stan po etapie czternastym i naprawie danych językowych OCR
+# Rozwiązywanie problemów — stan po etapie czternastym i naprawach po nim
 
 Ten dokument opisuje problemy, które wystąpiły w rzeczywistej pracy z aplikacją,
 oraz te, które wynikają wprost z jej budowy. Każdy przypadek ma tę samą budowę:
@@ -23,7 +23,7 @@ ozdobników, a polecenia do wpisania są w osobnych blokach.
 11. W interfejsie nie widać postępu, a licznik znaków się nie zmienia.
 12. Interfejs odrzuca wysłany plik.
 13. Skan PDF albo obraz nie został rozpoznany: brak Tesseracta.
-14. OCR rozpoznał polski tekst z błędami: brak danych językowych `pol`.
+14. Obrazy i skany pominięte: brak danych językowych `pol`.
 15. Tematyczny plik PDF grupy obrazów jest za duży.
 16. Nagranie mowy nie zostało przepisane: brak FFmpega. Źródło ma status „pominiete”.
 17. Pierwsza transkrypcja długo stoi bez znaku życia: pobiera się model.
@@ -170,8 +170,8 @@ jest zapisany przy źródle w pliku `manifest.txt`, w polu ostrzeżeń, oraz w p
 `log_szczegolowy.txt`.
 
 Dla skanowanego pliku PDF włącz OCR: ustawienie `ocr_wlaczony` jest domyślnie
-włączone, więc pusty wynik oznacza zwykle brak Tesseracta — patrz przypadek
-trzynasty. Po włączeniu OCR i zainstalowaniu Tesseracta ten sam plik przetworzy
+włączone, więc pominięcie skanu z komunikatem o Tesseractcie oznacza jego brak —
+patrz przypadek trzynasty. Po włączeniu OCR i zainstalowaniu Tesseracta ten sam plik przetworzy
 się na tekst, choć z ostrzeżeniem o możliwych błędach rozpoznania.
 
 Źródło nie jest kasowane i liczy się do limitu źródeł notatnika, więc plik bez
@@ -317,10 +317,12 @@ kolejne wysłanie z tą samą nazwą projektu dokłada źródła do istniejąceg
 
 ## 13. Skan PDF albo obraz nie został rozpoznany, bo brakuje Tesseracta
 
-Objaw. Dla skanowanego pliku PDF albo obrazu w raporcie końcowym, w sekcji
-„Materiały do sprawdzenia”, jest ostrzeżenie o braku warstwy tekstowej albo
-o tym, że OCR jest włączony, ale nie znaleziono programu Tesseract. Plik
-wynikowy zawiera sam nagłówek metadanych albo, dla obrazu, sam opis bez tekstu.
+Objaw. Skanowany plik PDF albo obraz ma status „pominięte”, a w raporcie
+końcowym i w manifeście stoi komunikat, że nie znaleziono programu Tesseract
+i że trzeba go pobrać i zainstalować. Liczy się jako pominięcie, nie jako błąd.
+Gdy OCR jest wyłączony w ustawieniach, zachowanie jest inne: obraz dostaje sam
+opis bez tekstu, a skan ostrzeżenie o braku warstwy tekstowej. PDF z warstwą
+tekstową nie potrzebuje OCR i działa bez Tesseracta.
 
 Przyczyna. Rozpoznawanie tekstu z obrazów i skanów wykonuje program Tesseract,
 wołany przez podproces. Aplikacja nie znalazła go ani w zmiennej PATH, ani
@@ -336,9 +338,9 @@ $env:GNB_SCIEZKA_TESSERACT = "C:/Program Files/Tesseract-OCR/tesseract.exe"
 
 Sprawdź wynik poleceniem `python -m gnb.cli diagnostyka`: wiersz „Tesseract”
 musi pokazywać wersję i ścieżkę. Potem przetwórz materiał pod nową nazwą
-projektu, bo źródło z ostrzeżeniem ma już status końcowy i nie jest ponawiane.
+projektu, bo pominięte źródło ma już status końcowy i nie jest ponawiane.
 
-## 14. OCR rozpoznał polski tekst z błędami, bo brakuje danych językowych „pol”
+## 14. Obrazy i skany pominięte, bo brakuje danych językowych „pol”
 
 Objaw. Obrazy i skany PDF mają status „pominięte”, a w raporcie i w manifeście
 stoi komunikat, że Tesseract nie ma danych językowych dla języka „pol” i że

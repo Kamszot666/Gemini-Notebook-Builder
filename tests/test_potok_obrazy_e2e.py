@@ -282,10 +282,9 @@ def test_obraz_bez_danych_jezyka_ocr_jest_pominiety_z_komunikatem_a_nie_bledem(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Brak pol.traineddata daje status „pominiete”, jak brak innego składnika opcjonalnego."""
-    from gnb.extractors import plik_obraz
     from gnb.images import tesseract
 
-    monkeypatch.setattr(plik_obraz, "czy_dostepny", lambda _sciezka="": True)
+    monkeypatch.setattr(tesseract, "czy_dostepny", lambda _sciezka="": True)
     monkeypatch.setattr(tesseract, "dostepne_jezyki", lambda _sciezka="": ("eng",))
 
     wynik = przetworz_projekt(
@@ -302,3 +301,42 @@ def test_obraz_bez_danych_jezyka_ocr_jest_pominiety_z_komunikatem_a_nie_bledem(
     assert zrodlo["status"] == "pominiete"
     assert "pol.traineddata" in json.dumps(zrodlo, ensure_ascii=False)
     assert "pol.traineddata" in wynik.sciezka_raportu.read_text(encoding="utf-8")
+
+
+def test_obraz_bez_programu_tesseract_jest_pominiety_z_komunikatem_a_nie_zapisany_bez_tekstu(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from gnb.images import tesseract
+
+    monkeypatch.setattr(tesseract, "czy_dostepny", lambda _sciezka="": False)
+
+    wynik = przetworz_projekt(
+        [przyjmij_plik(KATALOG_DANYCH / "obraz_wykres.png", _MOMENT)],
+        Konfiguracja(katalog_wynikow=tmp_path),
+        nazwa_projektu="Obraz bez Tesseracta",
+        zegar=_zegar_krokowy(),
+    )
+
+    assert wynik.liczba_bledow == 0
+    assert wynik.liczba_pominietych == 1
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    assert manifest["zrodla"][0]["status"] == "pominiete"
+    assert "Pobierz i zainstaluj Tesseract" in wynik.sciezka_raportu.read_text(encoding="utf-8")
+
+
+def test_obraz_bez_tesseracta_ale_z_wylaczonym_ocr_nadal_jest_zapisywany(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from gnb.images import tesseract
+
+    monkeypatch.setattr(tesseract, "czy_dostepny", lambda _sciezka="": False)
+
+    wynik = przetworz_projekt(
+        [przyjmij_plik(KATALOG_DANYCH / "obraz_wykres.png", _MOMENT)],
+        Konfiguracja(katalog_wynikow=tmp_path, ocr_wlaczony=False),
+        nazwa_projektu="Obraz bez OCR",
+        zegar=_zegar_krokowy(),
+    )
+
+    assert wynik.liczba_pominietych == 0
+    assert wynik.liczba_przetworzonych == 1

@@ -1,4 +1,4 @@
-# Architektura — stan po etapie czternastym i naprawie deduplikacji dosyłanych źródeł
+# Architektura — stan po etapie czternastym i naprawach po nim
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
 zakończeniu etapu czternastego. Pełny docelowy podział na pakiety opisuje
@@ -125,8 +125,10 @@ nowe źródła, i po zapisaniu nowych plików usuwa stare.
   oraz `BrakNarzedzia` na status źródła `pominiete`, a pozostałe wyjątki
   `BladGnb` na status `blad`. Brak opcjonalnego narzędzia albo biblioteki
   (FFmpeg, Audiveris, `mido`, `PyGuitarPro`) jest więc pominięciem, nie błędem;
-  brak Tesseracta przy OCR obrazu lub skanu PDF jest natomiast obsługiwany
-  wewnątrz ekstraktora jako ostrzeżenie, bez przerywania przetwarzania.
+  brak Tesseracta albo jego danych językowych przy włączonym OCR obrazu lub
+  skanu PDF też jest pominięciem. Przy wyłączonym OCR obraz jest opisywany bez
+  tekstu, a skan zapisywany z ostrzeżeniem; PDF z warstwą tekstową nie potrzebuje
+  OCR, więc go to nie dotyczy.
 - `gnb/core/konfiguracja.py` — wczytywanie konfiguracji z wartości domyślnych,
   pliku TOML i zmiennych środowiskowych z prefiksem `GNB_`. Zakres pól opisuje
   `docs/CONFIGURATION.md`.

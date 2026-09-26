@@ -136,9 +136,21 @@ def test_plik_z_tekstem_i_adresem_w_zdaniu_nie_jest_lista(tmp_path: Path) -> Non
     assert rozpoznaj_liste_adresow_w_pliku(plik) is None
 
 
-def test_plik_md_z_adresami_nie_jest_lista(tmp_path: Path) -> None:
+def test_plik_md_zlozony_z_samych_adresow_jest_lista(tmp_path: Path) -> None:
     plik = tmp_path / "linki.md"
-    plik.write_text("https://przyklad.pl/a\n", encoding="utf-8")
+    plik.write_text("https://przyklad.pl/a\nhttps://przyklad.pl/b\n", encoding="utf-8")
+
+    podsumowanie = rozpoznaj_liste_adresow_w_pliku(plik)
+
+    assert podsumowanie is not None
+    assert podsumowanie.liczba_poprawnych == 2
+
+
+def test_plik_md_z_tekstem_i_adresem_nie_jest_lista(tmp_path: Path) -> None:
+    plik = tmp_path / "notatka.md"
+    plik.write_text(
+        "# Tytuł\n\nWięcej na https://przyklad.pl/a w tym artykule.\n", encoding="utf-8"
+    )
 
     assert rozpoznaj_liste_adresow_w_pliku(plik) is None
 

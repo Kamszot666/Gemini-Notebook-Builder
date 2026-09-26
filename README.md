@@ -84,7 +84,7 @@ Czego notebook nie ma na swojej liście, a program obsłuży:
 6. Napisy SRT i VTT.
 7. Pliki tekstowe z danymi: JSON, XML, YAML, YML, TOML, INI, CFG, LOG.
 8. Archiwa ZIP, z zabezpieczeniami przed złośliwymi paczkami: limity liczby plików, rozmiaru, stopnia kompresji i zagłębienia oraz ochrona ścieżek.
-9. Listy adresów. W przeglądarce plik TXT złożony z samych adresów jest listą źródeł i program pobiera każdą stronę, a adresy znalezione w treści zwykłych plików TXT i MD też są pobierane, ale z kontrolą robots.txt i tylko do limitu 200 adresów z jednego pliku; przy większej liczbie żaden adres nie jest dodawany, a raport to zgłasza. W terminalu listę adresów podajesz opcją `--lista-url`. Adres zaczynający się od www. działa bez https wszędzie.
+9. Listy adresów. Plik TXT, MD albo DOCX złożony z samych adresów jest listą źródeł i program pobiera każdą stronę, w przeglądarce i w poleceniu `przetworz --plik`. Adresy jawne znalezione w treści zwykłych plików TXT, MD i DOCX też są pobierane (odnośnik ukryty pod innym tekstem jest pomijany, a pliki HTML i MHTML nie dają żadnych adresów), ale z kontrolą robots.txt i tylko do limitu 200 adresów z jednego pliku; przy większej liczbie żaden adres nie jest dodawany, a raport to zgłasza. W terminalu listę adresów podajesz opcją `--lista-url`. Adres zaczynający się od www. działa bez https wszędzie.
 10. Nuty w postaci zapisu: MIDI, MusicXML i MXL, Guitar Pro 3, 4 i 5, a także skany nut i tabulatur w PDF lub obrazach, które rozpoznaje program Audiveris. Wynik to zawsze opis tekstem: metrum, tonacja, dźwięki, tabulatura. Nagrań muzyki jako dźwięku program nie obsługuje.
 
 Nawet tam, gdzie notebook coś przyjmuje, program dokłada wartość:
@@ -209,7 +209,7 @@ Na stronie projektu możesz:
 5. Wpisać instrukcję systemową dla notatnika (do 10 000 znaków, z licznikiem, który czyta czytnik) oraz osobny prompt do zewnętrznego wyszukiwania źródeł. Program nigdy nie uruchamia tego promptu sam.
 6. Ustawić projekt jako ten, do którego wpada materiał ze skrótu klawiszowego.
 
-Plik TXT złożony z samych adresów wysłany w formularzu jest listą źródeł: program pobierze wszystkie wskazane strony.
+Plik TXT, MD albo DOCX złożony z samych adresów wysłany w formularzu jest listą źródeł: program pobierze wszystkie wskazane strony.
 
 ### Sposób drugi: skrót klawiszowy
 

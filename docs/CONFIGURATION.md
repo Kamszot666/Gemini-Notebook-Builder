@@ -1,4 +1,4 @@
-# Konfiguracja — stan po etapie czternastym i limicie adresów z pliku
+# Konfiguracja — stan po etapie czternastym i naprawach po nim
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
 obsługuje po etapie trzynastym. Z listy w sekcji jedenastej a pliku
@@ -360,7 +360,7 @@ Interfejs uruchamiasz poleceniem `python -m gnb.ui.server`.
    Domyślnie 190. Żądanie z większą treścią jest odrzucane, a nie obcinane.
 5. `limit_adresow_z_pliku`, zmienna `GNB_LIMIT_ADRESOW_Z_PLIKU`. Największa
    liczba różnych adresów, jaką program wyłuska z treści jednego zwykłego pliku
-   TXT albo MD wysłanego w interfejsie WWW. Domyślnie 200. Liczą się adresy po
+   TXT, MD albo DOCX, w interfejsie WWW i w poleceniu `przetworz --plik`. Domyślnie 200. Liczą się adresy po
    usunięciu powtórzeń. Gdy jest ich więcej, żaden nie zostaje dodany jako
    źródło, a sam plik jest przetwarzany normalnie; komunikat z liczbą znalezionych
    adresów i limitem trafia do logów, manifestu i raportu. Limit nie dotyczy

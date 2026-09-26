@@ -18,7 +18,6 @@ import logging
 import socket
 import sys
 from collections.abc import Callable
-from dataclasses import replace
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -29,15 +28,10 @@ from gnb.core.konfiguracja import Konfiguracja
 from gnb.core.nazwy import sanityzuj_nazwe_projektu
 from gnb.core.postep import WywolanieZwrotnePostepu
 from gnb.core.wyjatki import BladGnb
-from gnb.ingestion.lista_url import (
-    KOMUNIKAT_LIMIT_ADRESOW_Z_PLIKU,
-    AdresWejsciowy,
-    adresy_z_pliku_z_limitem,
-    rozpoznaj_liste_adresow_w_pliku,
-)
+from gnb.ingestion.adresy_z_plikow import dolacz_adresy_znalezione, przyjmij_plik_z_adresami
+from gnb.ingestion.lista_url import AdresWejsciowy
 from gnb.ingestion.wejscie import (
     PozycjaWejsciowa,
-    przyjmij_plik,
     przyjmij_tekst,
     przyjmij_url,
 )
@@ -465,57 +459,13 @@ class _Handler(BaseHTTPRequestHandler):
         znalezione: list[AdresWejsciowy] = []
         for plik in pliki:
             sciezka = self._zapisz_plik_wejsciowy(uklad.pliki_wejsciowe, plik)
-            lista = rozpoznaj_liste_adresow_w_pliku(
-                sciezka, konfiguracja.dodatkowe_parametry_sledzace
-            )
-            if lista is None:
-                z_pliku = adresy_z_pliku_z_limitem(
-                    sciezka,
-                    konfiguracja.limit_adresow_z_pliku,
-                    konfiguracja.dodatkowe_parametry_sledzace,
-                )
-                pozycja_pliku = przyjmij_plik(sciezka, moment, grupa=grupa)
-                if z_pliku.przekroczono_limit:
-                    pozycja_pliku = replace(
-                        pozycja_pliku,
-                        ostrzezenia_wejscia=(
-                            KOMUNIKAT_LIMIT_ADRESOW_Z_PLIKU.format(
-                                znaleziono=z_pliku.liczba_znalezionych, limit=z_pliku.limit
-                            ),
-                        ),
-                    )
-                pozycje.append(pozycja_pliku)
-                znalezione.extend(z_pliku.adresy)
-                continue
-            # Plik złożony wyłącznie z adresów jest listą źródeł: pobieramy strony,
-            # a sama lista nie trafia do notatnika jako treść.
-            for wpis in lista.adresy:
-                pozycje.append(
-                    przyjmij_url(
-                        wpis.podany,
-                        moment,
-                        konfiguracja.dodatkowe_parametry_sledzace,
-                        grupa=grupa,
-                    )
-                )
+            przyjecie = przyjmij_plik_z_adresami(sciezka, moment, konfiguracja, grupa=grupa)
+            pozycje.extend(przyjecie.pozycje)
+            znalezione.extend(przyjecie.adresy_znalezione)
 
         # Adresy znalezione w treści plików są dodawane na końcu i bez wyjątku od
-        # robots.txt, bo nie wskazał ich użytkownik wprost. Adres, który już jest
-        # na liście jawnych, nie jest dodawany drugi raz.
-        znane = {pozycja.adres_kanoniczny for pozycja in pozycje if pozycja.adres_kanoniczny}
-        for wpis in znalezione:
-            if wpis.kanoniczny in znane:
-                continue
-            znane.add(wpis.kanoniczny)
-            pozycje.append(
-                przyjmij_url(
-                    wpis.podany,
-                    moment,
-                    konfiguracja.dodatkowe_parametry_sledzace,
-                    grupa=grupa,
-                    wskazane_jawnie=False,
-                )
-            )
+        # robots.txt, bo nie wskazał ich użytkownik wprost.
+        dolacz_adresy_znalezione(pozycje, znalezione, moment, konfiguracja, grupa=grupa)
 
         def praca(postep: WywolanieZwrotnePostepu) -> WynikPrzetwarzania:
             return przetworz_projekt(pozycje, konfiguracja, nazwa_projektu=nazwa, postep=postep)

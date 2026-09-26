@@ -247,3 +247,65 @@ def test_przetworz_z_flaga_nuty_kieruje_pdf_do_sciezki_audiverisa(
     assert "Audiveris" in raport
     assert "Liczba źródeł pominiętych: 1" in raport
     assert "Liczba źródeł z błędem: 0" in raport
+
+
+def _uruchom_z_przechwyceniem_pozycji(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, argumenty: list[str]
+) -> list:
+    """Uruchamia polecenie z atrapą potoku i zwraca pozycje, które potok by dostał."""
+    from gnb import cli
+
+    monkeypatch.setenv("GNB_KATALOG_WYNIKOW", str(tmp_path))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    przechwycone: list = []
+
+    def atrapa(pozycje, *_argumenty, **_nazwane):  # type: ignore[no-untyped-def]
+        przechwycone.extend(pozycje)
+        raise cli.BladGnb("Atrapa potoku: przerwano po przechwyceniu pozycji.")
+
+    monkeypatch.setattr(cli, "przetworz_projekt", atrapa)
+    main(["przetworz", "--projekt", "Adresy CLI", *argumenty])
+    return przechwycone
+
+
+def test_plik_docx_z_adresem_jawnym_i_ukrytym_daje_plik_i_jeden_adres(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.ingestion.test_adresy_z_plikow import _docx_z_adresem_jawnym_i_ukrytym
+
+    plik = _docx_z_adresem_jawnym_i_ukrytym(tmp_path / "dokument.docx")
+
+    pozycje = _uruchom_z_przechwyceniem_pozycji(monkeypatch, tmp_path, ["--plik", str(plik)])
+
+    assert [pozycja.adres_kanoniczny is None for pozycja in pozycje] == [True, False]
+    assert pozycje[0].format_zrodla == "docx"
+    assert pozycje[1].wskazane_jawnie is False
+    assert "jawny.example" in (pozycje[1].adres_kanoniczny or "")
+
+
+def test_plik_md_zlozony_z_adresow_jest_lista_zrodel_jawnych(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plik = tmp_path / "lista.md"
+    plik.write_text("https://przyklad.pl/a https://przyklad.pl/b", encoding="utf-8")
+
+    pozycje = _uruchom_z_przechwyceniem_pozycji(monkeypatch, tmp_path, ["--plik", str(plik)])
+
+    assert all(pozycja.adres_kanoniczny for pozycja in pozycje)
+    assert len(pozycje) == 2
+    assert all(pozycja.wskazane_jawnie for pozycja in pozycje)
+
+
+def test_plik_ponad_limit_adresow_daje_komunikat_i_tylko_plik(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("GNB_LIMIT_ADRESOW_Z_PLIKU", "2")
+    plik = tmp_path / "wiele.md"
+    plik.write_text(
+        "Zobacz https://a.example/1 https://a.example/2 https://a.example/3", encoding="utf-8"
+    )
+
+    pozycje = _uruchom_z_przechwyceniem_pozycji(monkeypatch, tmp_path, ["--plik", str(plik)])
+
+    assert [pozycja.format_zrodla for pozycja in pozycje] == ["md"]
+    assert "limit wynosi 2" in capsys.readouterr().out

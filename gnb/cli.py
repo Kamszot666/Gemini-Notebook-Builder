@@ -37,7 +37,9 @@ from pathlib import Path
 from gnb.core.konfiguracja import Konfiguracja, wczytaj_konfiguracje
 from gnb.core.postep import FazaPotoku, WywolanieZwrotnePostepu, ZdarzeniePostepu
 from gnb.core.wyjatki import BladGnb
+from gnb.ingestion.adresy_z_plikow import dolacz_adresy_znalezione, przyjmij_plik_z_adresami
 from gnb.ingestion.lista_url import (
+    AdresWejsciowy,
     PodsumowanieListyUrl,
     opis_podsumowania,
     wczytaj_liste_z_pliku,
@@ -45,7 +47,6 @@ from gnb.ingestion.lista_url import (
 )
 from gnb.ingestion.wejscie import (
     PozycjaWejsciowa,
-    przyjmij_plik,
     przyjmij_tekst,
     przyjmij_url,
 )
@@ -542,8 +543,22 @@ def uruchom_przetwarzanie(
         return 0
 
     pozycje: list[PozycjaWejsciowa] = []
+    znalezione: list[AdresWejsciowy] = []
     for sciezka in pliki:
-        pozycje.append(przyjmij_plik(Path(sciezka), moment, grupa=grupa, nuty=nuty))
+        przyjecie = przyjmij_plik_z_adresami(
+            Path(sciezka), moment, konfiguracja, grupa=grupa, nuty=nuty
+        )
+        pozycje.extend(przyjecie.pozycje)
+        znalezione.extend(przyjecie.adresy_znalezione)
+        if przyjecie.jest_lista_adresow:
+            print(f"Plik {sciezka} jest listą adresów: {przyjecie.liczba_znalezionych}.")
+        elif przyjecie.liczba_znalezionych:
+            print(
+                f"W treści pliku {sciezka} znaleziono adresów jawnych: "
+                f"{przyjecie.liczba_znalezionych}."
+            )
+        if przyjecie.ostrzezenie:
+            print(przyjecie.ostrzezenie)
     for tresc in teksty_plaskie:
         pozycje.append(przyjmij_tekst(tresc, moment, format_tekstu="txt", grupa=grupa))
     for tresc in teksty_markdown:
@@ -557,6 +572,7 @@ def uruchom_przetwarzanie(
                 grupa=grupa,
             )
         )
+    dolacz_adresy_znalezione(pozycje, znalezione, moment, konfiguracja, grupa=grupa)
 
     if not pozycje:
         print(
@@ -725,7 +741,7 @@ def main(argumenty: list[str] | None = None) -> int:
         default=[],
         metavar="SCIEZKA",
         dest="lista_url",
-        help="Plik TXT z adresami. Opcję można podać wielokrotnie.",
+        help="Plik TXT, MD albo DOCX z adresami. Opcję można podać wielokrotnie.",
     )
     parser_przetworz.add_argument(
         "--sprawdz-liste",

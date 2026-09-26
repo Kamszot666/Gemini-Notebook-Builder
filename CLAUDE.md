@@ -25,6 +25,7 @@ Te punkty są rozstrzygnięte przez użytkownika. Nie otwieraj ich ponownie bez 
 5. Kondensacja treści przez zewnętrzne modele AI pozostaje domyślnie wyłączona. Buduj ją jako opcjonalny, wyraźnie odseparowany moduł, ale nie wcześniej niż po ukończeniu etapu dwunastego.
 6. Docelowo aplikacja ma dać się uruchomić także na serwerze, nie tylko lokalnie na Windows. Konsekwencje architektoniczne opisuje sekcja szósta.
 7. Rozdział lokalizacji jest ścisły. Repozytorium z kodem, testami i dokumentacją leży w osobnym katalogu roboczym użytkownika, poza katalogiem Dokumenty. Wyniki pracy aplikacji, czyli katalogi projektów z materiałami źródłowymi, plikami wynikowymi, manifestem, logami i checkpointem, trafiają domyślnie do podkatalogu `Gemini Notebook Builder` w katalogu Dokumenty. Kod nigdy nie zapisuje niczego wewnątrz katalogu repozytorium poza wynikami testów. Katalog wyników pochodzi wyłącznie z konfiguracji, jest wyznaczany dynamicznie i nigdy nie jest wpisany w kodzie na sztywno. Nie umieszczaj w repozytorium bezwzględnych ścieżek zawierających nazwę konta użytkownika, ponieważ repozytorium jest publiczne.
+8. Pola tekstowe interfejsu mają wzorzec z sekcji jedenastej, punkt drugi: `aria-label` z nazwą, ta sama nazwa jako `placeholder`, bez widocznej etykiety. Wybór użytkownika, uzasadniony podwójnym odczytem nazwy w NVDA przy etykiecie i podpowiedzi jednocześnie. Nie przywracaj widocznych etykiet przy polach tekstowych bez wyraźnej prośby.
 
 ## 2. Użytkownik i wynikające z tego wymagania
 
@@ -240,7 +241,7 @@ Interfejs to lokalny serwer WWW otwierany w przeglądarce użytkownika.
 Wymagania techniczne:
 
 1. Semantyczny HTML5. Elementy interaktywne to prawdziwe `button`, `a`, `input`, `select`, nie `div` z obsługą kliknięcia.
-2. Każde pole formularza ma powiązaną etykietę przez `label for` albo `aria-labelledby`. Sam `placeholder` nie jest etykietą.
+2. Każde pole tekstowe (`input` typu tekstowego i `textarea`) ma nazwę dostępną w `aria-label`, tę samą nazwę wpisaną jako `placeholder` i nie ma widocznego elementu `label`; opis pomocniczy pola jest przypięty przez `aria-describedby`, nie zapisany w `aria-label`, a tekst zastępczy ma czytelny kontrast. Pozostałe pola, czyli wybór pliku, pola wyboru i listy, zachowują zwykłą etykietę `label for`. Powód: przy widocznej etykiecie i podpowiedzi NVDA czytał tę samą nazwę dwa razy.
 3. Logiczna kolejność fokusu, widoczny wskaźnik fokusu, pełna obsługa z klawiatury, brak wymogu myszy.
 4. Ciemny motyw, jasny tekst, wysoki kontrast, duża czcionka, brak informacji przekazywanej wyłącznie kolorem.
 5. Błędy walidacji powiązane z polem przez `aria-describedby` oraz `aria-invalid`, a lista błędów dostępna również jako tekst.
@@ -403,7 +404,6 @@ Pełny zapis każdej pozycji, z objawem, przyczyną i propozycją, jest w `docs/
 8. Zamknięte, naprawa `naprawa-deduplikacja-zrodel-doslanych`: źródła dosłane w kolejnym przebiegu są porównywane z już spakowanymi, decyduje lista `deduplikacja.porownane`.
 
 9. Zamknięte, naprawa `naprawa-brak-danych-jezyka-ocr`: brak danych językowych Tesseracta daje status `pominiete` z komunikatem, którego języka brakuje.
-10. Formularz nowego projektu i dosyłania: pola nazwy, tekstu i grupy mają `aria-label` zamiast widocznej etykiety; odstępstwo od wzorca, opisane w `docs/DECYZJE_I_ZAGADNIENIA.md`, punkt 10.
 
 ## 19. Kryterium ukończenia funkcji
 

@@ -1,4 +1,4 @@
-# Dostępność interfejsu WWW — stan po etapie czternastym
+# Dostępność interfejsu WWW — stan po etapie czternastym i naprawach po nim
 
 Ten dokument opisuje, jak obsługiwać interfejs Gemini Notebook Builder
 z klawiatury i z czytnikiem ekranu, oraz co interfejs ogłasza i jak często.
@@ -120,10 +120,15 @@ karcie, z dopiskiem „(otwiera się w nowej karcie)” dla czytnika ekranu — 
 otwarcie karty nie było zaskoczeniem. Adres innego schematu, na przykład
 `javascript:`, nigdy nie staje się odnośnikiem.
 
-Na stronie głównej pola nazwy projektu, tekstu i grupy nie mają osobnych
-etykiet nad polem: opis jest podpowiedzią wewnątrz pola („Nazwa projektu
-(wymagana)”, „tutaj wklej tekst”, „Nazwa grupy tematycznej (wymagana)”), a nazwę
-dla czytnika ekranu niesie atrybut aria-label. Nazwa grupy jest wymagana.
+Wszystkie pola tekstowe interfejsu, czyli pola nazwy projektu, tekstu, adresów,
+grupy, instrukcji systemowej i promptu wyszukiwania oraz pole treści promptu do
+skopiowania, nie mają widocznych etykiet. Nazwę dla czytnika ekranu niesie
+atrybut aria-label, a ta sama nazwa jest podpowiedzią wewnątrz pola („Nazwa
+projektu”, „Tekst wklejony”, „Nazwa grupy tematycznej”). Powód: przy widocznej
+etykiecie i podpowiedzi NVDA czytał tę samą nazwę dwa razy. Pola wymagane
+oznacza atrybut required, więc NVDA mówi „wymagane”. Opis pomocniczy, na przykład
+pod polem promptu wyszukiwania, jest przypięty przez aria-describedby. Pole
+wyboru pliku zachowuje zwykłą etykietę. Nazwa grupy jest wymagana.
 
 Pod raportem jest formularz „Dodaj kolejne źródła” z polami zbudowanymi tak
 samo, bez pola nazwy — nazwa jest już znana z adresu strony. Pole grupy jest

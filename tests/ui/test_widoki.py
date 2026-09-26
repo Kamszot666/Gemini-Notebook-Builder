@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
+from html.parser import HTMLParser
 from pathlib import Path
 
 from gnb.persistence.pola_notatnika import PolaNotatnika
@@ -27,15 +28,15 @@ def test_strona_glowna_ma_etykiety_i_pole_csrf() -> None:
     html = strona_glowna(projekty=[], token_csrf="tok123")
 
     assert '<html lang="pl">' in html
-    # Pola tekstowe mają opis w podpowiedzi wewnątrz pola i nazwę dla czytnika
-    # ekranu w aria-label, bez osobnej etykiety nad polem.
-    assert 'placeholder="Nazwa projektu (wymagana)"' in html
+    # Pola tekstowe mają nazwę w aria-label i tę samą nazwę w podpowiedzi
+    # wewnątrz pola, bez widocznych etykiet; pole pliku zachowuje etykietę.
     assert 'aria-label="Nazwa projektu"' in html
-    assert 'placeholder="tutaj wklej tekst"' in html
-    assert 'placeholder="Nazwa grupy tematycznej (wymagana)"' in html
+    assert 'placeholder="Nazwa projektu"' in html
+    assert 'placeholder="Tekst wklejony"' in html
+    assert 'placeholder="Nazwa grupy tematycznej"' in html
     assert '<label for="nazwa_projektu">' not in html
     assert '<label for="tekst">' not in html
-    assert "(wymagana)</label>" not in html
+    assert '<label for="adresy">' not in html
     assert '<label for="pliki">' in html
     assert 'name="token_csrf" value="tok123"' in html
     assert "Nie ma niedokończonych projektów." in html
@@ -218,7 +219,7 @@ def test_adres_javascript_w_raporcie_nigdy_nie_staje_sie_odnosnikiem() -> None:
 def test_strona_projektu_po_zakonczeniu_ma_formularz_dosylania_zrodel() -> None:
     html = _strona_z_raportem("Raport końcowy projektu: Projekt\n")
 
-    assert 'placeholder="tutaj wklej tekst"' in html
+    assert 'placeholder="Tekst wklejony"' in html
     assert '<label for="dosylanie-tekst">' not in html
     assert 'action="/projekt/Projekt/dosylanie"' in html
     assert "Dodaj źródła i uruchom kolejny przebieg" in html
@@ -357,3 +358,75 @@ def test_formularz_dosylania_podpowiada_grupy_projektu_i_wymaga_grupy() -> None:
     assert '<option value="Rośliny">' in html
     # Domyślnie wpisana jest ostatnia grupa projektu, a pole jest wymagane.
     assert 'value="Rośliny" required' in html
+
+
+class _ZbieraczPolTekstowych(HTMLParser):
+    """Zbiera pola tekstowe i pola tekstowe wieloliniowe oraz etykiety z całej strony."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.pola: list[dict[str, str | None]] = []
+        self.etykiety: set[str] = set()
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        atrybuty = dict(attrs)
+        if tag == "textarea" or (tag == "input" and atrybuty.get("type") == "text"):
+            self.pola.append(atrybuty)
+        elif tag == "label" and atrybuty.get("for"):
+            self.etykiety.add(atrybuty["for"] or "")
+
+
+def _strony_z_polami_tekstowymi() -> list[str]:
+    informacja = InformacjaOZadaniu(
+        nazwa_projektu="Projekt",
+        stan=StanZadania.ZAKONCZONE,
+        komunikat_postepu="Projekt zakończony",
+        komunikat_bledu=None,
+        wynik=None,
+    )
+    return [
+        strona_glowna(projekty=[], token_csrf="t"),
+        _strona_z_raportem("Raport końcowy projektu: Projekt" + chr(10)),
+        strona_projektu(
+            nazwa="Projekt",
+            informacja=informacja,
+            pola=PolaNotatnika(),
+            limit_znakow_instrukcji=10_000,
+            token_csrf="t",
+            podsumowanie=None,
+            raport=None,
+            bledy=[BladPola(pole="instrukcja_systemowa", komunikat="Za dużo znaków.")],
+        ),
+        strona_promptu(nazwa="Projekt", prompt="Treść"),
+    ]
+
+
+def test_kazde_pole_tekstowe_ma_aria_label_i_taki_sam_placeholder_bez_widocznej_etykiety() -> None:
+    """Wzorzec z decyzji użytkownika: podwójny odczyt nazwy w NVDA przy etykiecie i podpowiedzi."""
+    liczba_pol = 0
+    for html in _strony_z_polami_tekstowymi():
+        zbieracz = _ZbieraczPolTekstowych()
+        zbieracz.feed(html)
+        for pole in zbieracz.pola:
+            liczba_pol += 1
+            identyfikator = pole.get("id")
+            assert pole.get("aria-label"), identyfikator
+            assert pole.get("placeholder") == pole.get("aria-label"), identyfikator
+            assert identyfikator not in zbieracz.etykiety, identyfikator
+    assert liczba_pol >= 10
+
+
+def test_pole_promptu_ma_opis_pomocniczy_przez_aria_describedby_a_nie_w_nazwie() -> None:
+    html = strona_projektu(
+        nazwa="Projekt",
+        informacja=None,
+        pola=PolaNotatnika(),
+        limit_znakow_instrukcji=10_000,
+        token_csrf="t",
+        podsumowanie=None,
+        raport=None,
+    )
+
+    assert 'aria-describedby="pomoc-prompt"' in html
+    assert 'id="pomoc-prompt"' in html
+    assert 'aria-label="Prompt dla mechanizmu wyszukującego źródła"' in html

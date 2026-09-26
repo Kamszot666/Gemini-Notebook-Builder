@@ -437,9 +437,12 @@ do sprawdzenia” raportu końcowego. Jeżeli rozpoznany tekst wygląda na przek
 — dużo znaków nietekstowych albo słów bez samogłosek — dochodzi drugie
 ostrzeżenie z powodem.
 
-Gdy OCR jest wyłączony albo nie znaleziono Tesseracta, ze skanu nie powstaje
-żadna treść, a plik dostaje ostrzeżenie o braku warstwy tekstowej, zapisane w
-manifeście, w logu szczegółowym oraz w sekcji „Materiały do sprawdzenia”.
+Gdy OCR jest wyłączony, ze skanu nie powstaje żadna treść, a plik dostaje
+ostrzeżenie o braku warstwy tekstowej, zapisane w manifeście, w logu
+szczegółowym oraz w sekcji „Materiały do sprawdzenia”. Gdy OCR jest włączony,
+a nie znaleziono Tesseracta albo jego danych językowych, skan jest pominięty
+z komunikatem, co trzeba doinstalować; to samo dotyczy obrazu. PDF z warstwą
+tekstową nie potrzebuje OCR i jest przetwarzany normalnie.
 
 Plik zaszyfrowany albo zabezpieczony przed kopiowaniem kończy się błędem trwałym
 z czytelnym komunikatem: taki plik nie zaimportuje się także wprost do notatnika,
@@ -951,8 +954,8 @@ aplikacji: to jedno źródło dostaje status „pominiete” z czytelnym komunik
 a przetwarzanie pozostałych źródeł idzie dalej bez zmian. Status jest tu
 „pominiete”, nie „blad” — tak samo jak przy braku FFmpega dla nagrania mowy —
 bo brak opcjonalnego narzędzia zewnętrznego wyłącza konkretną ścieżkę
-przetwarzania, a nie jest awarią. Brak Tesseracta przy OCR to osobny przypadek:
-skan zostaje zapisany bez rozpoznanego tekstu, z ostrzeżeniem, a nie pominięty.
+przetwarzania, a nie jest awarią. Tak samo traktowany jest brak Tesseracta
+albo jego danych językowych przy włączonym OCR obrazu lub skanu PDF.
 Pominięte źródło nie tworzy pliku wynikowego, więc nie zajmuje slotu notatnika,
 a powód pominięcia trafia do manifestu i do raportu końcowego.
 

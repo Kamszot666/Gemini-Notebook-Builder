@@ -75,6 +75,14 @@ KOMUNIKAT_BRAK_TESSERACTA = (
 )
 
 
+KOMUNIKAT_POMINIECIE_BRAK_TESSERACTA = (
+    "Nie znaleziono programu Tesseract, który rozpoznaje tekst na obrazach i "
+    "skanach. Pobierz i zainstaluj Tesseract, a potem dopisz go do zmiennej PATH "
+    "albo wskaż ścieżkę pliku wykonywalnego w ustawieniu „sciezka_tesseract”. "
+    "To źródło wymaga OCR, więc zostało pominięte."
+)
+
+
 @dataclass(frozen=True, slots=True)
 class UstawieniaOcr:
     """Zestaw ustawień jednego przebiegu OCR, wyprowadzony z konfiguracji projektu."""
@@ -199,6 +207,18 @@ def brakujace_dane_jezykowe(
     )
     wymagane = [czlon.strip() for czlon in jezyk.split("+") if czlon.strip()]
     return tuple(czlon for czlon in wymagane if czlon not in zainstalowane)
+
+
+def wymagaj_ocr(ustawienia: UstawieniaOcr, identyfikator_zrodla: str | None = None) -> None:
+    """Zgłasza `BrakNarzedzia`, gdy OCR nie może się wykonać: brak programu albo danych języka.
+
+    Wołają ją ekstraktory źródeł, które bez OCR nie mają treści: obrazu oraz
+    skanu PDF bez warstwy tekstowej, przy włączonym OCR. Wyjątek kończy się
+    pominięciem źródła z komunikatem, co jest doprowadzić do porządku.
+    """
+    if not czy_dostepny(ustawienia.sciezka_tesseract):
+        raise BrakNarzedzia(KOMUNIKAT_POMINIECIE_BRAK_TESSERACTA, identyfikator_zrodla)
+    wymagaj_danych_jezykowych(ustawienia, identyfikator_zrodla)
 
 
 def wymagaj_danych_jezykowych(

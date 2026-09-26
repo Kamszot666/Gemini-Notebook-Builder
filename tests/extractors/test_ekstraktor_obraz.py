@@ -115,24 +115,26 @@ def test_z_wlaczonym_ocr_wynik_zawiera_rozpoznany_tekst(wymaga_ocr_pol: None) ->
     assert dokument.metadane["ocena_ocr"] in {"poprawna", "pusta", "podejrzana"}
 
 
-def test_wlaczony_ocr_bez_tesseracta_daje_ostrzezenie(
+def test_wlaczony_ocr_bez_tesseracta_zglasza_brak_narzedzia(
     monkeypatch: pytest.MonkeyPatch, obraz_z_tekstem: Callable[..., bytes]
 ) -> None:
-    monkeypatch.setattr(plik_obraz, "czy_dostepny", lambda _sciezka="": False)
+    """Obraz wymagający OCR, a bez programu Tesseract, jest pomijany, nie zapisywany bez tekstu."""
+    monkeypatch.setattr(tesseract, "czy_dostepny", lambda _sciezka="": False)
 
-    dokument = EkstraktorObrazu(UstawieniaOcr(), ocr_wlaczony=True).wyekstrahuj(
-        "obraz-7", obraz_z_tekstem(["opis w metadanych brak"])
-    )
+    with pytest.raises(BrakNarzedzia) as informacja:
+        EkstraktorObrazu(UstawieniaOcr(), ocr_wlaczony=True).wyekstrahuj(
+            "obraz-7", obraz_z_tekstem(["opis w metadanych brak"])
+        )
 
-    assert any("Tesseract" in ostrzezenie for ostrzezenie in dokument.ostrzezenia)
-    assert dokument.metadane["ocr_wykonany"] == "nie"
+    assert "Pobierz i zainstaluj Tesseract" in informacja.value.komunikat
+    assert "pominięte" in informacja.value.komunikat
 
 
 def test_wlaczony_ocr_bez_danych_jezyka_zglasza_brak_narzedzia(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Brak pol.traineddata to brak opcjonalnego składnika, nie błąd rozpoznawania."""
-    monkeypatch.setattr(plik_obraz, "czy_dostepny", lambda _sciezka="": True)
+    monkeypatch.setattr(tesseract, "czy_dostepny", lambda _sciezka="": True)
     monkeypatch.setattr(tesseract, "dostepne_jezyki", lambda _sciezka="": ("eng",))
     bajty = (KATALOG_DANYCH / "obraz_wykres.png").read_bytes()
 

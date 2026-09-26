@@ -97,6 +97,7 @@ from gnb.ingestion.archiwum import (
     czy_archiwum,
     rozwin_archiwum,
 )
+from gnb.ingestion.lista_url import ostrzezenie_o_limicie_adresow
 from gnb.ingestion.pobieranie import (
     OdpowiedzPobrania,
     Pobieracz,
@@ -1363,7 +1364,7 @@ class _Wykonanie:
             self._pomin(zrodlo, pozycja, KOMUNIKAT_PLIK_BEZ_TRESCI)
             return
 
-        ostrzezenia = self._zbierz_ostrzezenia(zrodlo, dokument, pozycja.ostrzezenia_wejscia)
+        ostrzezenia = self._zbierz_ostrzezenia(zrodlo, dokument, pozycja)
         decyzja = regula_md.ocen(dokument)
         nazwa_bazowa = nazwa_pliku_wynikowego(dokument.tytul, identyfikator)
         naglowek = self._naglowek(
@@ -2134,7 +2135,7 @@ class _Wykonanie:
         self,
         zrodlo: Zrodlo,
         dokument: DokumentWyekstrahowany,
-        ostrzezenia_wejscia: tuple[str, ...] = (),
+        pozycja: PozycjaWejsciowa,
     ) -> list[str]:
         """Zbiera ostrzeżenia zgłoszone przez ekstraktor i odnotowuje je w obu logach.
 
@@ -2144,12 +2145,15 @@ class _Wykonanie:
         tekstowej, dociera tutaj nawet z pustą treścią, bo jego pusty wynik
         obsługuje ocena jakości, a nie to miejsce.
 
-        Ostrzeżenia ustalone przy przyjęciu wejścia dochodzą do tej samej listy.
+        Do tej samej listy dochodzi ostrzeżenie o przekroczonym limicie adresów
+        z treści pliku. Jest ustalane z zawartości pliku w chwili przetwarzania,
+        a nie zapisywane przy przyjęciu wejścia, więc przeżywa wznowienie
+        przerwanego przebiegu bez zmiany checkpointu.
 
         Ostrzeżenie nie zmienia statusu źródła. Źródło jest zapisywane normalnie,
         a ostrzeżenie trafia do checkpointu, a stąd do manifestu i do raportu.
         """
-        ostrzezenia = [*dokument.ostrzezenia, *ostrzezenia_wejscia]
+        ostrzezenia = [*dokument.ostrzezenia, *self._ostrzezenie_o_limicie_adresow(pozycja)]
         if not ostrzezenia:
             return []
 
@@ -2157,6 +2161,17 @@ class _Wykonanie:
         for ostrzezenie in ostrzezenia:
             self._loguj(logging.WARNING, zrodlo.identyfikator_zrodla, f"Ostrzeżenie: {ostrzezenie}")
         return ostrzezenia
+
+    def _ostrzezenie_o_limicie_adresow(self, pozycja: PozycjaWejsciowa) -> list[str]:
+        """Zwraca ostrzeżenie o adresach z treści pliku pominiętych z powodu limitu, jeśli jest."""
+        if pozycja.wejscie.typ_wejscia is not TypWejscia.PLIK or pozycja.archiwum:
+            return []
+        komunikat = ostrzezenie_o_limicie_adresow(
+            Path(pozycja.wejscie.wartosc),
+            self._konfiguracja.limit_adresow_z_pliku,
+            self._konfiguracja.dodatkowe_parametry_sledzace,
+        )
+        return [komunikat] if komunikat else []
 
     def _ocen_jakosc(
         self,

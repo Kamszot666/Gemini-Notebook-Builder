@@ -36,7 +36,12 @@ from gnb.core.wyjatki import BrakNarzedzia, FormatNieobslugiwany
 from gnb.extractors.bazowy import PostepEkstrakcji
 from gnb.images.ocena_ocr import OcenaOcr, ocen_ocr
 from gnb.images.opis import BRAK_OPISU, MaterialDoOpisu, zbuduj_opis
-from gnb.images.tesseract import UstawieniaOcr, czy_dostepny, rozpoznaj_tekst
+from gnb.images.tesseract import (
+    UstawieniaOcr,
+    czy_dostepny,
+    rozpoznaj_tekst,
+    wymagaj_danych_jezykowych,
+)
 
 METODA_EKSTRAKCJI = "obraz"
 METODA_EKSTRAKCJI_OCR = "obraz-ocr"
@@ -163,6 +168,7 @@ class EkstraktorObrazu:
         if not czy_dostepny(self._ustawienia_ocr.sciezka_tesseract):
             ostrzezenia.append(OSTRZEZENIE_OCR_BEZ_TESSERACTA)
             return "", False
+        wymagaj_danych_jezykowych(self._ustawienia_ocr, identyfikator_zrodla)
         try:
             tekst = rozpoznaj_tekst(
                 _do_png(obraz),

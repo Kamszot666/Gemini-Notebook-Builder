@@ -18,12 +18,13 @@ from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 
 from gnb.core.stale import TypZrodla
-from gnb.core.wyjatki import FormatNieobslugiwany
+from gnb.core.wyjatki import BrakNarzedzia, FormatNieobslugiwany
 from gnb.extractors import plik_obraz
 from gnb.extractors.plik_obraz import (
     KOMUNIKAT_BRAK_PILLOW_HEIF,
     EkstraktorObrazu,
 )
+from gnb.images import tesseract
 from gnb.images.tesseract import UstawieniaOcr
 
 KATALOG_DANYCH = Path(__file__).resolve().parents[1] / "dane"
@@ -125,3 +126,19 @@ def test_wlaczony_ocr_bez_tesseracta_daje_ostrzezenie(
 
     assert any("Tesseract" in ostrzezenie for ostrzezenie in dokument.ostrzezenia)
     assert dokument.metadane["ocr_wykonany"] == "nie"
+
+
+def test_wlaczony_ocr_bez_danych_jezyka_zglasza_brak_narzedzia(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Brak pol.traineddata to brak opcjonalnego składnika, nie błąd rozpoznawania."""
+    monkeypatch.setattr(plik_obraz, "czy_dostepny", lambda _sciezka="": True)
+    monkeypatch.setattr(tesseract, "dostepne_jezyki", lambda _sciezka="": ("eng",))
+    bajty = (KATALOG_DANYCH / "obraz_wykres.png").read_bytes()
+
+    with pytest.raises(BrakNarzedzia) as informacja:
+        EkstraktorObrazu(UstawieniaOcr(jezyk="pol"), ocr_wlaczony=True).wyekstrahuj(
+            "obraz-8", bajty
+        )
+
+    assert "pol.traineddata" in informacja.value.komunikat

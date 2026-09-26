@@ -173,3 +173,38 @@ def test_ustawienia_ocr_z_konfiguracji(tmp_path: Path) -> None:
 
     assert ustawienia.jezyk == "pol+eng"
     assert ustawienia.tryb_segmentacji == 6
+
+
+def test_wymagaj_danych_jezykowych_zglasza_brak_z_nazwa_pliku(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tesseract, "dostepne_jezyki", lambda _sciezka="": ("eng", "osd"))
+
+    with pytest.raises(BrakNarzedzia) as informacja:
+        tesseract.wymagaj_danych_jezykowych(UstawieniaOcr(jezyk="pol"), "obraz-1")
+
+    assert "pol.traineddata" in informacja.value.komunikat
+    assert "pominięte" in informacja.value.komunikat
+
+
+def test_wymagaj_danych_jezykowych_nic_nie_robi_gdy_dane_sa(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tesseract, "dostepne_jezyki", lambda _sciezka="": ("eng", "pol"))
+
+    tesseract.wymagaj_danych_jezykowych(UstawieniaOcr(jezyk="pol+eng"))
+
+
+def test_wskazany_katalog_danych_jest_przekazywany_do_listy_jezykow(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    zapytania: list[tuple[str, str]] = []
+
+    def atrapa(sciezka: str = "", sciezka_tessdata: str = "") -> tuple[str, ...]:
+        zapytania.append((sciezka, sciezka_tessdata))
+        return ("pol",)
+
+    monkeypatch.setattr(tesseract, "dostepne_jezyki", atrapa)
+
+    assert brakujace_dane_jezykowe("pol", "", "katalog_danych") == ()
+    assert zapytania == [("", "katalog_danych")]

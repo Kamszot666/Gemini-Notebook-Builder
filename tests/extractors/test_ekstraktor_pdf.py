@@ -16,9 +16,10 @@ import pytest
 from pypdf import PdfWriter
 
 from gnb.core.stale import PoziomPewnosciStruktury, TypZrodla
-from gnb.core.wyjatki import BladTrwaly
+from gnb.core.wyjatki import BladTrwaly, BrakNarzedzia
 from gnb.extractors import plik_pdf
 from gnb.extractors.plik_pdf import METODA_EKSTRAKCJI_OCR, OSTRZEZENIE_TEKST_Z_OCR, EkstraktorPdf
+from gnb.images import tesseract
 from gnb.images.tesseract import UstawieniaOcr
 
 KATALOG_DANYCH = Path(__file__).resolve().parents[1] / "dane"
@@ -175,3 +176,18 @@ def test_skan_z_ocr_ale_bez_tesseracta_daje_ostrzezenie(monkeypatch: pytest.Monk
 
     assert dokument.tekst == ""
     assert any("Tesseract" in ostrzezenie for ostrzezenie in dokument.ostrzezenia)
+
+
+def test_skan_z_ocr_bez_danych_jezyka_zglasza_brak_narzedzia(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(plik_pdf, "czy_dostepny", lambda _sciezka="": True)
+    monkeypatch.setattr(tesseract, "dostepne_jezyki", lambda _sciezka="": ("eng",))
+    dane = (KATALOG_DANYCH / "pdf_skan.pdf").read_bytes()
+
+    with pytest.raises(BrakNarzedzia) as informacja:
+        EkstraktorPdf(UstawieniaOcr(jezyk="pol"), ocr_wlaczony=True).wyekstrahuj(
+            "plik_dokument-12", dane
+        )
+
+    assert "pol.traineddata" in informacja.value.komunikat

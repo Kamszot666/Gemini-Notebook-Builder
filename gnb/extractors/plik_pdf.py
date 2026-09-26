@@ -47,7 +47,12 @@ from gnb.core.wyjatki import BladTrwaly, BrakNarzedzia
 from gnb.extractors.bazowy import PostepEkstrakcji
 from gnb.images.ocena_ocr import ocen_ocr
 from gnb.images.rasteryzacja import rasteryzuj_strony
-from gnb.images.tesseract import UstawieniaOcr, czy_dostepny, rozpoznaj_wiele
+from gnb.images.tesseract import (
+    UstawieniaOcr,
+    czy_dostepny,
+    rozpoznaj_wiele,
+    wymagaj_danych_jezykowych,
+)
 
 METODA_EKSTRAKCJI = "pdf"
 METODA_EKSTRAKCJI_OCR = "pdf-ocr"
@@ -164,6 +169,7 @@ class EkstraktorPdf:
             return pusty(KOMUNIKAT_BEZ_WARSTWY_TEKSTOWEJ)
         if not czy_dostepny(self._ustawienia_ocr.sciezka_tesseract):
             return pusty(OSTRZEZENIE_OCR_BEZ_TESSERACTA)
+        wymagaj_danych_jezykowych(self._ustawienia_ocr, identyfikator_zrodla)
 
         strony_png = rasteryzuj_strony(
             bajty,

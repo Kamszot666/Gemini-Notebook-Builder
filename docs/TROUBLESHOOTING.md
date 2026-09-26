@@ -1,4 +1,4 @@
-# Rozwiązywanie problemów — stan po etapie czternastym
+# Rozwiązywanie problemów — stan po etapie czternastym i naprawie danych językowych OCR
 
 Ten dokument opisuje problemy, które wystąpiły w rzeczywistej pracy z aplikacją,
 oraz te, które wynikają wprost z jej budowy. Każdy przypadek ma tę samą budowę:
@@ -340,13 +340,14 @@ projektu, bo źródło z ostrzeżeniem ma już status końcowy i nie jest ponawi
 
 ## 14. OCR rozpoznał polski tekst z błędami, bo brakuje danych językowych „pol”
 
-Objaw. Tekst z OCR skanu albo obrazu jest po polsku, ale systematycznie
-przekręcony: brakuje ogonków, litery „ł” i „ż” są mylone, całe wyrazy są
-nie do odczytania. Dotyczy każdego pliku, a nie jednego.
+Objaw. Obrazy i skany PDF mają status „pominięte”, a w raporcie i w manifeście
+stoi komunikat, że Tesseract nie ma danych językowych dla języka „pol” i że
+trzeba doinstalować plik `pol.traineddata`. Dotyczy każdego obrazu i skanu,
+a nie jednego pliku. Liczy się jako pominięcie, nie jako błąd.
 
 Przyczyna. Instalator Tesseracta domyślnie dokłada tylko dane językowe
-angielskiego. Bez pliku `pol.traineddata` Tesseract rozpoznaje polski tekst
-regułami angielskiego i wynik jest błędny.
+angielskiego. Bez pliku `pol.traineddata` Tesseract nie potrafi rozpoznać
+polskiego tekstu, więc aplikacja pomija źródło, zamiast zapisać wynik błędny.
 
 Co zrobić. Sprawdź listę zainstalowanych danych językowych poleceniem
 `python -m gnb.cli diagnostyka`: wiersz „Dane językowe OCR” wymienia je i

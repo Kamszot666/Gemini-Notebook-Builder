@@ -892,8 +892,11 @@ class _Wykonanie:
             # brak jako wyłączenie konkretnej ścieżki, a nie awarię, więc źródło
             # dostaje status „pominiete” z komunikatem mówiącym, czego zabrakło,
             # tak samo jak przy świadomym pominięciu przez ekstraktor. Brak
-            # Tesseracta przy OCR obrazu albo skanu PDF tu nie trafia: ekstraktor
-            # łapie go sam i zamienia na ostrzeżenie, nie przerywając pracy.
+            # samego Tesseracta przy OCR obrazu albo skanu PDF tu nie trafia:
+            # ekstraktor łapie go sam i zamienia na ostrzeżenie, nie przerywając
+            # pracy. Brak danych językowych Tesseracta, na przykład pliku
+            # pol.traineddata, tu trafia i daje pominięcie z komunikatem, który
+            # język trzeba doinstalować.
             # Wskazanie w konfiguracji ścieżki do nieistniejącego pliku narzędzia
             # to osobny przypadek: kończy się błędem trwałym już przy wczytywaniu
             # konfiguracji, zanim potok ruszy.

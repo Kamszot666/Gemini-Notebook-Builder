@@ -1,4 +1,4 @@
-# Architektura — stan po etapie piętnastym, część B
+# Architektura — stan po etapie piętnastym, część C
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
 zakończeniu etapu czternastego. Pełny docelowy podział na pakiety opisuje
@@ -436,7 +436,15 @@ istniejący potok z żądaniem HTTP przez semantyczny, dostępny HTML.
   elemencie `style`, dwa krótkie skrypty wbudowane w stronę.
 - `gnb/ui/serwer.py` — `ThreadingHTTPServer` z routingiem tablicą tras. Każdy
   POST wymaga zgodnego tokenu CSRF, a po udanym POST serwer przekierowuje kodem
-  303. Nieobsłużony wyjątek staje się stroną 500.
+  303. Nieobsłużony wyjątek staje się stroną 500. Na Windows gniazdo ma
+  `SO_EXCLUSIVEADDRUSE`, a nie `SO_REUSEADDR`, żeby drugi proces nie mógł zająć
+  tego samego portu.
+- `gnb/ui/blokada.py` — blokada pojedynczej kopii serwera: plik `serwer.lock`
+  w katalogu danych aplikacji z blokadą systemu operacyjnego (`msvcrt.locking`
+  na Windows, `fcntl.flock` na Linuksie), zwalnianą przez system po zakończeniu
+  procesu. Niesie też adres działającej kopii. Zakłada ją `gnb/ui/server.py`
+  przed otwarciem portu i przed rejestracją skrótu; druga kopia wypisuje zdanie,
+  otwiera adres pierwszej i kończy się kodem 3. Polecenia `gnb.cli` jej nie dotyczą.
 - `gnb/ui/widoki_zrodel.py` — wykaz źródeł projektu z działaniami, sekcja
   brakujących plików wynikowych. Zależy od
   `widoki.py`, a nie odwrotnie: gotowy fragment jest przekazywany do strony

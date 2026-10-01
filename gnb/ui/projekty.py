@@ -1,9 +1,11 @@
 """Wykrywanie projektów w katalogu wyników i wyróżnianie niedokończonych.
 
-Interfejs pokazuje po starcie listę projektów, które nie doszły do końca, żeby
-użytkownik mógł je wznowić zamiast zaczynać od nowa, zgodnie z sekcją osiemnastą
-punkt dziewiąty CLAUDE.md. Projekt jest niedokończony, gdy ma checkpoint z flagą
-``zakonczony`` równą fałsz.
+Interfejs pokazuje po starcie listę wszystkich projektów z katalogu wyników,
+żeby użytkownik mógł wejść do dowolnego z nich albo wznowić niedokończony zamiast
+zaczynać od nowa, zgodnie z sekcją osiemnastą punkt dziewiąty CLAUDE.md. Projekt
+jest niedokończony, gdy ma checkpoint z flagą ``zakonczony`` równą fałsz. Lista
+powstaje z odczytu katalogu przy każdym wywołaniu, bez pamięci podręcznej, więc
+projekt usunięty z dysku znika z niej od razu.
 
 Uszkodzony checkpoint jednego projektu nie może wywrócić całej listy. Taki
 projekt trafia na listę z komunikatem błędu przy nim, a nie znika po cichu.
@@ -31,6 +33,13 @@ class ProjektNaLiscie:
     czas_ostatniej_zmiany: str
     komunikat_bledu: str | None = None
 
+    @property
+    def stan(self) -> str:
+        """Krótki stan projektu do odczytu przez czytnik ekranu: jedno słowo."""
+        if self.komunikat_bledu is not None:
+            return "uszkodzony"
+        return "zakończony" if self.zakonczony else "niedokończony"
+
 
 def znajdz_projekty(katalog_wynikow: Path) -> list[ProjektNaLiscie]:
     """Zwraca projekty z katalogu wyników, ostatnio zmienione na początku listy.
@@ -47,6 +56,14 @@ def znajdz_projekty(katalog_wynikow: Path) -> list[ProjektNaLiscie]:
             projekty.append(_wczytaj_pozycje(wpis, plik))
     projekty.sort(key=lambda projekt: projekt.czas_ostatniej_zmiany, reverse=True)
     return projekty
+
+
+def opisz_projekt(katalog: Path) -> ProjektNaLiscie | None:
+    """Opisuje jeden projekt, albo zwraca None, gdy katalog nie ma pliku checkpointu."""
+    plik = katalog / _NAZWA_CHECKPOINT
+    if not katalog.is_dir() or not plik.is_file():
+        return None
+    return _wczytaj_pozycje(katalog, plik)
 
 
 def niedokonczone(katalog_wynikow: Path) -> list[ProjektNaLiscie]:

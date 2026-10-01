@@ -39,7 +39,7 @@ def test_strona_glowna_ma_etykiety_i_pole_csrf() -> None:
     assert '<label for="adresy">' not in html
     assert '<label for="pliki">' in html
     assert 'name="token_csrf" value="tok123"' in html
-    assert "Nie ma niedokończonych projektów." in html
+    assert "Nie ma jeszcze żadnych projektów." in html
 
 
 def test_zadna_strona_nie_laduje_zasobu_zewnetrznego() -> None:
@@ -263,18 +263,100 @@ def test_strona_bledu_ma_kod_i_komunikat_po_polsku() -> None:
     assert "Token formularza jest nieprawidłowy." in html
 
 
-def test_projekt_do_wznowienia_ma_wlasny_przycisk() -> None:
-    projekt = ProjektNaLiscie(
-        nazwa="Podatki 2026",
+def _projekt_na_liscie(nazwa: str, *, zakonczony: bool, blad: str | None = None) -> ProjektNaLiscie:
+    return ProjektNaLiscie(
+        nazwa=nazwa,
         katalog=Path("x"),
-        zakonczony=False,
+        zakonczony=zakonczony,
         liczba_zrodel=4,
         czas_ostatniej_zmiany="2026-09-02T10:00:00+00:00",
+        komunikat_bledu=blad,
     )
-    html = strona_glowna(projekty=[projekt], token_csrf="t")
-    assert "Podatki 2026" in html
-    assert "/projekt/Podatki%202026/wznow" in html
+
+
+def test_projekty_sa_na_rozwijanej_liscie_z_krotkim_stanem_i_przyciskiem_przejscia() -> None:
+    projekty = [
+        _projekt_na_liscie("Podatki 2026", zakonczony=False),
+        _projekt_na_liscie("Gotowy", zakonczony=True),
+        _projekt_na_liscie("Zepsuty", zakonczony=False, blad="Plik jest uszkodzony."),
+    ]
+
+    html = strona_glowna(projekty=projekty, token_csrf="t")
+
+    assert "<h2>Projekty do wznowienia</h2>" in html
+    assert '<label for="wybor-projektu">Wybierz projekt</label>' in html
+    assert '<select id="wybor-projektu" name="projekt">' in html
+    assert '<option value="Podatki 2026">Podatki 2026, niedokończony</option>' in html
+    assert '<option value="Gotowy">Gotowy, zakończony</option>' in html
+    assert '<option value="Zepsuty">Zepsuty, uszkodzony</option>' in html
+    assert 'method="get" action="/przejdz-do-projektu"' in html
+    assert '<button type="submit">Przejdź do projektu</button>' in html
+    # Liczba źródeł i data zmiany należą do strony projektu, nie do pozycji listy.
+    assert "źródeł w checkpoincie" not in html
+    assert "2026-09-02" not in html
+    assert "Wznów ten projekt" not in html
+
+
+def test_nazwa_projektu_na_liscie_jest_escapowana() -> None:
+    html = strona_glowna(projekty=[_projekt_na_liscie("<b>x</b>", zakonczony=True)], token_csrf="t")
+
+    assert "<b>x</b>" not in html
+    assert "&lt;b&gt;x&lt;/b&gt;" in html
+
+
+def _strona_projektu_z_opisem(opis: ProjektNaLiscie | None, informacja_stan: StanZadania) -> str:
+    informacja = InformacjaOZadaniu(
+        nazwa_projektu="Projekt",
+        stan=informacja_stan,
+        komunikat_postepu="",
+        komunikat_bledu=None,
+        wynik=None,
+    )
+    return strona_projektu(
+        nazwa="Projekt",
+        informacja=informacja,
+        pola=PolaNotatnika(),
+        limit_znakow_instrukcji=10_000,
+        token_csrf="t",
+        opis_projektu=opis,
+    )
+
+
+def test_strona_projektu_niedokonczonego_ma_przycisk_wznowienia_i_stan() -> None:
+    opis = _projekt_na_liscie("Projekt", zakonczony=False)
+
+    html = _strona_projektu_z_opisem(opis, StanZadania.ZAKONCZONE)
+
+    assert "Stan: niedokończony. Źródeł w checkpoincie: 4." in html
+    assert "2026-09-02T10:00:00+00:00" in html
+    assert 'action="/projekt/Projekt/wznow"' in html
     assert "Wznów ten projekt" in html
+
+
+def test_strona_projektu_zakonczonego_nie_ma_przycisku_wznowienia() -> None:
+    html = _strona_projektu_z_opisem(
+        _projekt_na_liscie("Projekt", zakonczony=True), StanZadania.ZAKONCZONE
+    )
+
+    assert "Stan: zakończony." in html
+    assert "Wznów ten projekt" not in html
+
+
+def test_strona_projektu_w_trakcie_przetwarzania_nie_ma_przycisku_wznowienia() -> None:
+    html = _strona_projektu_z_opisem(
+        _projekt_na_liscie("Projekt", zakonczony=False), StanZadania.TRWA
+    )
+
+    assert "Wznów ten projekt" not in html
+
+
+def test_strona_projektu_uszkodzonego_pokazuje_komunikat_bez_przycisku() -> None:
+    opis = _projekt_na_liscie("Projekt", zakonczony=False, blad="Plik checkpointu jest uszkodzony.")
+
+    html = _strona_projektu_z_opisem(opis, StanZadania.ZAKONCZONE)
+
+    assert "Stan: uszkodzony. Plik checkpointu jest uszkodzony." in html
+    assert "Wznów ten projekt" not in html
 
 
 def test_strona_glowna_bez_aktywnego_projektu_skrotu_mowi_to_wprost() -> None:

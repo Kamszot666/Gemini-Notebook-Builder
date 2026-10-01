@@ -1,4 +1,4 @@
-# Architektura — stan po etapie czternastym i naprawach po nim
+# Architektura — stan po etapie piętnastym, część B
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
 zakończeniu etapu czternastego. Pełny docelowy podział na pakiety opisuje
@@ -426,10 +426,12 @@ istniejący potok z żądaniem HTTP przez semantyczny, dostępny HTML.
 - `gnb/ui/zadania.py` — `RejestrZadan`: uruchamia potok w wątku roboczym i trzyma
   stan najwyżej jednego zadania. Drugie żądanie uruchomienia jest odrzucane,
   a nie kolejkowane. Wyjątek w wątku staje się stanem błędu.
-- `gnb/ui/projekty.py` — wykrywanie projektów w katalogu wyników i wyróżnianie
-  niedokończonych. Uszkodzony checkpoint jednego projektu nie wywraca listy.
+- `gnb/ui/projekty.py` — wykrywanie wszystkich projektów w katalogu wyników,
+  z ich stanem (niedokończony, zakończony, uszkodzony). Lista powstaje z odczytu
+  katalogu przy każdym wywołaniu, bez pamięci podręcznej. Uszkodzony checkpoint
+  jednego projektu nie wywraca listy.
 - `gnb/ui/widoki.py` — generowanie stron: strona główna z formularzem nowego
-  projektu i wykazem projektów do wznowienia, strona projektu z regionem postępu,
+  projektu i rozwijaną listą projektów, strona projektu z regionem postępu,
   dwoma polami tekstowymi i raportem, strony błędu. Ciemny motyw, style w jednym
   elemencie `style`, dwa krótkie skrypty wbudowane w stronę.
 - `gnb/ui/serwer.py` — `ThreadingHTTPServer` z routingiem tablicą tras. Każdy

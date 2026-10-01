@@ -1,4 +1,4 @@
-# Obsługiwane formaty — stan po etapie czternastym i naprawach po nim
+# Obsługiwane formaty — stan po etapie piętnastym, część B
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
 Etap czternasty dodał formaty biurowe ODT, ODS, ODP, PPTX, XLSX, XLS, RTF, DOC
@@ -552,10 +552,12 @@ celowo nie próbuje sama wykryć, że obraz jest nutami: fałszywa etykieta „t
 nuty” byłaby gorsza niż jej brak.
 
 Animowany plik GIF jest przetwarzany z pierwszej klatki, z ostrzeżeniem o tym.
-Formaty HEIC i HEIF wymagają biblioteki opcjonalnej pillow-heif; jej brak
-kończy się błędem `FormatNieobslugiwany` ze wskazówką instalacji, a nie
-wyłączeniem całej obsługi obrazów. Plik uszkodzony kończy się tym samym rodzajem
-błędu, a nie awarią programu.
+Formaty HEIC i HEIF wymagają biblioteki opcjonalnej pillow-heif. Jej brak,
+a także zablokowanie jej natywnej części przez system (na przykład przez
+Inteligentne sterowanie aplikacjami w Windows), daje plikowi HEIC albo HEIF status
+„pominiete” z komunikatem, co zrobić, tak jak brak Tesseracta. Wyłącza to wyłącznie
+te dwa formaty, a JPG, PNG i pozostałe obrazy działają normalnie. Plik uszkodzony
+kończy się błędem `FormatNieobslugiwany`, a nie awarią programu.
 
 Pliki obrazów nie są zapisywane jako TXT: cała grupa obrazów trafia do jednego
 tematycznego pliku PDF, opisanego w sekcji „Pakowanie i podział plików

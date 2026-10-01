@@ -200,6 +200,8 @@ Strona główna ma formularz nowego projektu. Pola po kolei:
 
 Potrzebujesz przynajmniej jednego źródła. Przycisk „Utwórz projekt i rozpocznij przetwarzanie” wszystko uruchamia. Na stronie projektu widzisz postęp, potem podsumowanie i raport.
 
+Pod formularzem jest lista „Wybierz projekt” ze wszystkimi projektami z katalogu wyników. Każda pozycja to nazwa projektu i jego stan: niedokończony, zakończony albo uszkodzony. Przycisk „Przejdź do projektu” otwiera stronę wybranego projektu. Niedokończony projekt wznowisz tam przyciskiem „Wznów ten projekt”.
+
 Na stronie projektu możesz:
 
 1. Dosłać kolejne źródła formularzem pod raportem.

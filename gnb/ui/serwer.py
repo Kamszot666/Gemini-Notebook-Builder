@@ -22,7 +22,7 @@ from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Protocol, cast
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from gnb.core.konfiguracja import Konfiguracja
 from gnb.core.nazwy import sanityzuj_nazwe_projektu
@@ -57,7 +57,7 @@ from gnb.potok import (
     przetworz_projekt,
 )
 from gnb.ui import csrf, formularze, widoki
-from gnb.ui.projekty import niedokonczone
+from gnb.ui.projekty import opisz_projekt, znajdz_projekty
 from gnb.ui.stan_skrotu import AktywnyProjektSkrotu, OstatniKomunikatSkrotu
 from gnb.ui.widoki import BladPola, DaneFormularzaProjektu, PodsumowanieWyniku, sciezka_projektu
 from gnb.ui.widoki_zrodel import (
@@ -226,6 +226,8 @@ class _Handler(BaseHTTPRequestHandler):
             self._pokaz_strone_glowna()
         elif sciezka == widoki.SCIEZKA_POSTEPU:
             self._pokaz_postep()
+        elif sciezka == widoki.SCIEZKA_WYBORU_PROJEKTU:
+            self._przejdz_do_projektu()
         elif sciezka.startswith("/projekt/") and sciezka.endswith("/prompt"):
             self._pokaz_prompt(self._nazwa_z_url(sciezka[len("/projekt/") : -len("/prompt")]))
         elif sciezka.startswith("/projekt/"):
@@ -265,7 +267,7 @@ class _Handler(BaseHTTPRequestHandler):
     ) -> None:
         token = self._token_sesji()
         html = widoki.strona_glowna(
-            projekty=niedokonczone(self._konfiguracja.katalog_wynikow),
+            projekty=znajdz_projekty(self._konfiguracja.katalog_wynikow),
             token_csrf=token,
             dane=dane,
             bledy=bledy,
@@ -273,6 +275,27 @@ class _Handler(BaseHTTPRequestHandler):
             ostatni_komunikat_skrotu=self._serwer.ostatni_komunikat_skrotu.aktualny(),
         )
         self._wyslij_html(kod, html, token=token)
+
+    def _przejdz_do_projektu(self) -> None:
+        """Przekierowuje na stronę projektu wybranego na liście strony głównej.
+
+        Nazwa przechodzi tę samą sanityzację co w pozostałych trasach, a nazwa,
+        której nie ma na dysku, daje czytelny komunikat, nie błąd serwera.
+        """
+        wartosci = parse_qs(urlsplit(self.path).query).get("projekt", [])
+        nazwa = wartosci[0].strip() if wartosci else ""
+        try:
+            uklad = ustal_uklad(self._konfiguracja.katalog_wynikow, nazwa)
+        except BladGnb:
+            uklad = None
+        if uklad is None or opisz_projekt(uklad.katalog_projektu) is None:
+            self._blad(
+                404,
+                "Nie znaleziono projektu",
+                f"Nie ma projektu o nazwie „{nazwa}”. Mógł zostać usunięty z dysku.",
+            )
+            return
+        self._przekieruj(widoki.sciezka_projektu(uklad.nazwa_projektu))
 
     def _pokaz_projekt(
         self,
@@ -324,6 +347,7 @@ class _Handler(BaseHTTPRequestHandler):
             dane_dosylania=dane_dosylania,
             bledy_dosylania=bledy_dosylania,
             zrodla_html=self._zrodla_html(uklad, token),
+            opis_projektu=opisz_projekt(uklad.katalog_projektu),
         )
         self._wyslij_html(kod, html, token=token)
 
@@ -334,9 +358,7 @@ class _Handler(BaseHTTPRequestHandler):
         z nich jest wartością domyślną tego pola, żeby kolejne źródła trafiały do
         tego samego pliku grupy bez przepisywania nazwy.
         """
-        if not uklad.checkpoint.is_file():
-            return []
-        checkpoint = wczytaj(uklad.checkpoint)
+        checkpoint = self._wczytaj_checkpoint_do_widoku(uklad)
         if checkpoint is None:
             return []
         grupy: list[str] = []
@@ -544,7 +566,11 @@ class _Handler(BaseHTTPRequestHandler):
             return
 
         uklad = ustal_uklad(self._konfiguracja.katalog_wynikow, nazwa)
-        checkpoint = wczytaj(uklad.checkpoint) if uklad.checkpoint.is_file() else None
+        try:
+            checkpoint = wczytaj(uklad.checkpoint) if uklad.checkpoint.is_file() else None
+        except BladGnb as blad:
+            self._blad(409, "Checkpoint jest uszkodzony", blad.komunikat)
+            return
         if checkpoint is None:
             self._blad(
                 404,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import shutil
 import threading
 import time
 from collections.abc import Iterator
@@ -427,3 +428,91 @@ def test_plik_z_adresami_ponad_limit_jest_zrodlem_a_adresy_nie_sa_dodawane(
     assert "limit_adresow_z_pliku" in (katalog / "raport.txt").read_text(encoding="utf-8")
     szczegolowy = (katalog / "logi" / "log_szczegolowy.txt").read_text(encoding="utf-8")
     assert "znaleziono 4 adresów" in szczegolowy
+
+
+def _zrob_projekt_z_checkpointem(katalog_wynikow: Path, nazwa: str, *, zakonczony: bool) -> None:
+    from gnb.persistence.checkpoint import WERSJA_SCHEMATU, Checkpoint, zapisz
+
+    uklad = ustal_uklad(katalog_wynikow, nazwa)
+    utworz_katalogi(uklad, z_materialami_zrodlowymi=False)
+    zapisz(
+        uklad.checkpoint,
+        Checkpoint(
+            wersja_schematu=WERSJA_SCHEMATU,
+            identyfikator_projektu=uklad.identyfikator_projektu,
+            nazwa_projektu=uklad.nazwa_projektu,
+            katalog_projektu=str(uklad.katalog_projektu),
+            konfiguracja={},
+            czas_ostatniej_zmiany="2026-09-02T10:00:00+00:00",
+            zakonczony=zakonczony,
+        ),
+    )
+
+
+def test_lista_projektow_jest_budowana_przy_kazdym_wyswietleniu_bez_restartu(
+    serwer: tuple[str, int, RejestrZadan], tmp_path: Path
+) -> None:
+    host, port, _ = serwer
+    wyniki = tmp_path / "wyniki"
+    _zrob_projekt_z_checkpointem(wyniki, "Pierwszy", zakonczony=True)
+    _zrob_projekt_z_checkpointem(wyniki, "Drugi", zakonczony=False)
+    klient = _Klient(host, port)
+
+    _, strona = klient.get_tekst("/")
+    assert "Pierwszy, zakończony" in strona
+    assert "Drugi, niedokończony" in strona
+
+    shutil.rmtree(wyniki / "Pierwszy")
+
+    _, strona = klient.get_tekst("/")
+    assert "Pierwszy" not in strona
+    assert "Drugi, niedokończony" in strona
+
+
+def test_przycisk_przejdz_do_projektu_przekierowuje_na_strone_wybranego(
+    serwer: tuple[str, int, RejestrZadan], tmp_path: Path
+) -> None:
+    host, port, _ = serwer
+    _zrob_projekt_z_checkpointem(tmp_path / "wyniki", "Podatki 2026", zakonczony=False)
+    klient = _Klient(host, port)
+
+    odpowiedz = klient.get("/przejdz-do-projektu?projekt=Podatki+2026")
+
+    assert odpowiedz.status == 303
+    assert odpowiedz.getheader("Location") == "/projekt/Podatki%202026"
+    _, strona = klient.get_tekst("/projekt/Podatki%202026")
+    assert "Wznów ten projekt" in strona
+
+
+@pytest.mark.parametrize(
+    "zapytanie", ["projekt=Nie+ma+takiego", "projekt=", "", "projekt=..%2F..%2Fx", "projekt=CON"]
+)
+def test_przejscie_do_nieistniejacego_projektu_daje_czytelny_komunikat_a_nie_blad_500(
+    serwer: tuple[str, int, RejestrZadan], zapytanie: str
+) -> None:
+    host, port, _ = serwer
+
+    odpowiedz, strona = _Klient(host, port).get_tekst(f"/przejdz-do-projektu?{zapytanie}")
+
+    assert odpowiedz.status == 404
+    assert "Nie ma projektu o nazwie" in strona
+
+
+def test_strona_projektu_uszkodzonego_pokazuje_komunikat_a_lista_dziala(
+    serwer: tuple[str, int, RejestrZadan], tmp_path: Path
+) -> None:
+    host, port, _ = serwer
+    wyniki = tmp_path / "wyniki"
+    _zrob_projekt_z_checkpointem(wyniki, "Dobry", zakonczony=True)
+    uszkodzony = wyniki / "Zepsuty"
+    uszkodzony.mkdir()
+    (uszkodzony / "checkpoint.json").write_text("to nie jest json", encoding="utf-8")
+    klient = _Klient(host, port)
+
+    _, glowna = klient.get_tekst("/")
+    odpowiedz, strona = klient.get_tekst("/projekt/Zepsuty")
+
+    assert "Dobry, zakończony" in glowna
+    assert "Zepsuty, uszkodzony" in glowna
+    assert odpowiedz.status == 200
+    assert "Stan: uszkodzony." in strona

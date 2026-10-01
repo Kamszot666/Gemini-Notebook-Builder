@@ -168,7 +168,7 @@ def strona_glowna(
     aktywny_projekt_skrotu: str | None = None,
     ostatni_komunikat_skrotu: KomunikatSkrotu | None = None,
 ) -> str:
-    """Strona główna: formularz nowego projektu oraz wykaz niedokończonych projektów."""
+    """Strona główna: formularz nowego projektu oraz rozwijana lista wszystkich projektów."""
     dane = dane or DaneFormularzaProjektu()
     bledy = bledy or []
 
@@ -205,7 +205,7 @@ def strona_glowna(
 
     tresc = (
         formularz
-        + _sekcja_niedokonczone(projekty, token_csrf)
+        + _sekcja_projektow(projekty)
         + _sekcja_skrotu_glowna(aktywny_projekt_skrotu, ostatni_komunikat_skrotu)
     )
     return _dokument("Gemini Notebook Builder", tresc, skrypt=_SKRYPT_FOKUS_BLEDOW if bledy else "")
@@ -235,37 +235,59 @@ def _akapit_ostatniego_komunikatu(komunikat: KomunikatSkrotu | None) -> str:
     return f'<p class="pomoc">Ostatnie zdarzenie skrótu ({wynik}): {tekst}</p>'
 
 
-def _sekcja_niedokonczone(projekty: list[ProjektNaLiscie], token_csrf: str) -> str:
-    """Wykaz projektów do wznowienia. Każdy z przyciskiem wznowienia."""
+SCIEZKA_WYBORU_PROJEKTU = "/przejdz-do-projektu"
+
+
+def _sekcja_projektow(projekty: list[ProjektNaLiscie]) -> str:
+    """Rozwijana lista wszystkich projektów z przyciskiem przejścia na stronę wybranego.
+
+    Pozycja listy jest krótka, bo czytnik ekranu odczytuje ją przy każdym ruchu
+    strzałką: nazwa, przecinek i stan. Liczba źródeł i data zmiany są na stronie
+    projektu. Formularz działa bez JavaScriptu, jako zwykła nawigacja metodą GET.
+    """
     if not projekty:
         return (
             '<div class="blok">\n<h2>Projekty do wznowienia</h2>\n'
-            "<p>Nie ma niedokończonych projektów.</p>\n</div>"
+            "<p>Nie ma jeszcze żadnych projektów.</p>\n</div>"
         )
-    pozycje = []
-    for projekt in projekty:
-        sciezka = sciezka_projektu(projekt.nazwa)
-        opis_bledu = (
-            f'<p class="pomoc">Uwaga: {tekst_z_odnosnikami(projekt.komunikat_bledu)}</p>'
-            if projekt.komunikat_bledu
-            else ""
-        )
-        pozycje.append(
-            "<li>\n"
-            f'<a href="{escapuj(sciezka)}">{escapuj(projekt.nazwa)}</a> '
-            f"— źródeł w checkpoincie: {projekt.liczba_zrodel}, "
-            f"ostatnia zmiana: {escapuj(projekt.czas_ostatniej_zmiany or 'nieznana')}.\n"
-            f"{opis_bledu}\n"
-            f'<form method="post" action="{escapuj(sciezka)}/wznow">\n'
-            f"{_pole_csrf(token_csrf)}\n"
-            '<button type="submit">Wznów ten projekt</button>\n'
-            "</form>\n"
-            "</li>"
-        )
-    return (
-        '<div class="blok">\n<h2>Projekty do wznowienia</h2>\n'
-        f"<ul>\n{''.join(pozycje)}\n</ul>\n</div>"
+    opcje = "\n".join(
+        f'<option value="{escapuj(projekt.nazwa)}">'
+        f"{escapuj(projekt.nazwa)}, {projekt.stan}</option>"
+        for projekt in projekty
     )
+    return (
+        '<form class="blok" method="get" '
+        f'action="{escapuj(SCIEZKA_WYBORU_PROJEKTU)}">\n'
+        "<h2>Projekty do wznowienia</h2>\n"
+        '<label for="wybor-projektu">Wybierz projekt</label>\n'
+        f'<select id="wybor-projektu" name="projekt">\n{opcje}\n</select>\n'
+        '<button type="submit">Przejdź do projektu</button>\n'
+        "</form>"
+    )
+
+
+def _sekcja_stanu_projektu(
+    sciezka: str, opis: ProjektNaLiscie | None, mozna_wznowic: bool, token_csrf: str
+) -> str:
+    """Stan projektu na jego stronie, z przyciskiem wznowienia dla niedokończonego."""
+    if opis is None:
+        return ""
+    czesci = ['<div class="blok">', "<h2>Stan projektu</h2>"]
+    if opis.komunikat_bledu:
+        czesci.append(f"<p>Stan: uszkodzony. {tekst_z_odnosnikami(opis.komunikat_bledu)}</p>")
+    else:
+        czesci.append(
+            f"<p>Stan: {opis.stan}. Źródeł w checkpoincie: {opis.liczba_zrodel}. "
+            f"Ostatnia zmiana: {escapuj(opis.czas_ostatniej_zmiany or 'nieznana')}.</p>"
+        )
+        if not opis.zakonczony and mozna_wznowic:
+            czesci.append(
+                f'<form method="post" action="{escapuj(sciezka)}/wznow">\n'
+                f"{_pole_csrf(token_csrf)}\n"
+                '<button type="submit">Wznów ten projekt</button>\n</form>'
+            )
+    czesci.append("</div>")
+    return "\n".join(czesci)
 
 
 def strona_projektu(
@@ -284,6 +306,7 @@ def strona_projektu(
     dane_dosylania: DaneFormularzaProjektu | None = None,
     bledy_dosylania: list[BladPola] | None = None,
     zrodla_html: str = "",
+    opis_projektu: ProjektNaLiscie | None = None,
 ) -> str:
     """Strona projektu: region postępu, dwa pola tekstowe oraz raport po zakończeniu.
 
@@ -293,7 +316,12 @@ def strona_projektu(
     """
     bledy = bledy or []
     sciezka = sciezka_projektu(nazwa)
-    czesci = [f"<h1>Projekt: {escapuj(nazwa)}</h1>", _sekcja_postepu(sciezka, informacja)]
+    trwa = informacja is not None and informacja.stan is StanZadania.TRWA
+    czesci = [
+        f"<h1>Projekt: {escapuj(nazwa)}</h1>",
+        _sekcja_stanu_projektu(sciezka, opis_projektu, not trwa, token_csrf),
+        _sekcja_postepu(sciezka, informacja),
+    ]
 
     fragment_wyniku = _fragment_wyniku(
         podsumowanie,
@@ -316,7 +344,6 @@ def strona_projektu(
     czesci.append(f'<p><a href="{escapuj(sciezka)}">Odśwież stan</a></p>')
     czesci.append('<p><a href="/">Wróć do strony głównej</a></p>')
 
-    trwa = informacja is not None and informacja.stan is StanZadania.TRWA
     fragmenty_skryptu = [_SKRYPT_LICZNIKA]
     if trwa:
         fragmenty_skryptu.append(

@@ -32,7 +32,7 @@ def test_strona_glowna_ma_etykiety_i_pole_csrf() -> None:
     # wewnątrz pola, bez widocznych etykiet; pole pliku zachowuje etykietę.
     assert 'aria-label="Nazwa projektu"' in html
     assert 'placeholder="Nazwa projektu"' in html
-    assert 'placeholder="Tekst wklejony"' in html
+    assert 'placeholder="Tu wklej tekst"' in html
     assert 'placeholder="Nazwa grupy tematycznej"' in html
     assert '<label for="nazwa_projektu">' not in html
     assert '<label for="tekst">' not in html
@@ -219,7 +219,7 @@ def test_adres_javascript_w_raporcie_nigdy_nie_staje_sie_odnosnikiem() -> None:
 def test_strona_projektu_po_zakonczeniu_ma_formularz_dosylania_zrodel() -> None:
     html = _strona_z_raportem("Raport końcowy projektu: Projekt\n")
 
-    assert 'placeholder="Tekst wklejony"' in html
+    assert 'placeholder="Tu wklej tekst"' in html
     assert '<label for="dosylanie-tekst">' not in html
     assert 'action="/projekt/Projekt/dosylanie"' in html
     assert "Dodaj źródła i uruchom kolejny przebieg" in html
@@ -430,3 +430,30 @@ def test_pole_promptu_ma_opis_pomocniczy_przez_aria_describedby_a_nie_w_nazwie()
     assert 'aria-describedby="pomoc-prompt"' in html
     assert 'id="pomoc-prompt"' in html
     assert 'aria-label="Prompt dla mechanizmu wyszukującego źródła"' in html
+
+
+NAZWA_POLA_TEKSTU = "Tu wklej tekst"
+NAZWA_POLA_ADRESOW = "Tu wklej adresy stron www i adresy do YouTube, po jednym w każdym wierszu"
+
+
+def _atrybuty_pola(html: str, identyfikator: str) -> dict[str, str]:
+    """Zwraca atrybuty znacznika textarea o podanym id, bez zaglądania w resztę strony."""
+    dopasowanie = re.search(rf'<textarea id="{identyfikator}"(.*?)>', html, re.DOTALL)
+    assert dopasowanie is not None, identyfikator
+    return dict(re.findall(r'([\w-]+)="([^"]*)"', dopasowanie.group(1)))
+
+
+def test_pola_tekstu_i_adresow_maja_nowe_nazwy_w_obu_formularzach() -> None:
+    glowna = strona_glowna(projekty=[], token_csrf="tok123")
+    projekt = _strona_z_raportem("Raport końcowy projektu: Projekt\n")
+
+    pola = [
+        (glowna, "tekst", NAZWA_POLA_TEKSTU),
+        (glowna, "adresy", NAZWA_POLA_ADRESOW),
+        (projekt, "dosylanie-tekst", NAZWA_POLA_TEKSTU),
+        (projekt, "dosylanie-adresy", NAZWA_POLA_ADRESOW),
+    ]
+    for html, identyfikator, nazwa in pola:
+        atrybuty = _atrybuty_pola(html, identyfikator)
+        assert atrybuty["aria-label"] == nazwa, identyfikator
+        assert atrybuty["placeholder"] == nazwa, identyfikator

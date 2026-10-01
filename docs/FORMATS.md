@@ -1302,8 +1302,8 @@ treści źródła z grupy pakuje całą grupę od nowa.
 
 ### Usunięcie źródła z projektu
 
-Usunięcie jest zalecaną drogą pozbycia się źródła i wymaga potwierdzenia
-wpisanym słowem. Źródło znika z checkpointu, z listy wejść, z decyzji
+Usunięcie jest zalecaną drogą pozbycia się źródła i następuje od razu, jednym
+przyciskiem, bez strony pytającej i bez wpisywania potwierdzenia. Źródło znika z checkpointu, z listy wejść, z decyzji
 deduplikacji, z manifestu i z raportu, a jego pliki wynikowe i wyniki pośrednie
 z dysku. Zachowane oryginały i wysłane pliki zostają w katalogu projektu. Lista
 wejść jest oczyszczona, więc wznowienie projektu nie przywraca usuniętego źródła.

@@ -52,8 +52,9 @@ Pierwsza to formularz nowego projektu. Pola, w kolejności:
 
 1. Nazwa projektu. Pole wymagane. Nazwa staje się nazwą katalogu z wynikami, więc
    podaj krótką i rozpoznawalną, na przykład „Podatki 2026”.
-2. Tekst wklejony. Pole wielowierszowe na treść wklejaną wprost.
-3. Adresy stron i filmów. Pole wielowierszowe, po jednym adresie w wierszu.
+2. Tu wklej tekst. Pole wielowierszowe na treść wklejaną wprost.
+3. Tu wklej adresy stron www i adresy do YouTube, po jednym w każdym wierszu. Pole wielowierszowe, po jednym adresie
+   w wierszu.
    Przyjmowane są adresy stron internetowych oraz adresy filmów z serwisu
    YouTube, dla których pobierane są napisy.
 4. Pliki z dysku. Pole wyboru pliku z możliwością wskazania wielu plików naraz.
@@ -124,7 +125,7 @@ Wszystkie pola tekstowe interfejsu, czyli pola nazwy projektu, tekstu, adresów,
 grupy, instrukcji systemowej i promptu wyszukiwania oraz pole treści promptu do
 skopiowania, nie mają widocznych etykiet. Nazwę dla czytnika ekranu niesie
 atrybut aria-label, a ta sama nazwa jest podpowiedzią wewnątrz pola („Nazwa
-projektu”, „Tekst wklejony”, „Nazwa grupy tematycznej”). Powód: przy widocznej
+projektu”, „Tu wklej tekst”, „Nazwa grupy tematycznej”). Powód: przy widocznej
 etykiecie i podpowiedzi NVDA czytał tę samą nazwę dwa razy. Pola wymagane
 oznacza atrybut required, więc NVDA mówi „wymagane”. Opis pomocniczy, na przykład
 pod polem promptu wyszukiwania, jest przypięty przez aria-describedby. Pole

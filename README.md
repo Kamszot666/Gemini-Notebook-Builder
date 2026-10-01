@@ -194,8 +194,8 @@ Strona główna ma formularz nowego projektu. Pola po kolei:
 
 1. Nazwa projektu, wymagana. To będzie nazwa katalogu z wynikami, więc niech będzie krótka, na przykład „Podatki 2026”.
 2. Nazwa grupy tematycznej, wymagana. Wszystko z jednego wysłania z tą samą grupą zostanie połączone w jak najmniej plików. Pole podpowiada grupy, które projekt już zna.
-3. Tekst wklejony. Duże pole na tekst.
-4. Adresy stron i filmów, po jednym w wierszu. Adres z www. na początku działa bez https.
+3. Tu wklej tekst. Duże pole na tekst.
+4. Tu wklej adresy stron www i adresy do YouTube, po jednym w każdym wierszu. Adres z www. na początku działa bez https.
 5. Pliki z dysku. Możesz wskazać wiele plików naraz, w zwykłym oknie wyboru pliku Windows.
 
 Potrzebujesz przynajmniej jednego źródła. Przycisk „Utwórz projekt i rozpocznij przetwarzanie” wszystko uruchamia. Na stronie projektu widzisz postęp, potem podsumowanie i raport.

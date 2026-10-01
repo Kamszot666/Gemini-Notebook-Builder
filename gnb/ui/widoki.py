@@ -186,13 +186,13 @@ def strona_glowna(
   aria-label="Nazwa projektu" placeholder="Nazwa projektu"
   value="{escapuj(dane.nazwa_projektu)}" required{atrybuty_nazwa}>
 {blad_nazwa}
-<textarea id="tekst" name="tekst" aria-label="Tekst wklejony"
-  placeholder="Tekst wklejony"{atrybuty_tekst}>{escapuj(dane.tekst)}</textarea>
+<textarea id="tekst" name="tekst" aria-label="Tu wklej tekst"
+  placeholder="Tu wklej tekst"{atrybuty_tekst}>{escapuj(dane.tekst)}</textarea>
 {blad_tekst}
 <textarea id="adresy" name="adresy"
-  aria-label="Adresy stron i filmów, po jednym w wierszu"
-  placeholder="Adresy stron i filmów, po jednym w wierszu"{atrybuty_adresy}
-  >{escapuj(dane.adresy)}</textarea>
+  aria-label="Tu wklej adresy stron www i adresy do YouTube, po jednym w każdym wierszu"
+  placeholder="Tu wklej adresy stron www i adresy do YouTube, po jednym w każdym wierszu"
+  {atrybuty_adresy}>{escapuj(dane.adresy)}</textarea>
 {blad_adresy}
 <label for="pliki">Pliki z dysku</label>
 <input type="file" id="pliki" name="pliki" multiple>
@@ -396,13 +396,13 @@ def _formularz_dosylania(
 {_pole_csrf(token_csrf)}
 {_lista_bledow(bledy)}
 <h2>Dodaj kolejne źródła</h2>
-<textarea id="dosylanie-tekst" name="tekst" aria-label="Tekst wklejony"
-  placeholder="Tekst wklejony"{atrybuty_tekst}>{escapuj(dane.tekst)}</textarea>
+<textarea id="dosylanie-tekst" name="tekst" aria-label="Tu wklej tekst"
+  placeholder="Tu wklej tekst"{atrybuty_tekst}>{escapuj(dane.tekst)}</textarea>
 {blad_tekst}
 <textarea id="dosylanie-adresy" name="adresy"
-  aria-label="Adresy stron i filmów, po jednym w wierszu"
-  placeholder="Adresy stron i filmów, po jednym w wierszu"{atrybuty_adresy}
-  >{escapuj(dane.adresy)}</textarea>
+  aria-label="Tu wklej adresy stron www i adresy do YouTube, po jednym w każdym wierszu"
+  placeholder="Tu wklej adresy stron www i adresy do YouTube, po jednym w każdym wierszu"
+  {atrybuty_adresy}>{escapuj(dane.adresy)}</textarea>
 {blad_adresy}
 <label for="dosylanie-pliki">Pliki z dysku</label>
 <input type="file" id="dosylanie-pliki" name="pliki" multiple>

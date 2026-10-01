@@ -405,6 +405,7 @@ Pełny zapis każdej pozycji, z objawem, przyczyną i propozycją, jest w `docs/
 8. Zamknięte, naprawa `naprawa-deduplikacja-zrodel-doslanych`: źródła dosłane w kolejnym przebiegu są porównywane z już spakowanymi, decyduje lista `deduplikacja.porownane`.
 
 9. Zamknięte, naprawa `naprawa-brak-danych-jezyka-ocr`: brak danych językowych Tesseracta daje status `pominiete` z komunikatem, którego języka brakuje.
+10. Jednoczesny przebieg z wiersza poleceń i z interfejsu na tym samym projekcie może nadpisać checkpoint. Decyzja użytkownika: blokada per projekt, w katalogu projektu, zakładana przez interfejs i wiersz poleceń; osobny, mały etap po części F etapu piętnastego, nie wcześniej.
 
 ## 19. Kryterium ukończenia funkcji
 

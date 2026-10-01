@@ -81,7 +81,6 @@ input[type="text"], textarea {
   font: inherit;
 }
 textarea { min-height: 8rem; }
-::placeholder { color: #c4cbe0; opacity: 1; }
 button {
   margin-top: 1.25rem; padding: 0.6rem 1.2rem;
   background: #2b6cb0; color: #fff;
@@ -159,6 +158,10 @@ def sciezka_projektu(nazwa: str) -> str:
     return "/projekt/" + quote(nazwa, safe="")
 
 
+NAZWA_POLA_TEKSTU = "Tu wklej tekst"
+NAZWA_POLA_ADRESOW = "Tu wklej adresy stron www i adresy do YouTube, po jednym w każdym wierszu"
+
+
 def strona_glowna(
     *,
     projekty: list[ProjektNaLiscie],
@@ -182,22 +185,20 @@ def strona_glowna(
 {_pole_csrf(token_csrf)}
 {_lista_bledow(bledy)}
 <h2>Nowy projekt</h2>
+<label for="nazwa_projektu">Nazwa projektu</label>
 <input type="text" id="nazwa_projektu" name="nazwa_projektu"
-  aria-label="Nazwa projektu" placeholder="Nazwa projektu"
   value="{escapuj(dane.nazwa_projektu)}" required{atrybuty_nazwa}>
 {blad_nazwa}
-<textarea id="tekst" name="tekst" aria-label="Tu wklej tekst"
-  placeholder="Tu wklej tekst"{atrybuty_tekst}>{escapuj(dane.tekst)}</textarea>
+<label for="tekst">{NAZWA_POLA_TEKSTU}</label>
+<textarea id="tekst" name="tekst"{atrybuty_tekst}>{escapuj(dane.tekst)}</textarea>
 {blad_tekst}
-<textarea id="adresy" name="adresy"
-  aria-label="Tu wklej adresy stron www i adresy do YouTube, po jednym w każdym wierszu"
-  placeholder="Tu wklej adresy stron www i adresy do YouTube, po jednym w każdym wierszu"
-  {atrybuty_adresy}>{escapuj(dane.adresy)}</textarea>
+<label for="adresy">{NAZWA_POLA_ADRESOW}</label>
+<textarea id="adresy" name="adresy"{atrybuty_adresy}>{escapuj(dane.adresy)}</textarea>
 {blad_adresy}
 <label for="pliki">Pliki z dysku</label>
 <input type="file" id="pliki" name="pliki" multiple>
-<input type="text" id="grupa" name="grupa" aria-label="Nazwa grupy tematycznej"
-  placeholder="Nazwa grupy tematycznej" value="{escapuj(dane.grupa)}"
+<label for="grupa">Nazwa grupy tematycznej</label>
+<input type="text" id="grupa" name="grupa" value="{escapuj(dane.grupa)}"
   required{atrybuty_grupa}>
 {blad_grupa}
 <button type="submit">Utwórz projekt i rozpocznij przetwarzanie</button>
@@ -407,10 +408,10 @@ def _formularz_dosylania(
 ) -> str:
     """Formularz dosyłania kolejnych źródeł do już przetworzonego projektu.
 
-    Nazwy pól niesie `aria-label`, a ta sama nazwa jest podpowiedzią wewnątrz
-    pola, tak jak na stronie głównej, bez widocznych etykiet. Nazwa grupy jest wymagana i ma listę
-    podpowiedzi z grupami, które projekt już zna, więc kolejne źródło trafia do
-    istniejącego pliku grupy bez przepisywania jej nazwy.
+    Nazwy pól niesie widoczna etykieta `label for`, tak jak na stronie głównej,
+    bez podpowiedzi wewnątrz pola i bez `aria-label`. Nazwa grupy jest wymagana
+    i ma listę podpowiedzi z grupami, które projekt już zna, więc kolejne źródło
+    trafia do istniejącego pliku grupy bez przepisywania jej nazwy.
     """
     dane = dane or DaneFormularzaProjektu(grupa=grupy_projektu[-1] if grupy_projektu else "")
     bledy = bledy or []
@@ -423,18 +424,16 @@ def _formularz_dosylania(
 {_pole_csrf(token_csrf)}
 {_lista_bledow(bledy)}
 <h2>Dodaj kolejne źródła</h2>
-<textarea id="dosylanie-tekst" name="tekst" aria-label="Tu wklej tekst"
-  placeholder="Tu wklej tekst"{atrybuty_tekst}>{escapuj(dane.tekst)}</textarea>
+<label for="dosylanie-tekst">{NAZWA_POLA_TEKSTU}</label>
+<textarea id="dosylanie-tekst" name="tekst"{atrybuty_tekst}>{escapuj(dane.tekst)}</textarea>
 {blad_tekst}
-<textarea id="dosylanie-adresy" name="adresy"
-  aria-label="Tu wklej adresy stron www i adresy do YouTube, po jednym w każdym wierszu"
-  placeholder="Tu wklej adresy stron www i adresy do YouTube, po jednym w każdym wierszu"
-  {atrybuty_adresy}>{escapuj(dane.adresy)}</textarea>
+<label for="dosylanie-adresy">{NAZWA_POLA_ADRESOW}</label>
+<textarea id="dosylanie-adresy" name="adresy"{atrybuty_adresy}>{escapuj(dane.adresy)}</textarea>
 {blad_adresy}
 <label for="dosylanie-pliki">Pliki z dysku</label>
 <input type="file" id="dosylanie-pliki" name="pliki" multiple>
+<label for="dosylanie-grupa">Nazwa grupy tematycznej</label>
 <input type="text" id="dosylanie-grupa" name="grupa" list="dosylanie-grupy"
-  aria-label="Nazwa grupy tematycznej" placeholder="Nazwa grupy tematycznej"
   value="{escapuj(dane.grupa)}" required{atrybuty_grupa}>
 <datalist id="dosylanie-grupy">{opcje_grup}</datalist>
 {blad_grupa}
@@ -538,14 +537,14 @@ def _sekcja_pol(
         f"pozostało {limit_znakow_instrukcji - uzyte}."
     )
     textarea_instrukcja = (
+        f'<label for="instrukcja_systemowa">{NAZWA_INSTRUKCJI}</label>\n'
         '<textarea id="instrukcja_systemowa" name="instrukcja_systemowa" '
-        f'aria-label="{NAZWA_INSTRUKCJI}" placeholder="{NAZWA_INSTRUKCJI}" '
         f'data-limit="{limit_znakow_instrukcji}"{atrybuty_instrukcja}>'
         f"{escapuj(pola.instrukcja_systemowa)}</textarea>"
     )
     textarea_prompt = (
+        f'<label for="prompt_wyszukiwania">{NAZWA_PROMPTU}</label>\n'
         '<textarea id="prompt_wyszukiwania" name="prompt_wyszukiwania" '
-        f'aria-label="{NAZWA_PROMPTU}" placeholder="{NAZWA_PROMPTU}" '
         'aria-describedby="pomoc-prompt">'
         f"{escapuj(pola.prompt_wyszukiwania)}</textarea>"
     )
@@ -577,8 +576,8 @@ def strona_promptu(*, nazwa: str, prompt: str) -> str:
 <div class="blok">
 <p>Poniższa treść jest przeznaczona do skopiowania i użycia poza aplikacją.
 Aplikacja nigdzie jej nie wysyła.</p>
-<textarea id="prompt-do-skopiowania" aria-label="Treść promptu"
-  placeholder="Treść promptu" readonly>{escapuj(tresc)}</textarea>
+<label for="prompt-do-skopiowania">Treść promptu</label>
+<textarea id="prompt-do-skopiowania" readonly>{escapuj(tresc)}</textarea>
 </div>
 <p><a href="{escapuj(sciezka)}">Wróć do projektu</a></p>""",
     )

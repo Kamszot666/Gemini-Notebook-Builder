@@ -83,7 +83,7 @@ def test_brak_pillow_heif_dla_pliku_heic_daje_czytelny_komunikat(
     monkeypatch.setattr(plik_obraz, "_zarejestruj_heif_jesli_dostepne", lambda: False)
     bajty = b"\x00\x00\x00\x18ftypheic" + b"\x00" * 64
 
-    with pytest.raises(FormatNieobslugiwany, match="pillow-heif"):
+    with pytest.raises(BrakNarzedzia, match="pillow-heif"):
         EkstraktorObrazu().wyekstrahuj("obraz-4", bajty)
 
     assert "pip install gnb[obrazy-heic]" in KOMUNIKAT_BRAK_PILLOW_HEIF
@@ -122,7 +122,7 @@ def test_zablokowany_pillow_heif_wylacza_tylko_heic_z_czytelnym_komunikatem(
     _podstaw_zablokowany_pillow_heif(monkeypatch)
     bajty = b"\x00\x00\x00\x18ftypheic" + b"\x00" * 64
 
-    with pytest.raises(FormatNieobslugiwany, match="zablokował") as informacja:
+    with pytest.raises(BrakNarzedzia, match="zablokował") as informacja:
         EkstraktorObrazu().wyekstrahuj("obraz-heic", bajty)
 
     assert KOMUNIKAT_ZABLOKOWANY_PILLOW_HEIF in str(informacja.value)

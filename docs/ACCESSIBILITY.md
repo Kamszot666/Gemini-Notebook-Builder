@@ -1,4 +1,4 @@
-# Dostępność interfejsu WWW — stan po etapie piętnastym, część B, i naprawie etykiet
+# Dostępność interfejsu WWW — stan po etapie piętnastym, część C2
 
 Ten dokument opisuje, jak obsługiwać interfejs Gemini Notebook Builder
 z klawiatury i z czytnikiem ekranu, oraz co interfejs ogłasza i jak często.
@@ -46,41 +46,68 @@ trzeba użyć myszy.
 
 ## Strona główna
 
-Strona główna ma dwie części.
+Strona główna ma jeden formularz dodawania materiałów. Pola, od góry do dołu:
 
-Pierwsza to formularz nowego projektu. Pola, w kolejności:
-
-1. Nazwa projektu. Pole wymagane. Nazwa staje się nazwą katalogu z wynikami, więc
-   podaj krótką i rozpoznawalną, na przykład „Podatki 2026”.
-2. Tu wklej tekst. Pole wielowierszowe na treść wklejaną wprost.
-3. Tu wklej adresy stron www i adresy do YouTube, po jednym w każdym wierszu. Pole wielowierszowe, po jednym adresie
-   w wierszu.
-   Przyjmowane są adresy stron internetowych oraz adresy filmów z serwisu
-   YouTube, dla których pobierane są napisy.
-4. Pliki z dysku. Pole wyboru pliku z możliwością wskazania wielu plików naraz.
+1. Lista „Projekt”. Pierwsza pozycja to „Nowy projekt”, pod nią są wszystkie
+   projekty z katalogu wyników, także zakończone. Pozycja jest krótka, żeby
+   czytnik ekranu nie czytał za dużo przy każdym ruchu strzałką: nazwa projektu,
+   przecinek i stan, czyli „niedokończony”, „zakończony” albo „uszkodzony”.
+   Liczba źródeł i data zmiany są na stronie projektu. Lista powstaje z odczytu
+   katalogu przy każdym wyświetleniu strony, więc projekt usunięty z dysku znika
+   z niej od razu, bez restartu serwera. Przy wczytaniu strony zaznaczony jest
+   aktywny projekt skrótu, jeżeli taki jest.
+2. Przycisk „Przejdź do projektu”, zaraz za listą. Otwiera stronę wybranego
+   projektu i ustawia go jako aktywny projekt skrótu. Działa bez JavaScriptu jako
+   wysłanie formularza metodą POST z tokenem zabezpieczającym. Przy wybranym
+   „Nowy projekt” skrypt go ukrywa, a bez skryptu strona wraca z komunikatem
+   „Wybierz istniejący projekt, żeby do niego przejść.”.
+3. Pole „Nazwa nowego projektu”. Widoczne i wymagane tylko wtedy, gdy na liście
+   „Projekt” wybrano „Nowy projekt”. Przy wybranym istniejącym projekcie skrypt
+   ukrywa je atrybutem hidden, więc czytnik ekranu na nie nie trafia. Nazwa staje
+   się nazwą katalogu z wynikami, więc podaj krótką i rozpoznawalną, na przykład
+   „Podatki 2026”.
+4. Lista „Grupa”. Pozycje: „Bez grupy”, „Nowa grupa”, a pod nimi grupy wybranego
+   projektu. Przy „Nowy projekt” są tylko dwie pierwsze. Przy istniejącym
+   projekcie zaznaczona jest ostatnio używana grupa tego projektu.
+5. Pole „Nazwa nowej grupy”. Widoczne i wymagane tylko przy wyborze „Nowa grupa”.
+6. Tu wklej tekst. Pole wielowierszowe na treść wklejaną wprost.
+7. Tu wklej adresy stron www i adresy do YouTube, po jednym w każdym wierszu.
+   Pole wielowierszowe. Przyjmowane są adresy stron internetowych oraz adresy
+   filmów z serwisu YouTube, dla których pobierane są napisy.
+8. Pliki z dysku. Pole wyboru pliku z możliwością wskazania wielu plików naraz.
    Otwiera zwykłe okno wyboru pliku systemu Windows, w pełni dostępne z NVDA.
    Obsługiwane formaty to te same, które przyjmuje wiersz poleceń; ich pełny
    wykaz jest w `FORMATS.md`.
-5. Nazwa grupy tematycznej. Pole opcjonalne. Wszystkie źródła jednego wysłania
-   z wypełnioną tą samą nazwą grupy są łączone w możliwie najmniej plików
-   wynikowych.
+9. Przycisk „Dodaj materiały i rozpocznij przetwarzanie”.
 
-Musisz podać przynajmniej jedno źródło: tekst, adres albo plik. Sam formularz
-z nazwą projektu jest niekompletny.
+Musisz podać przynajmniej jedno źródło: tekst, adres albo plik. Klawisz Enter
+w polu nazwy wysyła formularz, nie uruchamia przejścia do projektu; zapewnia to
+ukryty, pierwszy w formularzu przycisk wysyłania, niewidoczny dla czytnika
+ekranu.
 
-Przycisk „Utwórz projekt i rozpocznij przetwarzanie” wysyła formularz. Po
-wysłaniu przeglądarka przechodzi na stronę projektu, a przetwarzanie rusza w tle.
+Wybór istniejącego projektu dodaje źródła do niego, tak jak formularz dosyłania
+na stronie projektu, a po wysłaniu projekt staje się aktywnym projektem skrótu.
+Wybór „Nowy projekt” zakłada nowy projekt i nie zmienia aktywnego.
 
-Druga część strony głównej, pod nagłówkiem „Projekty do wznowienia”, to rozwijana
-lista wszystkich projektów z katalogu wyników, także zakończonych. Lista ma
-widoczną etykietę „Wybierz projekt”, bo listy zachowują zwykłą etykietę. Każda
-pozycja jest krótka, żeby czytnik ekranu nie czytał za dużo przy każdym ruchu
-strzałką: nazwa projektu, przecinek i stan, czyli „niedokończony”, „zakończony”
-albo „uszkodzony”. Przycisk „Przejdź do projektu” otwiera stronę wybranego
-projektu i działa bez JavaScriptu, jako zwykłe wysłanie formularza metodą GET.
-Lista jest budowana z odczytu katalogu przy każdym wyświetleniu strony, więc
-projekt usunięty z dysku znika z niej od razu, bez restartu serwera. Gdy nie ma
-żadnego projektu, zamiast listy jest zdanie „Nie ma jeszcze żadnych projektów.”.
+Zachowanie listy grup, gdy JavaScript działa. Po wybraniu projektu lista „Grupa”
+jest uzupełniana od razu, bez przeładowania strony, z grupami tego projektu
+pobranymi z serwera. Fokus zostaje na liście „Projekt”. Zmiana następuje po
+krótkim opóźnieniu, więc przeglądanie listy strzałkami nie wywołuje zapytania
+przy każdej pozycji. Wybranie projektu ustawia go też jako aktywny projekt
+skrótu. Region stanu o roli „status” z ustawieniem `aria-live` na „polite”,
+tuż pod polami grupy, ogłasza jedno krótkie podsumowanie, na przykład „Aktywny
+projekt skrótu: bas. Lista grup zaktualizowana, 2 grupy.” albo „Aktywny projekt
+skrótu: bas. Ten projekt nie ma grup.”. Nazwy grup trafiają do strony wyłącznie
+jako tekst. Wybór „Nowy projekt” przywraca listę grup do dwóch pozycji i nie
+zmienia aktywnego projektu.
+
+Bez JavaScriptu formularz działa tak samo, ale oba pola nazw są widoczne, każde
+z opisem, kiedy jest używane, a lista grup zawiera grupy projektu zaznaczonego
+w chwili wczytania strony. Żeby zobaczyć grupy innego projektu, wybierz go
+i użyj przycisku „Przejdź do projektu”, albo wyślij formularz. Walidacja jest po
+stronie serwera: pusta nazwa nowego projektu, pusta nazwa nowej grupy,
+nieistniejący projekt, niepoprawna nazwa i nieistniejąca grupa wracają jako
+lista błędów, a fokus trafia na tę listę.
 
 Na stronie projektu, pod nagłówkiem, jest sekcja „Stan projektu”: stan, liczba
 źródeł w checkpoincie i data ostatniej zmiany. Projekt niedokończony ma w niej
@@ -136,7 +163,7 @@ otwarcie karty nie było zaskoczeniem. Adres innego schematu, na przykład
 Wszystkie pola tekstowe interfejsu, czyli pola nazwy projektu, tekstu, adresów,
 grupy, instrukcji systemowej i promptu wyszukiwania oraz pole treści promptu do
 skopiowania, mają widoczną etykietę nad polem („Nazwa projektu”, „Tu wklej
-tekst”, „Nazwa grupy tematycznej”). Nazwę niesie wyłącznie ta etykieta: pola nie
+tekst”, „Nazwa nowej grupy”). Nazwę niesie wyłącznie ta etykieta: pola nie
 mają ani podpowiedzi wewnątrz pola (placeholder), ani atrybutu aria-label. Powód:
 po odsłuchu w NVDA z 1 października 2026 okazało się, że aria-label razem
 z podpowiedzią o tej samej treści powodują, że nazwa pustego pola jest czytana

@@ -1,4 +1,4 @@
-# Architektura — stan po etapie piętnastym, część C
+# Architektura — stan po etapie piętnastym, część C2
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
 zakończeniu etapu czternastego. Pełny docelowy podział na pakiety opisuje
@@ -431,7 +431,7 @@ istniejący potok z żądaniem HTTP przez semantyczny, dostępny HTML.
   katalogu przy każdym wywołaniu, bez pamięci podręcznej. Uszkodzony checkpoint
   jednego projektu nie wywraca listy.
 - `gnb/ui/widoki.py` — generowanie stron: strona główna z formularzem nowego
-  projektu i rozwijaną listą projektów, strona projektu z regionem postępu,
+  projektu z listami Projekt i Grupa (jeden formularz dodawania materiałów), strona projektu z regionem postępu,
   dwoma polami tekstowymi i raportem, strony błędu. Ciemny motyw, style w jednym
   elemencie `style`, dwa krótkie skrypty wbudowane w stronę.
 - `gnb/ui/serwer.py` — `ThreadingHTTPServer` z routingiem tablicą tras. Każdy

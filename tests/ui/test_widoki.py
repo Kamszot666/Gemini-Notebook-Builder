@@ -30,9 +30,11 @@ def test_strona_glowna_ma_etykiety_i_pole_csrf() -> None:
     assert '<html lang="pl">' in html
     # Każde pole ma widoczną etykietę, bez podpowiedzi wewnątrz pola i bez
     # aria-label; pole pliku też zachowuje etykietę.
-    assert '<label for="nazwa_projektu">Nazwa projektu</label>' in html
+    assert '<label for="projekt">Projekt</label>' in html
+    assert '<label for="nazwa_projektu">Nazwa nowego projektu</label>' in html
+    assert '<label for="wybor_grupy">Grupa</label>' in html
+    assert '<label for="nazwa_grupy">Nazwa nowej grupy</label>' in html
     assert '<label for="tekst">Tu wklej tekst</label>' in html
-    assert '<label for="grupa">Nazwa grupy tematycznej</label>' in html
     assert "placeholder" not in html
     assert "aria-label" not in html
     assert '<label for="pliki">' in html
@@ -91,7 +93,8 @@ def test_bledy_walidacji_sa_powiazane_z_polami() -> None:
     assert 'role="alert"' in html
     assert 'id="bledy-formularza"' in html
     assert 'aria-invalid="true"' in html
-    assert 'aria-describedby="nazwa_projektu-blad"' in html
+    # Stały opis pola i komunikat błędu są w jednym atrybucie aria-describedby.
+    assert 'aria-describedby="pomoc-nazwa-projektu nazwa_projektu-blad"' in html
     assert "Nazwa projektu jest wymagana." in html
     # Sekcja 11 punkt 8 CLAUDE.md: fokus wolno przenieść po nieudanej walidacji.
     assert "getElementById('bledy-formularza')" in html
@@ -272,7 +275,29 @@ def _projekt_na_liscie(nazwa: str, *, zakonczony: bool, blad: str | None = None)
     )
 
 
-def test_projekty_sa_na_rozwijanej_liscie_z_krotkim_stanem_i_przyciskiem_przejscia() -> None:
+def _kolejnosc_identyfikatorow(html: str, identyfikatory: list[str]) -> list[int]:
+    return [html.index(f'id="{identyfikator}"') for identyfikator in identyfikatory]
+
+
+def test_formularz_glowny_ma_pola_w_zadanej_kolejnosci() -> None:
+    html = strona_glowna(projekty=[], token_csrf="t")
+
+    kolejnosc = [
+        "projekt",
+        "przejdz-do-projektu",
+        "nazwa_projektu",
+        "wybor_grupy",
+        "nazwa_grupy",
+        "tekst",
+        "adresy",
+        "pliki",
+    ]
+    pozycje = _kolejnosc_identyfikatorow(html, kolejnosc)
+    assert pozycje == sorted(pozycje)
+    assert html.count("<form") == 1
+
+
+def test_lista_projekt_ma_nowy_projekt_pierwszy_a_pod_nim_projekty_ze_stanem() -> None:
     projekty = [
         _projekt_na_liscie("Podatki 2026", zakonczony=False),
         _projekt_na_liscie("Gotowy", zakonczony=True),
@@ -281,18 +306,131 @@ def test_projekty_sa_na_rozwijanej_liscie_z_krotkim_stanem_i_przyciskiem_przejsc
 
     html = strona_glowna(projekty=projekty, token_csrf="t")
 
-    assert "<h2>Projekty do wznowienia</h2>" in html
-    assert '<label for="wybor-projektu">Wybierz projekt</label>' in html
-    assert '<select id="wybor-projektu" name="projekt">' in html
-    assert '<option value="Podatki 2026">Podatki 2026, niedokończony</option>' in html
-    assert '<option value="Gotowy">Gotowy, zakończony</option>' in html
-    assert '<option value="Zepsuty">Zepsuty, uszkodzony</option>' in html
-    assert 'method="get" action="/przejdz-do-projektu"' in html
-    assert '<button type="submit">Przejdź do projektu</button>' in html
+    opcje = [
+        '<option value="" selected>Nowy projekt</option>',
+        '<option value="Podatki 2026">Podatki 2026, niedokończony</option>',
+        '<option value="Gotowy">Gotowy, zakończony</option>',
+        '<option value="Zepsuty">Zepsuty, uszkodzony</option>',
+    ]
+    pozycje = [html.index(opcja) for opcja in opcje]
+    assert pozycje == sorted(pozycje)
     # Liczba źródeł i data zmiany należą do strony projektu, nie do pozycji listy.
     assert "źródeł w checkpoincie" not in html
     assert "2026-09-02" not in html
     assert "Wznów ten projekt" not in html
+    # Dawny osobny formularz z listą projektów zniknął.
+    assert "wybor-projektu" not in html
+    assert "Projekty do wznowienia" not in html
+
+
+def test_lista_projekt_zaznacza_wybrany_projekt() -> None:
+    projekty = [
+        _projekt_na_liscie("Jeden", zakonczony=True),
+        _projekt_na_liscie("Dwa", zakonczony=True),
+    ]
+
+    html = strona_glowna(projekty=projekty, token_csrf="t", wybrany_projekt="Dwa")
+
+    assert '<option value="Dwa" selected>Dwa, zakończony</option>' in html
+    assert '<option value="" selected>' not in html
+
+
+def test_przycisk_przejdz_do_projektu_wysyla_formularz_metoda_post_z_tokenem() -> None:
+    html = strona_glowna(projekty=[], token_csrf="tok")
+
+    przycisk = html[html.index('id="przejdz-do-projektu"') :].split(">", 1)[0]
+    assert 'formaction="/przejdz-do-projektu"' in przycisk
+    assert 'formmethod="post"' in przycisk
+    assert 'name="token_csrf" value="tok"' in html
+
+
+def test_klawisz_enter_w_polu_nazwy_nie_uruchamia_przejscia_do_projektu() -> None:
+    """Pierwszy przycisk formularza jest domyślnym; ma nim być wysłanie, nie przejście."""
+    html = strona_glowna(projekty=[], token_csrf="t")
+
+    pierwszy = html[html.index("<button") :].split(">", 1)[0]
+    assert "formaction" not in pierwszy
+    assert "hidden" in pierwszy
+    assert 'aria-hidden="true"' in pierwszy
+
+
+def test_lista_grup_dla_projektu_z_grupami_ma_bez_grupy_nowa_i_grupy_projektu() -> None:
+    html = strona_glowna(
+        projekty=[_projekt_na_liscie("Jeden", zakonczony=True)],
+        token_csrf="t",
+        wybrany_projekt="Jeden",
+        grupy_projektu=["Zwierzęta", "Rośliny"],
+    )
+
+    opcje = [
+        '<option value="__bez__">Bez grupy</option>',
+        '<option value="__nowa__">Nowa grupa</option>',
+        '<option value="g:Zwierzęta">Zwierzęta</option>',
+        '<option value="g:Rośliny" selected>Rośliny</option>',
+    ]
+    pozycje = [html.index(opcja) for opcja in opcje]
+    assert pozycje == sorted(pozycje)
+
+
+def test_lista_grup_dla_projektu_bez_grup_i_dla_nowego_ma_tylko_dwie_pozycje() -> None:
+    html = strona_glowna(projekty=[], token_csrf="t")
+
+    lista = html[
+        html.index('id="wybor_grupy"') : html.index("</select>", html.index("wybor_grupy"))
+    ]
+    assert lista.count("<option") == 2
+    assert '<option value="__bez__" selected>Bez grupy</option>' in lista
+
+
+def test_nazwa_grupy_na_liscie_jest_escapowana() -> None:
+    html = strona_glowna(
+        projekty=[_projekt_na_liscie("Jeden", zakonczony=True)],
+        token_csrf="t",
+        wybrany_projekt="Jeden",
+        grupy_projektu=["<script>alert(1)</script>"],
+    )
+
+    assert "<script>alert(1)</script>" not in html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+
+
+def test_pola_nazw_sa_widoczne_bez_javascriptu_a_skrypt_ukrywa_je_wedlug_wyboru() -> None:
+    html = strona_glowna(projekty=[], token_csrf="t")
+
+    # Bez JavaScriptu oba pola są widoczne i opisane, kiedy są używane.
+    assert 'id="blok-nazwy-projektu">' in html
+    assert 'id="blok-nazwy-grupy">' in html
+    assert 'id="pomoc-nazwa-projektu"' in html
+    assert 'id="pomoc-nazwa-grupy"' in html
+    # Skrypt ukrywa pole atrybutem hidden i ustawia wymóg tylko, gdy pole jest używane.
+    assert "blok.hidden = !widoczny" in html
+    assert "wejscie.required = widoczny" in html
+
+
+def test_region_stanu_formularza_jest_uprzejmy_a_skrypt_opoznia_zmiane_projektu() -> None:
+    html = strona_glowna(projekty=[], token_csrf="t")
+
+    assert 'id="komunikat-formularza" role="status" aria-live="polite"' in html
+    assert 'aria-live="assertive"' not in html
+    assert "setTimeout(function () { zmianaProjektu(wybrany, moj); }, 700)" in html
+    assert "Lista grup zaktualizowana, " in html
+    assert "Ten projekt nie ma grup." in html
+    assert "'Aktywny projekt skrótu: '" in html
+
+
+def test_bledy_pol_grupy_sa_powiazane_z_polami() -> None:
+    html = strona_glowna(
+        projekty=[],
+        token_csrf="t",
+        bledy=[
+            BladPola(pole="nazwa_grupy", komunikat="Nazwa nowej grupy jest wymagana."),
+            BladPola(pole="projekt", komunikat="Projekt nie istnieje."),
+        ],
+    )
+
+    assert 'aria-describedby="pomoc-nazwa-grupy nazwa_grupy-blad"' in html
+    assert 'aria-describedby="projekt-blad"' in html
+    assert 'href="#nazwa_grupy"' in html
 
 
 def test_nazwa_projektu_na_liscie_jest_escapowana() -> None:

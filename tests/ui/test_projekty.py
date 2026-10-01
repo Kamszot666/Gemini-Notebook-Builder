@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from gnb.persistence.checkpoint import WERSJA_SCHEMATU, Checkpoint, zapisz
-from gnb.ui.projekty import niedokonczone, znajdz_projekty
+from gnb.ui.projekty import niedokonczone, opisz_projekt, znajdz_projekty
 
 
 def _zapisz_projekt(katalog_wynikow: Path, nazwa: str, *, zakonczony: bool, czas: str) -> None:
@@ -60,3 +61,42 @@ def test_podkatalog_bez_checkpointu_jest_pomijany(tmp_path: Path) -> None:
     (tmp_path / "nie_projekt").mkdir()
     (tmp_path / "nie_projekt" / "cos.txt").write_text("x", encoding="utf-8")
     assert znajdz_projekty(tmp_path) == []
+
+
+def test_lista_zawiera_projekty_zakonczone_i_niedokonczone_z_ich_stanem(tmp_path: Path) -> None:
+    _zapisz_projekt(tmp_path, "gotowy", zakonczony=True, czas="2026-09-01T10:00:00+00:00")
+    _zapisz_projekt(tmp_path, "w_toku", zakonczony=False, czas="2026-09-02T10:00:00+00:00")
+    zepsuty = tmp_path / "zepsuty"
+    zepsuty.mkdir()
+    (zepsuty / "checkpoint.json").write_text("to nie jest json", encoding="utf-8")
+
+    stany = {projekt.nazwa: projekt.stan for projekt in znajdz_projekty(tmp_path)}
+
+    assert stany == {"gotowy": "zakończony", "w_toku": "niedokończony", "zepsuty": "uszkodzony"}
+
+
+def test_plik_w_katalogu_wynikow_nie_jest_projektem(tmp_path: Path) -> None:
+    _zapisz_projekt(tmp_path, "gotowy", zakonczony=True, czas="2026-09-01T10:00:00+00:00")
+    (tmp_path / "archiwum.7z").write_bytes(b"7z")
+
+    assert [projekt.nazwa for projekt in znajdz_projekty(tmp_path)] == ["gotowy"]
+
+
+def test_projekt_usuniety_z_dysku_znika_z_listy_bez_pamieci_podrecznej(tmp_path: Path) -> None:
+    _zapisz_projekt(tmp_path, "jeden", zakonczony=True, czas="2026-09-01T10:00:00+00:00")
+    _zapisz_projekt(tmp_path, "drugi", zakonczony=True, czas="2026-09-02T10:00:00+00:00")
+    assert {projekt.nazwa for projekt in znajdz_projekty(tmp_path)} == {"jeden", "drugi"}
+
+    shutil.rmtree(tmp_path / "jeden")
+
+    assert [projekt.nazwa for projekt in znajdz_projekty(tmp_path)] == ["drugi"]
+
+
+def test_opisz_projekt_zwraca_none_dla_katalogu_bez_checkpointu(tmp_path: Path) -> None:
+    (tmp_path / "pusty").mkdir()
+    _zapisz_projekt(tmp_path, "gotowy", zakonczony=True, czas="2026-09-01T10:00:00+00:00")
+
+    assert opisz_projekt(tmp_path / "pusty") is None
+    assert opisz_projekt(tmp_path / "nie_ma") is None
+    opis = opisz_projekt(tmp_path / "gotowy")
+    assert opis is not None and opis.stan == "zakończony"

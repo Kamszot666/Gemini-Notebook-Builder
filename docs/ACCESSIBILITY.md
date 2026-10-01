@@ -1,4 +1,4 @@
-# Dostępność interfejsu WWW — stan po etapie czternastym i naprawach po nim
+# Dostępność interfejsu WWW — stan po etapie piętnastym, część B
 
 Ten dokument opisuje, jak obsługiwać interfejs Gemini Notebook Builder
 z klawiatury i z czytnikiem ekranu, oraz co interfejs ogłasza i jak często.
@@ -71,9 +71,21 @@ z nazwą projektu jest niekompletny.
 Przycisk „Utwórz projekt i rozpocznij przetwarzanie” wysyła formularz. Po
 wysłaniu przeglądarka przechodzi na stronę projektu, a przetwarzanie rusza w tle.
 
-Druga część strony głównej to wykaz projektów do wznowienia. Są to projekty,
-które nie doszły do końca albo mają uszkodzony plik checkpointu. Każdy ma własny
-odnośnik do strony projektu oraz własny przycisk „Wznów ten projekt”.
+Druga część strony głównej, pod nagłówkiem „Projekty do wznowienia”, to rozwijana
+lista wszystkich projektów z katalogu wyników, także zakończonych. Lista ma
+widoczną etykietę „Wybierz projekt”, bo listy zachowują zwykłą etykietę. Każda
+pozycja jest krótka, żeby czytnik ekranu nie czytał za dużo przy każdym ruchu
+strzałką: nazwa projektu, przecinek i stan, czyli „niedokończony”, „zakończony”
+albo „uszkodzony”. Przycisk „Przejdź do projektu” otwiera stronę wybranego
+projektu i działa bez JavaScriptu, jako zwykłe wysłanie formularza metodą GET.
+Lista jest budowana z odczytu katalogu przy każdym wyświetleniu strony, więc
+projekt usunięty z dysku znika z niej od razu, bez restartu serwera. Gdy nie ma
+żadnego projektu, zamiast listy jest zdanie „Nie ma jeszcze żadnych projektów.”.
+
+Na stronie projektu, pod nagłówkiem, jest sekcja „Stan projektu”: stan, liczba
+źródeł w checkpoincie i data ostatniej zmiany. Projekt niedokończony ma w niej
+przycisk „Wznów ten projekt”, który nie pojawia się, gdy przetwarzanie trwa.
+Przy uszkodzonym checkpoincie sekcja pokazuje komunikat błędu zamiast przycisku.
 
 ## Strona projektu
 

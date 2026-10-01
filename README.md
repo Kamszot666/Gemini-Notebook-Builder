@@ -190,17 +190,17 @@ Koniec bloku poleceń. Program wypisze adres, domyślnie `http://127.0.0.1:8765/
 
 ### Sposób pierwszy: w przeglądarce
 
-Strona główna ma formularz nowego projektu. Pola po kolei:
+Strona główna ma jeden formularz dodawania materiałów. Pola po kolei:
 
-1. Nazwa projektu, wymagana. To będzie nazwa katalogu z wynikami, więc niech będzie krótka, na przykład „Podatki 2026”.
-2. Nazwa grupy tematycznej, wymagana. Wszystko z jednego wysłania z tą samą grupą zostanie połączone w jak najmniej plików. Pole podpowiada grupy, które projekt już zna.
-3. Tu wklej tekst. Duże pole na tekst.
-4. Tu wklej adresy stron www i adresy do YouTube, po jednym w każdym wierszu. Adres z www. na początku działa bez https.
-5. Pliki z dysku. Możesz wskazać wiele plików naraz, w zwykłym oknie wyboru pliku Windows.
+1. Lista „Projekt”. Pierwsza pozycja to „Nowy projekt”, pod nią są wszystkie projekty z katalogu wyników. Każda pozycja to nazwa projektu i jego stan: niedokończony, zakończony albo uszkodzony. Wybranie projektu ustawia go jako cel globalnego skrótu klawiszowego. Przycisk „Przejdź do projektu” zaraz za listą otwiera stronę wybranego projektu.
+2. Nazwa nowego projektu. Pole pojawia się i jest wymagane tylko przy wybranym „Nowy projekt”. To będzie nazwa katalogu z wynikami, więc niech będzie krótka, na przykład „Podatki 2026”.
+3. Lista „Grupa”: „Bez grupy”, „Nowa grupa” i grupy wybranego projektu. Wszystko z jednego wysłania z tą samą grupą zostanie połączone w jak najmniej plików.
+4. Nazwa nowej grupy. Pole pojawia się i jest wymagane tylko przy wybranej „Nowa grupa”.
+5. Tu wklej tekst. Duże pole na tekst.
+6. Tu wklej adresy stron www i adresy do YouTube, po jednym w każdym wierszu. Adres z www. na początku działa bez https.
+7. Pliki z dysku. Możesz wskazać wiele plików naraz, w zwykłym oknie wyboru pliku Windows.
 
-Potrzebujesz przynajmniej jednego źródła. Przycisk „Utwórz projekt i rozpocznij przetwarzanie” wszystko uruchamia. Na stronie projektu widzisz postęp, potem podsumowanie i raport.
-
-Pod formularzem jest lista „Wybierz projekt” ze wszystkimi projektami z katalogu wyników. Każda pozycja to nazwa projektu i jego stan: niedokończony, zakończony albo uszkodzony. Przycisk „Przejdź do projektu” otwiera stronę wybranego projektu. Niedokończony projekt wznowisz tam przyciskiem „Wznów ten projekt”.
+Potrzebujesz przynajmniej jednego źródła. Przycisk „Dodaj materiały i rozpocznij przetwarzanie” wszystko uruchamia. Przy wybranym istniejącym projekcie źródła są do niego dodawane, a przy „Nowy projekt” powstaje nowy projekt. Na stronie projektu widzisz postęp, potem podsumowanie i raport. Niedokończony projekt wznowisz na jego stronie przyciskiem „Wznów ten projekt”.
 
 Na stronie projektu możesz:
 

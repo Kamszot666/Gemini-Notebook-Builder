@@ -120,7 +120,8 @@ def _utworz_projekt(klient: _Klient, rejestr: RejestrZadan, tresc: str, grupa: s
             "token_csrf": klient.token(),
             "nazwa_projektu": _NAZWA,
             "tekst": tresc,
-            "grupa": grupa,
+            "wybor_grupy": "__nowa__",
+            "nazwa_grupy": grupa,
         },
     )
     assert odpowiedz.status == 303
@@ -420,11 +421,17 @@ def test_nowy_projekt_bez_nazwy_grupy_daje_blad_walidacji(
 
     odpowiedz, strona = klient.post(
         "/projekt/nowy",
-        {"token_csrf": klient.token(), "nazwa_projektu": _NAZWA, "tekst": _TEKST_A, "grupa": ""},
+        {
+            "token_csrf": klient.token(),
+            "nazwa_projektu": _NAZWA,
+            "tekst": _TEKST_A,
+            "wybor_grupy": "__nowa__",
+            "nazwa_grupy": "",
+        },
     )
 
     assert odpowiedz.status == 400
-    assert "Nazwa grupy tematycznej jest wymagana." in strona
+    assert "Nazwa nowej grupy jest wymagana." in strona
 
 
 def test_dosylanie_bez_nazwy_grupy_daje_blad_walidacji(
@@ -453,7 +460,8 @@ def test_adres_bez_schematu_w_nowym_projekcie_nie_tworzy_katalogu(
             "token_csrf": klient.token(),
             "nazwa_projektu": _NAZWA,
             "adresy": "wp.pl/artykul",
-            "grupa": "G",
+            "wybor_grupy": "__nowa__",
+            "nazwa_grupy": "G",
         },
     )
 

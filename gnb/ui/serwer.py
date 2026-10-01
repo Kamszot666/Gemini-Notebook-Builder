@@ -251,6 +251,10 @@ class _Handler(BaseHTTPRequestHandler):
             self._pokaz_postep()
         elif sciezka == widoki.SCIEZKA_WYBORU_PROJEKTU:
             self._przejdz_do_projektu()
+        elif sciezka.startswith("/projekt/") and sciezka.endswith("/grupy"):
+            self._pokaz_grupy_projektu(
+                self._nazwa_z_url(sciezka[len("/projekt/") : -len("/grupy")])
+            )
         elif sciezka.startswith("/projekt/") and sciezka.endswith("/prompt"):
             self._pokaz_prompt(self._nazwa_z_url(sciezka[len("/projekt/") : -len("/prompt")]))
         elif sciezka.startswith("/projekt/"):
@@ -262,6 +266,8 @@ class _Handler(BaseHTTPRequestHandler):
         sciezka = urlsplit(self.path).path
         if sciezka == "/projekt/nowy":
             self._utworz_projekt()
+        elif sciezka == widoki.SCIEZKA_WYBORU_PROJEKTU:
+            self._przejdz_do_projektu_z_ustawieniem_aktywnego()
         elif (adres_zrodla := self._rozbij_adres_zrodla(sciezka)) is not None:
             self._obsluz_dzialanie_na_zrodle(*adres_zrodla)
         elif sciezka.startswith("/projekt/") and sciezka.endswith("/wznow"):
@@ -289,15 +295,61 @@ class _Handler(BaseHTTPRequestHandler):
         bledy: list[BladPola] | None = None,
     ) -> None:
         token = self._token_sesji()
+        projekty = znajdz_projekty(self._konfiguracja.katalog_wynikow)
+        aktywny = self._serwer.aktywny_projekt_skrotu.aktualny()
+        if dane is not None and (dane.projekt or dane.wybor_grupy):
+            wybrany = dane.projekt
+        elif aktywny and any(projekt.nazwa == aktywny for projekt in projekty):
+            wybrany = aktywny
+        else:
+            wybrany = ""
         html = widoki.strona_glowna(
-            projekty=znajdz_projekty(self._konfiguracja.katalog_wynikow),
+            projekty=projekty,
             token_csrf=token,
             dane=dane,
             bledy=bledy,
-            aktywny_projekt_skrotu=self._serwer.aktywny_projekt_skrotu.aktualny(),
+            aktywny_projekt_skrotu=aktywny,
             ostatni_komunikat_skrotu=self._serwer.ostatni_komunikat_skrotu.aktualny(),
+            grupy_projektu=self._grupy_wybranego_projektu(wybrany),
+            wybrany_projekt=wybrany,
         )
         self._wyslij_html(kod, html, token=token)
+
+    def _grupy_wybranego_projektu(self, nazwa: str) -> list[str]:
+        """Grupy projektu wybranego na liście; pusta lista dla nowego albo niepoprawnej nazwy."""
+        if not nazwa:
+            return []
+        try:
+            uklad = ustal_uklad(self._konfiguracja.katalog_wynikow, nazwa)
+        except BladGnb:
+            return []
+        return self._grupy_projektu(uklad)
+
+    def _pokaz_grupy_projektu(self, nazwa: str) -> None:
+        """Zwraca grupy projektu jako JSON, do uzupełnienia listy „Grupa” bez przeładowania.
+
+        Grupy pochodzą z tej samej funkcji co formularz dosyłania. Uszkodzony
+        checkpoint daje pustą listę, a nie błąd, a nazwy trafiają do strony
+        wyłącznie jako tekst, bo skrypt wstawia je przez ``new Option``.
+        """
+        uklad = self._znajdz_istniejacy_projekt(nazwa)
+        if uklad is None:
+            self._blad(404, "Nie znaleziono projektu", f"Nie ma projektu o nazwie „{nazwa}”.")
+            return
+        grupy = self._grupy_projektu(uklad)
+        dane = {"grupy": grupy, "domyslna": grupy[-1] if grupy else ""}
+        self._wyslij(200, json.dumps(dane, ensure_ascii=False).encode("utf-8"), _TYP_JSON)
+
+    def _znajdz_istniejacy_projekt(self, nazwa: str) -> UkladProjektu | None:
+        """Zwraca układ projektu, który ma checkpoint na dysku, albo nic.
+
+        Nazwa przechodzi tę samą sanityzację co w pozostałych trasach.
+        """
+        try:
+            uklad = ustal_uklad(self._konfiguracja.katalog_wynikow, nazwa)
+        except BladGnb:
+            return None
+        return uklad if opisz_projekt(uklad.katalog_projektu) is not None else None
 
     def _przejdz_do_projektu(self) -> None:
         """Przekierowuje na stronę projektu wybranego na liście strony głównej.
@@ -307,11 +359,8 @@ class _Handler(BaseHTTPRequestHandler):
         """
         wartosci = parse_qs(urlsplit(self.path).query).get("projekt", [])
         nazwa = wartosci[0].strip() if wartosci else ""
-        try:
-            uklad = ustal_uklad(self._konfiguracja.katalog_wynikow, nazwa)
-        except BladGnb:
-            uklad = None
-        if uklad is None or opisz_projekt(uklad.katalog_projektu) is None:
+        uklad = self._znajdz_istniejacy_projekt(nazwa)
+        if uklad is None:
             self._blad(
                 404,
                 "Nie znaleziono projektu",
@@ -319,6 +368,43 @@ class _Handler(BaseHTTPRequestHandler):
             )
             return
         self._przekieruj(widoki.sciezka_projektu(uklad.nazwa_projektu))
+
+    def _przejdz_do_projektu_z_ustawieniem_aktywnego(self) -> None:
+        """Przycisk „Przejdź do projektu” bez JavaScriptu: ustawia aktywny projekt i przechodzi.
+
+        Zmienia stan, więc działa metodą POST z tokenem CSRF. Przy wybranym
+        „Nowy projekt” nic się nie zmienia, a strona główna wraca z komunikatem.
+        """
+        wynik_formularza = self._parsuj_formularz()
+        if wynik_formularza is None:
+            return
+        if not self._csrf_ok(wynik_formularza.pole(csrf.NAZWA_POLA_FORMULARZA)):
+            return
+        nazwa = wynik_formularza.pole("projekt").strip()
+        if not nazwa:
+            dane = DaneFormularzaProjektu(
+                nazwa_projektu=wynik_formularza.pole("nazwa_projektu").strip(),
+                tekst=wynik_formularza.pole("tekst"),
+                adresy=wynik_formularza.pole("adresy"),
+                wybor_grupy=wynik_formularza.pole("wybor_grupy", widoki.WYBOR_BEZ_GRUPY),
+                nazwa_grupy=wynik_formularza.pole("nazwa_grupy").strip(),
+            )
+            self._pokaz_strone_glowna(
+                kod=400,
+                dane=dane,
+                bledy=[BladPola("projekt", "Wybierz istniejący projekt, żeby do niego przejść.")],
+            )
+            return
+        uklad = self._znajdz_istniejacy_projekt(nazwa)
+        if uklad is None:
+            self._blad(
+                404,
+                "Nie znaleziono projektu",
+                f"Nie ma projektu o nazwie „{nazwa}”. Mógł zostać usunięty z dysku.",
+            )
+            return
+        self._serwer.aktywny_projekt_skrotu.ustaw(uklad.nazwa_projektu)
+        self._przekieruj(sciezka_projektu(uklad.nazwa_projektu))
 
     def _pokaz_projekt(
         self,
@@ -431,6 +517,13 @@ class _Handler(BaseHTTPRequestHandler):
     # --- operacje ------------------------------------------------------
 
     def _utworz_projekt(self) -> None:
+        """Obsługuje jedyny formularz strony głównej: nowy albo istniejący projekt.
+
+        Pusta wartość listy „Projekt” oznacza nowy projekt i działa jak dawny
+        formularz nowego projektu. Wybrany istniejący projekt dostaje źródła tak
+        jak z formularza dosyłania, z wybraną albo nową grupą, i staje się
+        aktywnym projektem skrótu. Walidacja nie zależy od JavaScriptu.
+        """
         wynik_formularza = self._parsuj_formularz()
         if wynik_formularza is None:
             return
@@ -441,13 +534,26 @@ class _Handler(BaseHTTPRequestHandler):
             nazwa_projektu=wynik_formularza.pole("nazwa_projektu").strip(),
             tekst=wynik_formularza.pole("tekst"),
             adresy=wynik_formularza.pole("adresy"),
-            grupa=wynik_formularza.pole("grupa").strip(),
+            projekt=wynik_formularza.pole("projekt").strip(),
+            wybor_grupy=wynik_formularza.pole("wybor_grupy", widoki.WYBOR_BEZ_GRUPY),
+            nazwa_grupy=wynik_formularza.pole("nazwa_grupy").strip(),
         )
+        istniejacy = bool(dane.projekt)
         bledy: list[BladPola] = []
-        if not dane.nazwa_projektu:
-            bledy.append(BladPola("nazwa_projektu", "Nazwa projektu jest wymagana."))
-        if not dane.grupa:
-            bledy.append(BladPola("grupa", "Nazwa grupy tematycznej jest wymagana."))
+        nazwa_bezpieczna = ""
+        grupy_znane: list[str] = []
+
+        if istniejacy:
+            nazwa_bezpieczna, grupy_znane = self._sprawdz_istniejacy_projekt(dane.projekt, bledy)
+        elif not dane.nazwa_projektu:
+            bledy.append(BladPola("nazwa_projektu", "Nazwa nowego projektu jest wymagana."))
+        else:
+            try:
+                nazwa_bezpieczna = sanityzuj_nazwe_projektu(dane.nazwa_projektu)
+            except BladGnb as blad:
+                bledy.append(BladPola("nazwa_projektu", blad.komunikat))
+
+        grupa = self._ustal_grupe(dane, grupy_znane, bledy)
 
         adresy = [wiersz.strip() for wiersz in dane.adresy.splitlines() if wiersz.strip()]
         pliki = [plik for plik in wynik_formularza.pliki if plik.zawartosc]
@@ -456,30 +562,60 @@ class _Handler(BaseHTTPRequestHandler):
                 BladPola("tekst", "Podaj przynajmniej jedno źródło: tekst, adres albo plik.")
             )
 
-        nazwa_bezpieczna = ""
-        if dane.nazwa_projektu:
-            try:
-                nazwa_bezpieczna = sanityzuj_nazwe_projektu(dane.nazwa_projektu)
-            except BladGnb as blad:
-                bledy.append(BladPola("nazwa_projektu", blad.komunikat))
-
         if bledy:
             self._pokaz_strone_glowna(kod=400, dane=dane, bledy=bledy)
             return
 
         try:
-            self._uruchom_nowy_projekt(nazwa_bezpieczna, dane, adresy, pliki, dane.grupa)
+            self._uruchom_nowy_projekt(nazwa_bezpieczna, dane, adresy, pliki, grupa)
         except ZadanieJuzTrwa as blad:
-            self._pokaz_strone_glowna(
-                kod=409, dane=dane, bledy=[BladPola("nazwa_projektu", str(blad))]
-            )
+            self._pokaz_strone_glowna(kod=409, dane=dane, bledy=[BladPola("projekt", str(blad))])
             return
         except BladGnb as blad:
             self._pokaz_strone_glowna(
                 kod=400, dane=dane, bledy=[BladPola("adresy", blad.komunikat)]
             )
             return
+        if istniejacy:
+            self._serwer.aktywny_projekt_skrotu.ustaw(nazwa_bezpieczna)
         self._przekieruj(sciezka_projektu(nazwa_bezpieczna))
+
+    def _sprawdz_istniejacy_projekt(
+        self, nazwa: str, bledy: list[BladPola]
+    ) -> tuple[str, list[str]]:
+        """Sprawdza projekt wybrany na liście; zwraca jego nazwę i grupy albo dopisuje błąd."""
+        uklad = self._znajdz_istniejacy_projekt(nazwa)
+        if uklad is None:
+            bledy.append(BladPola("projekt", f"Projekt „{nazwa}” nie istnieje."))
+            return "", []
+        opis = opisz_projekt(uklad.katalog_projektu)
+        if opis is not None and opis.komunikat_bledu:
+            bledy.append(
+                BladPola("projekt", f"Checkpoint projektu jest uszkodzony. {opis.komunikat_bledu}")
+            )
+            return "", []
+        return uklad.nazwa_projektu, self._grupy_projektu(uklad)
+
+    def _ustal_grupe(
+        self, dane: DaneFormularzaProjektu, grupy_znane: list[str], bledy: list[BladPola]
+    ) -> str | None:
+        """Zamienia wybór z listy „Grupa” na nazwę grupy albo dopisuje błąd walidacji."""
+        wybor = dane.wybor_grupy
+        if wybor == widoki.WYBOR_BEZ_GRUPY:
+            return None
+        if wybor == widoki.WYBOR_NOWA_GRUPA:
+            if not dane.nazwa_grupy:
+                bledy.append(BladPola("nazwa_grupy", "Nazwa nowej grupy jest wymagana."))
+                return None
+            return dane.nazwa_grupy
+        if wybor.startswith(widoki.PREFIKS_GRUPY):
+            nazwa = wybor[len(widoki.PREFIKS_GRUPY) :]
+            if nazwa in grupy_znane:
+                return nazwa
+            bledy.append(BladPola("wybor_grupy", "Wybrana grupa nie istnieje w tym projekcie."))
+            return None
+        bledy.append(BladPola("wybor_grupy", "Wybierz grupę z listy."))
+        return None
 
     def _uruchom_nowy_projekt(
         self,
@@ -487,7 +623,7 @@ class _Handler(BaseHTTPRequestHandler):
         dane: DaneFormularzaProjektu,
         adresy: list[str],
         pliki: list[formularze.PlikFormularza],
-        grupa: str,
+        grupa: str | None,
     ) -> None:
         """Przyjmuje wejścia i uruchamia przebieg; błędny adres kończy się przed katalogiem."""
         konfiguracja = self._konfiguracja
@@ -657,7 +793,9 @@ class _Handler(BaseHTTPRequestHandler):
         """Ustawia jawnie wybrany projekt jako cel globalnego skrótu klawiszowego.
 
         Wybór jest jawny, nie „ostatnio otwarty”, zgodnie z decyzją drugą sekcji
-        dwunastej CLAUDE.md — patrz docstring ``AktywnyProjektSkrotu``.
+        dwunastej CLAUDE.md — patrz docstring ``AktywnyProjektSkrotu``. Jawnym
+        wyborem jest też wybranie projektu na liście strony głównej; skrypt tej
+        strony wywołuje tę samą trasę i prosi o odpowiedź JSON.
         """
         wynik_formularza = self._parsuj_formularz()
         if wynik_formularza is None:
@@ -671,6 +809,10 @@ class _Handler(BaseHTTPRequestHandler):
             return
 
         self._serwer.aktywny_projekt_skrotu.ustaw(uklad.nazwa_projektu)
+        if "application/json" in self.headers.get("Accept", ""):
+            dane = {"aktywny": uklad.nazwa_projektu}
+            self._wyslij(200, json.dumps(dane, ensure_ascii=False).encode("utf-8"), _TYP_JSON)
+            return
         self._przekieruj(sciezka_projektu(uklad.nazwa_projektu))
 
     # --- ręczne działania na źródłach ---------------------------------

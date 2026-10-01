@@ -45,6 +45,9 @@ class DaneFormularzaProjektu:
     tekst: str = ""
     adresy: str = ""
     grupa: str = ""
+    projekt: str = ""
+    wybor_grupy: str = ""
+    nazwa_grupy: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,6 +165,63 @@ NAZWA_POLA_TEKSTU = "Tu wklej tekst"
 NAZWA_POLA_ADRESOW = "Tu wklej adresy stron www i adresy do YouTube, po jednym w każdym wierszu"
 
 
+SCIEZKA_WYBORU_PROJEKTU = "/przejdz-do-projektu"
+WYBOR_BEZ_GRUPY = "__bez__"
+WYBOR_NOWA_GRUPA = "__nowa__"
+PREFIKS_GRUPY = "g:"
+NAZWA_PROJEKTU_NOWEGO = "Nowy projekt"
+
+
+def _atrybuty_pola_z_opisem(
+    bledy: list[BladPola], pole: str, pomoc_id: str | None = None
+) -> tuple[str, str]:
+    """Jak `_opis_bledu_pola`, ale łączy opis pomocniczy pola z komunikatem błędu.
+
+    Atrybut `aria-describedby` może wystąpić w znaczniku tylko raz, więc przy polu,
+    które ma i stały opis, i błąd, oba identyfikatory trafiają do jednego atrybutu.
+    """
+    opisy = [pomoc_id] if pomoc_id else []
+    nieprawidlowe = ""
+    komunikat = ""
+    for blad in bledy:
+        if blad.pole == pole:
+            opis_id = f"{pole}-blad"
+            opisy.append(opis_id)
+            nieprawidlowe = ' aria-invalid="true"'
+            komunikat = f'<p class="pomoc" id="{escapuj(opis_id)}">{escapuj(blad.komunikat)}</p>'
+            break
+    opis = f' aria-describedby="{escapuj(" ".join(opisy))}"' if opisy else ""
+    return nieprawidlowe + opis, komunikat
+
+
+def _opcje_projektow(projekty: list[ProjektNaLiscie], wybrany: str) -> str:
+    """Pozycje listy „Projekt”: „Nowy projekt”, a pod nim wszystkie projekty ze stanem."""
+    opcje = [
+        f'<option value=""{" selected" if not wybrany else ""}>{NAZWA_PROJEKTU_NOWEGO}</option>'
+    ]
+    for projekt in projekty:
+        zaznaczona = " selected" if projekt.nazwa == wybrany else ""
+        opcje.append(
+            f'<option value="{escapuj(projekt.nazwa)}"{zaznaczona}>'
+            f"{escapuj(projekt.nazwa)}, {projekt.stan}</option>"
+        )
+    return "\n".join(opcje)
+
+
+def _opcje_grup(grupy: list[str], wybrana: str) -> str:
+    """Pozycje listy „Grupa”: „Bez grupy”, „Nowa grupa” i grupy wybranego projektu."""
+    opcje = [
+        (WYBOR_BEZ_GRUPY, "Bez grupy"),
+        (WYBOR_NOWA_GRUPA, "Nowa grupa"),
+        *((PREFIKS_GRUPY + grupa, grupa) for grupa in grupy),
+    ]
+    return "\n".join(
+        f'<option value="{escapuj(wartosc)}"{" selected" if wartosc == wybrana else ""}>'
+        f"{escapuj(tekst)}</option>"
+        for wartosc, tekst in opcje
+    )
+
+
 def strona_glowna(
     *,
     projekty: list[ProjektNaLiscie],
@@ -170,25 +230,68 @@ def strona_glowna(
     bledy: list[BladPola] | None = None,
     aktywny_projekt_skrotu: str | None = None,
     ostatni_komunikat_skrotu: KomunikatSkrotu | None = None,
+    grupy_projektu: list[str] | None = None,
+    wybrany_projekt: str = "",
 ) -> str:
-    """Strona główna: formularz nowego projektu oraz rozwijana lista wszystkich projektów."""
+    """Strona główna: jeden formularz dodawania materiałów do nowego albo istniejącego projektu.
+
+    Argument `wybrany_projekt` to nazwa projektu zaznaczonego na liście „Projekt”
+    przy wczytaniu strony, a `grupy_projektu` to grupy tego projektu. Po błędzie
+    walidacji zaznaczenie wraca do tego, co użytkownik wybrał w wysłanym formularzu.
+    """
     dane = dane or DaneFormularzaProjektu()
     bledy = bledy or []
+    grupy = grupy_projektu or []
+    wybrany = dane.projekt if dane.projekt or dane.wybor_grupy else wybrany_projekt
+    domyslna_grupa = dane.wybor_grupy or (PREFIKS_GRUPY + grupy[-1] if grupy else WYBOR_BEZ_GRUPY)
 
-    atrybuty_nazwa, blad_nazwa = _opis_bledu_pola(bledy, "nazwa_projektu")
+    atrybuty_projekt, blad_projekt = _atrybuty_pola_z_opisem(bledy, "projekt")
+    atrybuty_nazwa, blad_nazwa = _atrybuty_pola_z_opisem(
+        bledy, "nazwa_projektu", "pomoc-nazwa-projektu"
+    )
+    atrybuty_grupa, blad_grupa = _atrybuty_pola_z_opisem(bledy, "wybor_grupy")
+    atrybuty_nazwa_grupy, blad_nazwa_grupy = _atrybuty_pola_z_opisem(
+        bledy, "nazwa_grupy", "pomoc-nazwa-grupy"
+    )
     atrybuty_tekst, blad_tekst = _opis_bledu_pola(bledy, "tekst")
     atrybuty_adresy, blad_adresy = _opis_bledu_pola(bledy, "adresy")
-    atrybuty_grupa, blad_grupa = _opis_bledu_pola(bledy, "grupa")
+    brak_projektow = (
+        '<p class="pomoc">Nie ma jeszcze żadnych projektów.</p>\n' if not projekty else ""
+    )
 
     formularz = f"""<h1>Gemini Notebook Builder</h1>
-<form class="blok" method="post" action="/projekt/nowy" enctype="multipart/form-data">
+<form class="blok" id="formularz-glowny" method="post" action="/projekt/nowy"
+  enctype="multipart/form-data">
 {_pole_csrf(token_csrf)}
 {_lista_bledow(bledy)}
-<h2>Nowy projekt</h2>
-<label for="nazwa_projektu">Nazwa projektu</label>
+<h2>Dodaj materiały</h2>
+<button type="submit" hidden tabindex="-1" aria-hidden="true"></button>
+<label for="projekt">Projekt</label>
+<select id="projekt" name="projekt"{atrybuty_projekt}>
+{_opcje_projektow(projekty, wybrany)}
+</select>
+{blad_projekt}{brak_projektow}<button type="submit" id="przejdz-do-projektu"
+  formaction="{escapuj(SCIEZKA_WYBORU_PROJEKTU)}" formmethod="post"
+  formenctype="application/x-www-form-urlencoded" formnovalidate>Przejdź do projektu</button>
+<div id="blok-nazwy-projektu">
+<label for="nazwa_projektu">Nazwa nowego projektu</label>
 <input type="text" id="nazwa_projektu" name="nazwa_projektu"
-  value="{escapuj(dane.nazwa_projektu)}" required{atrybuty_nazwa}>
-{blad_nazwa}
+  value="{escapuj(dane.nazwa_projektu)}"{atrybuty_nazwa}>
+<p class="pomoc" id="pomoc-nazwa-projektu">Wpisz tylko wtedy, gdy na liście Projekt
+wybrano Nowy projekt.</p>
+{blad_nazwa}</div>
+<label for="wybor_grupy">Grupa</label>
+<select id="wybor_grupy" name="wybor_grupy"{atrybuty_grupa}>
+{_opcje_grup(grupy, domyslna_grupa)}
+</select>
+{blad_grupa}<div id="blok-nazwy-grupy">
+<label for="nazwa_grupy">Nazwa nowej grupy</label>
+<input type="text" id="nazwa_grupy" name="nazwa_grupy"
+  value="{escapuj(dane.nazwa_grupy)}"{atrybuty_nazwa_grupy}>
+<p class="pomoc" id="pomoc-nazwa-grupy">Wpisz tylko wtedy, gdy na liście Grupa
+wybrano Nowa grupa.</p>
+{blad_nazwa_grupy}</div>
+<p id="komunikat-formularza" role="status" aria-live="polite"></p>
 <label for="tekst">{NAZWA_POLA_TEKSTU}</label>
 <textarea id="tekst" name="tekst"{atrybuty_tekst}>{escapuj(dane.tekst)}</textarea>
 {blad_tekst}
@@ -197,19 +300,17 @@ def strona_glowna(
 {blad_adresy}
 <label for="pliki">Pliki z dysku</label>
 <input type="file" id="pliki" name="pliki" multiple>
-<label for="grupa">Nazwa grupy tematycznej</label>
-<input type="text" id="grupa" name="grupa" value="{escapuj(dane.grupa)}"
-  required{atrybuty_grupa}>
-{blad_grupa}
-<button type="submit">Utwórz projekt i rozpocznij przetwarzanie</button>
+<button type="submit">Dodaj materiały i rozpocznij przetwarzanie</button>
 </form>"""
 
-    tresc = (
-        formularz
-        + _sekcja_projektow(projekty)
-        + _sekcja_skrotu_glowna(aktywny_projekt_skrotu, ostatni_komunikat_skrotu)
-    )
-    return _dokument("Gemini Notebook Builder", tresc, skrypt=_SKRYPT_FOKUS_BLEDOW if bledy else "")
+    tresc = formularz + _sekcja_skrotu_glowna(aktywny_projekt_skrotu, ostatni_komunikat_skrotu)
+    skrypt = _SKRYPT_FORMULARZA_GLOWNEGO.replace("NAZWA_POLA_CSRF", NAZWA_POLA_FORMULARZA)
+    skrypt = skrypt.replace("WYBOR_BEZ_GRUPY", WYBOR_BEZ_GRUPY)
+    skrypt = skrypt.replace("WYBOR_NOWA_GRUPA", WYBOR_NOWA_GRUPA)
+    skrypt = skrypt.replace("PREFIKS_GRUPY", PREFIKS_GRUPY)
+    if bledy:
+        skrypt += "\n" + _SKRYPT_FOKUS_BLEDOW
+    return _dokument("Gemini Notebook Builder", tresc, skrypt=skrypt)
 
 
 def _sekcja_skrotu_glowna(
@@ -223,7 +324,7 @@ def _sekcja_skrotu_glowna(
     )
     return (
         '<div class="blok">\n<h2>Globalny skrót klawiszowy</h2>\n'
-        f"<p>{status}</p>\n"
+        f'<p id="stan-aktywnego-projektu">{status}</p>\n'
         f"{_akapit_ostatniego_komunikatu(ostatni_komunikat_skrotu)}\n</div>"
     )
 
@@ -234,37 +335,6 @@ def _akapit_ostatniego_komunikatu(komunikat: KomunikatSkrotu | None) -> str:
     wynik = "powodzenie" if komunikat.sukces else "porażka"
     tekst = tekst_z_odnosnikami(komunikat.tekst)
     return f'<p class="pomoc">Ostatnie zdarzenie skrótu ({wynik}): {tekst}</p>'
-
-
-SCIEZKA_WYBORU_PROJEKTU = "/przejdz-do-projektu"
-
-
-def _sekcja_projektow(projekty: list[ProjektNaLiscie]) -> str:
-    """Rozwijana lista wszystkich projektów z przyciskiem przejścia na stronę wybranego.
-
-    Pozycja listy jest krótka, bo czytnik ekranu odczytuje ją przy każdym ruchu
-    strzałką: nazwa, przecinek i stan. Liczba źródeł i data zmiany są na stronie
-    projektu. Formularz działa bez JavaScriptu, jako zwykła nawigacja metodą GET.
-    """
-    if not projekty:
-        return (
-            '<div class="blok">\n<h2>Projekty do wznowienia</h2>\n'
-            "<p>Nie ma jeszcze żadnych projektów.</p>\n</div>"
-        )
-    opcje = "\n".join(
-        f'<option value="{escapuj(projekt.nazwa)}">'
-        f"{escapuj(projekt.nazwa)}, {projekt.stan}</option>"
-        for projekt in projekty
-    )
-    return (
-        '<form class="blok" method="get" '
-        f'action="{escapuj(SCIEZKA_WYBORU_PROJEKTU)}">\n'
-        "<h2>Projekty do wznowienia</h2>\n"
-        '<label for="wybor-projektu">Wybierz projekt</label>\n'
-        f'<select id="wybor-projektu" name="projekt">\n{opcje}\n</select>\n'
-        '<button type="submit">Przejdź do projektu</button>\n'
-        "</form>"
-    )
 
 
 def _sekcja_stanu_projektu(
@@ -628,6 +698,105 @@ _SKRYPT_POSTEPU = """
   }
   odswiez();
   setInterval(odswiez, 4000);
+})();
+""".strip()
+
+_SKRYPT_FORMULARZA_GLOWNEGO = """
+(function () {
+  var projekt = document.getElementById('projekt');
+  var grupa = document.getElementById('wybor_grupy');
+  var blokProjektu = document.getElementById('blok-nazwy-projektu');
+  var nazwaProjektu = document.getElementById('nazwa_projektu');
+  var blokGrupy = document.getElementById('blok-nazwy-grupy');
+  var nazwaGrupy = document.getElementById('nazwa_grupy');
+  var przejdz = document.getElementById('przejdz-do-projektu');
+  var region = document.getElementById('komunikat-formularza');
+  var stanAktywnego = document.getElementById('stan-aktywnego-projektu');
+  var pole = document.querySelector('#formularz-glowny input[name="NAZWA_POLA_CSRF"]');
+  if (!projekt || !grupa || !blokProjektu || !blokGrupy) { return; }
+  var czasomierz = null;
+  var numer = 0;
+  function pokaz(blok, wejscie, widoczny) {
+    blok.hidden = !widoczny;
+    wejscie.required = widoczny;
+  }
+  function odswiezWidocznosc() {
+    var nowy = projekt.value === '';
+    pokaz(blokProjektu, nazwaProjektu, nowy);
+    pokaz(blokGrupy, nazwaGrupy, grupa.value === 'WYBOR_NOWA_GRUPA');
+    if (przejdz) { przejdz.hidden = nowy; }
+  }
+  function ustawGrupy(lista, domyslna) {
+    while (grupa.options.length) { grupa.remove(0); }
+    grupa.add(new Option('Bez grupy', 'WYBOR_BEZ_GRUPY'));
+    grupa.add(new Option('Nowa grupa', 'WYBOR_NOWA_GRUPA'));
+    for (var i = 0; i < lista.length; i++) {
+      grupa.add(new Option(lista[i], 'PREFIKS_GRUPY' + lista[i]));
+    }
+    grupa.value = domyslna ? 'PREFIKS_GRUPY' + domyslna : 'WYBOR_BEZ_GRUPY';
+    odswiezWidocznosc();
+  }
+  function odmiana(n) {
+    if (n === 1) { return 'grupa'; }
+    var reszta = n % 10;
+    var setki = n % 100;
+    return (reszta >= 2 && reszta <= 4 && (setki < 12 || setki > 14)) ? 'grupy' : 'grup';
+  }
+  function ogloszenie(czesci) {
+    if (region) { region.textContent = czesci.join(' '); }
+  }
+  function zmianaProjektu(nazwa, moj) {
+    var baza = '/projekt/' + encodeURIComponent(nazwa);
+    var grupyZapytanie = fetch(baza + '/grupy', { headers: { 'Accept': 'application/json' } })
+      .then(function (o) { return o.ok ? o.json() : null; })
+      .catch(function () { return null; });
+    var aktywnyZapytanie = fetch(baza + '/aktywny-skrot', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: 'NAZWA_POLA_CSRF=' + encodeURIComponent(pole ? pole.value : '')
+    })
+      .then(function (o) { return o.ok ? o.json() : null; })
+      .catch(function () { return null; });
+    Promise.all([grupyZapytanie, aktywnyZapytanie]).then(function (wyniki) {
+      if (moj !== numer) { return; }
+      var czesci = [];
+      var dane = wyniki[0];
+      var aktywny = wyniki[1];
+      if (aktywny && aktywny.aktywny) {
+        czesci.push('Aktywny projekt skrótu: ' + aktywny.aktywny + '.');
+        if (stanAktywnego) {
+          stanAktywnego.textContent = 'Aktywny projekt skrótu: ' + aktywny.aktywny + '.';
+        }
+      }
+      if (dane) {
+        ustawGrupy(dane.grupy, dane.domyslna);
+        var liczba = dane.grupy.length;
+        czesci.push(liczba === 0
+          ? 'Ten projekt nie ma grup.'
+          : 'Lista grup zaktualizowana, ' + liczba + ' ' + odmiana(liczba) + '.');
+      } else {
+        czesci.push('Nie udało się pobrać listy grup tego projektu.');
+      }
+      ogloszenie(czesci);
+    });
+  }
+  projekt.addEventListener('change', function () {
+    odswiezWidocznosc();
+    if (czasomierz) { clearTimeout(czasomierz); }
+    var moj = ++numer;
+    var wybrany = projekt.value;
+    if (wybrany === '') {
+      ustawGrupy([], '');
+      ogloszenie([]);
+      return;
+    }
+    czasomierz = setTimeout(function () { zmianaProjektu(wybrany, moj); }, 700);
+  });
+  grupa.addEventListener('change', odswiezWidocznosc);
+  odswiezWidocznosc();
 })();
 """.strip()
 

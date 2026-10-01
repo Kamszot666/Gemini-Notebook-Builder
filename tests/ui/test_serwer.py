@@ -129,7 +129,8 @@ def test_pelny_przebieg_tworzenia_projektu_z_tekstem(
     cialo = (
         czesc("token_csrf", token)
         + czesc("nazwa_projektu", "Projekt Testowy")
-        + czesc("grupa", "Wiedza")
+        + czesc("wybor_grupy", "__nowa__")
+        + czesc("nazwa_grupy", "Wiedza")
         + czesc("tekst", "Krótki tekst do testu serwera.")
         + f"--{granica}--\r\n"
     ).encode("utf-8")
@@ -188,7 +189,8 @@ def test_dosylanie_zrodel_dodaje_je_do_istniejacego_projektu(
                 "token_csrf": _token(klient),
                 "nazwa_projektu": "Projekt Dosylania",
                 "tekst": "Pierwszy tekst wklejony do testu dosyłania.",
-                "grupa": "Wiedza",
+                "wybor_grupy": "__nowa__",
+                "nazwa_grupy": "Wiedza",
             },
         ),
         f"multipart/form-data; boundary={granica}",
@@ -252,7 +254,8 @@ def test_dosylanie_zrodel_bez_zadnego_zrodla_wraca_na_strone_projektu_z_bledem(
                 "token_csrf": _token(klient),
                 "nazwa_projektu": "Projekt Pusty",
                 "tekst": "Materiał startowy projektu.",
-                "grupa": "Wiedza",
+                "wybor_grupy": "__nowa__",
+                "nazwa_grupy": "Wiedza",
             },
         ),
         f"multipart/form-data; boundary={granica}",
@@ -402,7 +405,12 @@ def test_plik_z_adresami_ponad_limit_jest_zrodlem_a_adresy_nie_sa_dodawane(
         )
         naglowek = _wielloczesciowe(
             granica,
-            {"token_csrf": _token(klient), "nazwa_projektu": "Projekt Limitu", "grupa": "Wiedza"},
+            {
+                "token_csrf": _token(klient),
+                "nazwa_projektu": "Projekt Limitu",
+                "wybor_grupy": "__nowa__",
+                "nazwa_grupy": "Wiedza",
+            },
         ).removesuffix(f"--{granica}--\r\n".encode())
         czesc_pliku = (
             f'--{granica}\r\nContent-Disposition: form-data; name="pliki"; '

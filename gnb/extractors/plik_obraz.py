@@ -61,6 +61,12 @@ KOMUNIKAT_BRAK_PILLOW_HEIF = (
     "Zainstaluj ją poleceniem „pip install gnb[obrazy-heic]” albo przekonwertuj "
     "obraz do formatu JPG lub PNG."
 )
+KOMUNIKAT_ZABLOKOWANY_PILLOW_HEIF = (
+    "Obsługa formatów HEIC i HEIF jest wyłączona: system zablokował natywną "
+    "bibliotekę pillow-heif (na przykład Inteligentne sterowanie aplikacjami "
+    "w Windows). Przekonwertuj obraz do formatu JPG lub PNG. Pozostałe formaty "
+    "obrazów działają normalnie."
+)
 OSTRZEZENIE_KLATKA_ANIMOWANEGO_GIF = (
     "Plik GIF jest animowany. Do przetworzenia wzięto wyłącznie pierwszą klatkę."
 )
@@ -140,16 +146,25 @@ class EkstraktorObrazu:
 
     def _otworz(self, identyfikator_zrodla: str, bajty: bytes) -> tuple[Image.Image, str]:
         """Otwiera obraz z bajtów, wczytując wsparcie HEIC dopiero gdy jest potrzebne."""
-        _zarejestruj_heif_jesli_dostepne()
+        heif_zablokowany = _zarejestruj_heif_jesli_dostepne()
         try:
             obraz = Image.open(io.BytesIO(bajty))
             obraz.load()
         except UnidentifiedImageError as blad:
             if _wyglada_na_heif(bajty):
-                raise FormatNieobslugiwany(
-                    KOMUNIKAT_BRAK_PILLOW_HEIF, identyfikator_zrodla
-                ) from blad
+                komunikat = (
+                    KOMUNIKAT_ZABLOKOWANY_PILLOW_HEIF
+                    if heif_zablokowany
+                    else KOMUNIKAT_BRAK_PILLOW_HEIF
+                )
+                raise FormatNieobslugiwany(komunikat, identyfikator_zrodla) from blad
             raise FormatNieobslugiwany(KOMUNIKAT_USZKODZONY_OBRAZ, identyfikator_zrodla) from blad
+        except ImportError as blad:
+            # Nieudana rejestracja pillow-heif zostawia w Pillow otwieracz HEIF,
+            # który przy otwarciu pliku zgłasza ten sam błąd ładowania biblioteki.
+            raise FormatNieobslugiwany(
+                KOMUNIKAT_ZABLOKOWANY_PILLOW_HEIF, identyfikator_zrodla
+            ) from blad
         except OSError as blad:
             raise FormatNieobslugiwany(KOMUNIKAT_USZKODZONY_OBRAZ, identyfikator_zrodla) from blad
         return obraz, (obraz.format or "").lower()
@@ -276,13 +291,24 @@ def _do_png(obraz: Image.Image) -> bytes:
     return bufor.getvalue()
 
 
-def _zarejestruj_heif_jesli_dostepne() -> None:
-    """Rejestruje w Pillow obsługę HEIC i HEIF, gdy biblioteka pillow-heif jest dostępna."""
+def _zarejestruj_heif_jesli_dostepne() -> bool:
+    """Rejestruje w Pillow obsługę HEIC i HEIF, gdy biblioteka pillow-heif jest dostępna.
+
+    Zwraca prawdę wyłącznie wtedy, gdy biblioteka jest zainstalowana, ale jej
+    natywnej części nie dało się załadować, na przykład z powodu blokady przez
+    system. Biblioteka pillow-heif odracza ten błąd do chwili rejestracji, więc
+    ImportError jest łapany także przy niej. Taka awaria wyłącza wyłącznie HEIC
+    i HEIF, a pozostałe formaty obrazów są otwierane normalnie.
+    """
     try:
         import pillow_heif
     except ImportError:
-        return
-    pillow_heif.register_heif_opener()
+        return False
+    try:
+        pillow_heif.register_heif_opener()
+    except ImportError:
+        return True
+    return False
 
 
 def _wyglada_na_heif(bajty: bytes) -> bool:

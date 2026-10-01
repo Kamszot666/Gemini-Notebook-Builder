@@ -28,15 +28,13 @@ def test_strona_glowna_ma_etykiety_i_pole_csrf() -> None:
     html = strona_glowna(projekty=[], token_csrf="tok123")
 
     assert '<html lang="pl">' in html
-    # Pola tekstowe mają nazwę w aria-label i tę samą nazwę w podpowiedzi
-    # wewnątrz pola, bez widocznych etykiet; pole pliku zachowuje etykietę.
-    assert 'aria-label="Nazwa projektu"' in html
-    assert 'placeholder="Nazwa projektu"' in html
-    assert 'placeholder="Tu wklej tekst"' in html
-    assert 'placeholder="Nazwa grupy tematycznej"' in html
-    assert '<label for="nazwa_projektu">' not in html
-    assert '<label for="tekst">' not in html
-    assert '<label for="adresy">' not in html
+    # Każde pole ma widoczną etykietę, bez podpowiedzi wewnątrz pola i bez
+    # aria-label; pole pliku też zachowuje etykietę.
+    assert '<label for="nazwa_projektu">Nazwa projektu</label>' in html
+    assert '<label for="tekst">Tu wklej tekst</label>' in html
+    assert '<label for="grupa">Nazwa grupy tematycznej</label>' in html
+    assert "placeholder" not in html
+    assert "aria-label" not in html
     assert '<label for="pliki">' in html
     assert 'name="token_csrf" value="tok123"' in html
     assert "Nie ma jeszcze żadnych projektów." in html
@@ -219,8 +217,8 @@ def test_adres_javascript_w_raporcie_nigdy_nie_staje_sie_odnosnikiem() -> None:
 def test_strona_projektu_po_zakonczeniu_ma_formularz_dosylania_zrodel() -> None:
     html = _strona_z_raportem("Raport końcowy projektu: Projekt\n")
 
-    assert 'placeholder="Tu wklej tekst"' in html
-    assert '<label for="dosylanie-tekst">' not in html
+    assert '<label for="dosylanie-tekst">Tu wklej tekst</label>' in html
+    assert "placeholder" not in html
     assert 'action="/projekt/Projekt/dosylanie"' in html
     assert "Dodaj źródła i uruchom kolejny przebieg" in html
 
@@ -443,19 +441,35 @@ def test_formularz_dosylania_podpowiada_grupy_projektu_i_wymaga_grupy() -> None:
 
 
 class _ZbieraczPolTekstowych(HTMLParser):
-    """Zbiera pola tekstowe i pola tekstowe wieloliniowe oraz etykiety z całej strony."""
+    """Zbiera pola tekstowe i wieloliniowe oraz teksty etykiet `label for` z całej strony."""
 
     def __init__(self) -> None:
         super().__init__()
         self.pola: list[dict[str, str | None]] = []
-        self.etykiety: set[str] = set()
+        self.etykiety: dict[str, list[str]] = {}
+        self._biezaca_etykieta: str | None = None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         atrybuty = dict(attrs)
         if tag == "textarea" or (tag == "input" and atrybuty.get("type") == "text"):
             self.pola.append(atrybuty)
         elif tag == "label" and atrybuty.get("for"):
-            self.etykiety.add(atrybuty["for"] or "")
+            self._biezaca_etykieta = atrybuty["for"] or ""
+            self.etykiety.setdefault(self._biezaca_etykieta, []).append("")
+
+    def handle_data(self, data: str) -> None:
+        if self._biezaca_etykieta is not None:
+            self.etykiety[self._biezaca_etykieta][-1] += data
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "label":
+            self._biezaca_etykieta = None
+
+    def tekst_etykiety(self, identyfikator: str) -> str:
+        """Zwraca tekst jedynej etykiety pola o danym id; inna liczba etykiet to błąd."""
+        teksty = self.etykiety.get(identyfikator, [])
+        assert len(teksty) == 1, (identyfikator, teksty)
+        return teksty[0].strip()
 
 
 def _strony_z_polami_tekstowymi() -> list[str]:
@@ -468,6 +482,11 @@ def _strony_z_polami_tekstowymi() -> list[str]:
     )
     return [
         strona_glowna(projekty=[], token_csrf="t"),
+        strona_glowna(
+            projekty=[],
+            token_csrf="t",
+            bledy=[BladPola(pole="nazwa_projektu", komunikat="Podaj nazwę projektu.")],
+        ),
         _strona_z_raportem("Raport końcowy projektu: Projekt" + chr(10)),
         strona_projektu(
             nazwa="Projekt",
@@ -483,18 +502,19 @@ def _strony_z_polami_tekstowymi() -> list[str]:
     ]
 
 
-def test_kazde_pole_tekstowe_ma_aria_label_i_taki_sam_placeholder_bez_widocznej_etykiety() -> None:
-    """Wzorzec z decyzji użytkownika: podwójny odczyt nazwy w NVDA przy etykiecie i podpowiedzi."""
+def test_kazde_pole_tekstowe_ma_jedna_widoczna_etykiete_bez_placeholdera_i_aria_label() -> None:
+    """Wzorzec z odsłuchu NVDA: nazwę niesie tylko etykieta, bez podpowiedzi w polu."""
     liczba_pol = 0
     for html in _strony_z_polami_tekstowymi():
         zbieracz = _ZbieraczPolTekstowych()
         zbieracz.feed(html)
         for pole in zbieracz.pola:
             liczba_pol += 1
-            identyfikator = pole.get("id")
-            assert pole.get("aria-label"), identyfikator
-            assert pole.get("placeholder") == pole.get("aria-label"), identyfikator
-            assert identyfikator not in zbieracz.etykiety, identyfikator
+            identyfikator = pole.get("id") or ""
+            assert identyfikator
+            assert zbieracz.tekst_etykiety(identyfikator), identyfikator
+            assert "placeholder" not in pole, identyfikator
+            assert "aria-label" not in pole, identyfikator
     assert liczba_pol >= 10
 
 
@@ -511,23 +531,20 @@ def test_pole_promptu_ma_opis_pomocniczy_przez_aria_describedby_a_nie_w_nazwie()
 
     assert 'aria-describedby="pomoc-prompt"' in html
     assert 'id="pomoc-prompt"' in html
-    assert 'aria-label="Prompt dla mechanizmu wyszukującego źródła"' in html
+    assert (
+        '<label for="prompt_wyszukiwania">Prompt dla mechanizmu wyszukującego źródła</label>'
+        in html
+    )
+    assert "aria-label" not in html
 
 
 NAZWA_POLA_TEKSTU = "Tu wklej tekst"
 NAZWA_POLA_ADRESOW = "Tu wklej adresy stron www i adresy do YouTube, po jednym w każdym wierszu"
 
 
-def _atrybuty_pola(html: str, identyfikator: str) -> dict[str, str]:
-    """Zwraca atrybuty znacznika textarea o podanym id, bez zaglądania w resztę strony."""
-    dopasowanie = re.search(rf'<textarea id="{identyfikator}"(.*?)>', html, re.DOTALL)
-    assert dopasowanie is not None, identyfikator
-    return dict(re.findall(r'([\w-]+)="([^"]*)"', dopasowanie.group(1)))
-
-
-def test_pola_tekstu_i_adresow_maja_nowe_nazwy_w_obu_formularzach() -> None:
+def test_pola_tekstu_i_adresow_maja_nowe_nazwy_jako_etykiety_w_obu_formularzach() -> None:
     glowna = strona_glowna(projekty=[], token_csrf="tok123")
-    projekt = _strona_z_raportem("Raport końcowy projektu: Projekt\n")
+    projekt = _strona_z_raportem("Raport końcowy projektu: Projekt" + chr(10))
 
     pola = [
         (glowna, "tekst", NAZWA_POLA_TEKSTU),
@@ -536,6 +553,6 @@ def test_pola_tekstu_i_adresow_maja_nowe_nazwy_w_obu_formularzach() -> None:
         (projekt, "dosylanie-adresy", NAZWA_POLA_ADRESOW),
     ]
     for html, identyfikator, nazwa in pola:
-        atrybuty = _atrybuty_pola(html, identyfikator)
-        assert atrybuty["aria-label"] == nazwa, identyfikator
-        assert atrybuty["placeholder"] == nazwa, identyfikator
+        zbieracz = _ZbieraczPolTekstowych()
+        zbieracz.feed(html)
+        assert zbieracz.tekst_etykiety(identyfikator) == nazwa, identyfikator

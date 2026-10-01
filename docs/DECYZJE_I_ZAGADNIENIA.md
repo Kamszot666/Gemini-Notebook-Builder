@@ -1,4 +1,4 @@
-# Decyzje odrzucone, zagadnienia otwarte i decyzje podjęte — stan po etapie piętnastym, część B, i naprawie etykiet
+# Decyzje odrzucone, zagadnienia otwarte i decyzje podjęte — stan po etapie piętnastym, część C, i naprawie etykiet
 
 Ten dokument zawiera dosłowną treść sekcji 18d i 18e dawnego głównego `CLAUDE.md`. W głównym pliku zostały krótkie streszczenia i odsyłacz do tego dokumentu. Reguła doboru zależności pod kontrolą aplikacji Windows została w głównym `CLAUDE.md`.
 
@@ -41,6 +41,8 @@ Sprawy zauważone w trakcie pracy, świadomie odłożone, żeby nie ruszać ich 
 
 9. ZAMKNIĘTE, naprawa `naprawa-brak-danych-jezyka-ocr`. Brak danych językowych Tesseracta (na przykład `pol.traineddata`) daje teraz źródłu status „pominiete” z komunikatem, którego języka brakuje i że trzeba doinstalować plik, zgodnie z zasadą z pull requesta 30. Sprawdzenie robi `wymagaj_danych_jezykowych` w `gnb/images/tesseract.py`, wywołane przez ekstraktory obrazu i skanu PDF po sprawdzeniu, że sam program istnieje; wyjątek `BrakNarzedzia` trafia do gałęzi pominięcia w `gnb/potok.py`. Brak samego programu Tesseract dawał w tamtym pull requeście jeszcze ostrzeżenie i zapis źródła bez OCR; został ujednolicony w naprawie `naprawa-brak-tesseracta-jako-pominiecie` — przy włączonym OCR daje teraz to samo pominięcie, z komunikatem, że trzeba pobrać Tesseract. PDF z warstwą tekstową i przypadek wyłączonego OCR bez zmian. Zapis pierwotny, dla kontekstu: brak danych języka kończył źródło statusem „blad” z komunikatem Tesseracta o niemożności otwarcia pliku danych.
 
+
+10. Jednoczesny przebieg z wiersza poleceń i z interfejsu na tym samym projekcie. Zgłoszone w części C etapu piętnastego, decyzja użytkownika z 1 października 2026. Objaw: blokada pojedynczej kopii z części C obejmuje wyłącznie serwer interfejsu, a polecenia `python -m gnb.cli` jej nie dotyczą, więc dwa przebiegi na tym samym projekcie mogą działać jednocześnie. Przyczyna: zapis checkpointu jest atomowy (plik tymczasowy i `os.replace`), ale dwa procesy nie widzą nawzajem swoich zmian, więc ostatni zapis wygrywa i źródła dodane przez drugi proces mogą zniknąć z checkpointu albo zostać przetworzone dwa razy. To wniosek z lektury kodu, nie zmierzony fakt. DECYZJA: blokada per projekt, w katalogu projektu, zakładana na czas przebiegu zarówno przez interfejs, jak i przez wiersz poleceń; drugi przebieg na tym samym projekcie kończy się czytelnym komunikatem po polsku. TERMIN: osobny, mały etap po części F etapu piętnastego, nie wcześniej. Do tego czasu nie zmieniamy niczego w tej sprawie, a w razie potrzeby wystarczy nie uruchamiać dwóch przebiegów na tym samym projekcie.
 
 ## Decyzje podjęte
 

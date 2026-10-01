@@ -10,6 +10,7 @@ niezależnie od obecności Tesseracta.
 from __future__ import annotations
 
 import io
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from gnb.core.wyjatki import BrakNarzedzia, FormatNieobslugiwany
 from gnb.extractors import plik_obraz
 from gnb.extractors.plik_obraz import (
     KOMUNIKAT_BRAK_PILLOW_HEIF,
+    KOMUNIKAT_ZABLOKOWANY_PILLOW_HEIF,
     EkstraktorObrazu,
 )
 from gnb.images import tesseract
@@ -78,13 +80,52 @@ def test_brak_pillow_heif_dla_pliku_heic_daje_czytelny_komunikat(
     Rejestracja obsługi HEIF jest podmieniona na pustą, więc test działa tak
     samo, gdy pillow-heif jest zainstalowany, jak i gdy go nie ma.
     """
-    monkeypatch.setattr(plik_obraz, "_zarejestruj_heif_jesli_dostepne", lambda: None)
+    monkeypatch.setattr(plik_obraz, "_zarejestruj_heif_jesli_dostepne", lambda: False)
     bajty = b"\x00\x00\x00\x18ftypheic" + b"\x00" * 64
 
     with pytest.raises(FormatNieobslugiwany, match="pillow-heif"):
         EkstraktorObrazu().wyekstrahuj("obraz-4", bajty)
 
     assert "pip install gnb[obrazy-heic]" in KOMUNIKAT_BRAK_PILLOW_HEIF
+
+
+def _podstaw_zablokowany_pillow_heif(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Podstawia pillow-heif, którego natywna część jest zablokowana przez system.
+
+    Odwzorowuje rzeczywiste zachowanie: import modułu przechodzi, a błąd
+    ładowania biblioteki DLL wychodzi dopiero z rejestracji obsługi HEIF.
+    """
+
+    class ZablokowanyModul:
+        @staticmethod
+        def register_heif_opener() -> None:
+            raise ImportError("DLL load failed while importing _pillow_heif")
+
+    monkeypatch.setitem(sys.modules, "pillow_heif", ZablokowanyModul)
+
+
+def test_zablokowany_pillow_heif_nie_psuje_zwyklych_obrazow(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _podstaw_zablokowany_pillow_heif(monkeypatch)
+    bufor = io.BytesIO()
+    Image.new("RGB", (8, 6), "white").save(bufor, format="PNG")
+
+    wynik = EkstraktorObrazu().wyekstrahuj("obraz-png", bufor.getvalue())
+
+    assert wynik is not None
+
+
+def test_zablokowany_pillow_heif_wylacza_tylko_heic_z_czytelnym_komunikatem(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _podstaw_zablokowany_pillow_heif(monkeypatch)
+    bajty = b"\x00\x00\x00\x18ftypheic" + b"\x00" * 64
+
+    with pytest.raises(FormatNieobslugiwany, match="zablokował") as informacja:
+        EkstraktorObrazu().wyekstrahuj("obraz-heic", bajty)
+
+    assert KOMUNIKAT_ZABLOKOWANY_PILLOW_HEIF in str(informacja.value)
 
 
 def test_obraz_bez_opisu_i_bez_ocr_zapisuje_jawny_brak_opisu(

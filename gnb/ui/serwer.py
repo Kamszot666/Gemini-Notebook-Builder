@@ -57,6 +57,7 @@ from gnb.potok import (
     przetworz_projekt,
 )
 from gnb.ui import csrf, formularze, widoki
+from gnb.ui.blokada import BlokadaInstancji
 from gnb.ui.projekty import opisz_projekt, znajdz_projekty
 from gnb.ui.stan_skrotu import AktywnyProjektSkrotu, OstatniKomunikatSkrotu
 from gnb.ui.widoki import BladPola, DaneFormularzaProjektu, PodsumowanieWyniku, sciezka_projektu
@@ -79,7 +80,11 @@ class _Serwer(ThreadingHTTPServer):
     """Serwer wątkowy przechowujący konfigurację i rejestr zadań dla obsługi żądań."""
 
     daemon_threads = True
-    allow_reuse_address = True
+    # Na Windows SO_REUSEADDR pozwala drugiemu procesowi zająć ten sam adres
+    # i port, więc druga kopia serwera startowałaby bez błędu. Tam flaga jest
+    # wyłączona, a w ``server_bind`` ustawiany jest SO_EXCLUSIVEADDRUSE.
+    # Na Linuksie SO_REUSEADDR tylko ułatwia szybki restart i zostaje.
+    allow_reuse_address = sys.platform != "win32"
 
     def __init__(
         self,
@@ -96,6 +101,12 @@ class _Serwer(ThreadingHTTPServer):
         self.rejestr = rejestr
         self.aktywny_projekt_skrotu = aktywny_projekt_skrotu
         self.ostatni_komunikat_skrotu = ostatni_komunikat_skrotu
+
+    def server_bind(self) -> None:
+        """Wiąże gniazdo; na Windows wyłącznie, bez współdzielenia portu z innym procesem."""
+        if sys.platform == "win32":
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
 
 def zbuduj_serwer(
@@ -115,8 +126,18 @@ def zbuduj_serwer(
     )
 
 
-def uruchom_serwer(konfiguracja: Konfiguracja, *, rejestr: RejestrZadan | None = None) -> None:
+def uruchom_serwer(
+    konfiguracja: Konfiguracja,
+    *,
+    rejestr: RejestrZadan | None = None,
+    blokada: BlokadaInstancji | None = None,
+) -> None:
     """Uruchamia serwer i blokuje do przerwania klawiszem.
+
+    Blokadę pojedynczej kopii zakłada wołający, przed wywołaniem tej funkcji,
+    czyli przed otwarciem portu i przed rejestracją skrótu. Funkcja zapisuje
+    w niej tylko adres, pod którym serwer działa, żeby druga kopia mogła go
+    podać użytkownikowi.
 
     Adres i port pochodzą z konfiguracji. Adres jest tam już zweryfikowany jako
     pętla zwrotna, więc serwer nie może przypadkiem wystawić się do sieci.
@@ -130,6 +151,8 @@ def uruchom_serwer(konfiguracja: Konfiguracja, *, rejestr: RejestrZadan | None =
     """
     serwer = cast("_Serwer", zbuduj_serwer(konfiguracja, rejestr))
     adres = f"http://{konfiguracja.adres_nasluchu}:{serwer.server_address[1]}/"
+    if blokada is not None:
+        blokada.zapisz_adres(adres)
     print(f"Interfejs Gemini Notebook Builder działa pod adresem {adres}", flush=True)
     print(
         "Otwórz ten adres w przeglądarce. Serwer zatrzymasz klawiszami Control plus C.",

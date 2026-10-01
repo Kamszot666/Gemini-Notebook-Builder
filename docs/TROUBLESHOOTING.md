@@ -1,4 +1,4 @@
-# Rozwiązywanie problemów — stan po etapie czternastym i naprawach po nim
+# Rozwiązywanie problemów — stan po etapie piętnastym, część C
 
 Ten dokument opisuje problemy, które wystąpiły w rzeczywistej pracy z aplikacją,
 oraz te, które wynikają wprost z jej budowy. Każdy przypadek ma tę samą budowę:
@@ -48,6 +48,7 @@ ozdobników, a polecenia do wpisania są w osobnych blokach.
 32. Całe archiwum ZIP zostało pominięte.
 33. Z archiwum ZIP przyjęto mniej plików, niż w nim jest.
 34. Pliki z archiwum ZIP zajęły wiele slotów notatnika.
+35. Uruchomienie interfejsu kończy się zdaniem, że interfejs już działa.
 
 ## 1. Windows blokuje plik wykonywalny narzędzia deweloperskiego
 
@@ -266,11 +267,11 @@ Objaw. Polecenie `python -m gnb.ui.server` kończy się komunikatem, że nie uda
 się uruchomić serwera, a port może być zajęty. Zwykle w komunikacie systemu jest
 zwrot „address already in use” albo „Only one usage of each socket address”.
 
-Przyczyna. Domyślny port 8765 jest już używany przez inny program albo przez
-poprzednie, niezamknięte uruchomienie interfejsu.
+Przyczyna. Domyślny port 8765 jest już używany przez inny program. Druga kopia
+samego interfejsu nie dochodzi do tego błędu: kończy się wcześniej, zdaniem
+opisanym w przypadku 35.
 
-Co zrobić. Zamknij poprzednie uruchomienie interfejsu, jeśli takie zostało, albo
-wskaż inny port. Numer portu podajesz w pliku `konfiguracja.toml` polem
+Co zrobić. Zamknij program, który używa portu, albo wskaż inny port. Numer portu podajesz w pliku `konfiguracja.toml` polem
 `port_nasluchu` albo zmienną środowiskową `GNB_PORT_NASLUCHU`:
 
 ```powershell
@@ -732,3 +733,33 @@ Co zrobić. Jeżeli zawartość archiwum jest jednym tematem, dodaj je ponownie,
 podając nazwę grupy opcją `--grupa` albo polem grupy w interfejsie: wszystkie pliki
 utworzą wtedy wspólny plik wynikowy w jednym slocie. Albo podnieś limit źródeł
 w konfiguracji, jeśli Twój plan notatnika na to pozwala.
+
+## 35. Uruchomienie interfejsu kończy się zdaniem, że interfejs już działa
+
+Objaw. Polecenie `python -m gnb.ui.server` wypisuje jedno zdanie w rodzaju
+„Interfejs Gemini Notebook Builder już działa pod adresem http://127.0.0.1:8765/.
+Nie uruchamiam drugiej kopii. Otwieram ten adres w przeglądarce.”, otwiera ten
+adres w domyślnej przeglądarce i kończy się kodem wyjścia 3.
+
+Przyczyna. W danym momencie może działać tylko jedna kopia serwera interfejsu.
+Powód jest praktyczny: globalny skrót klawiszowy może zarejestrować tylko jeden
+proces, a dwie kopie na jednym porcie zaczęłyby się podsłuchiwać nawzajem. Blokada
+jest plikiem `serwer.lock` w katalogu danych aplikacji, obok pliku konfiguracji
+(na Windows `%APPDATA%\Gemini Notebook Builder`). System operacyjny zwalnia ją sam,
+gdy proces się kończy, także po awarii albo zabiciu procesu, więc zostawiony plik
+niczego nie blokuje i nie trzeba go usuwać. Pierwsza kopia nie jest przez to
+zatrzymywana ani zakłócana. Blokada nie dotyczy poleceń `python -m gnb.cli`.
+
+Co zrobić. Zwykle nic: przeglądarka otworzyła się na działającej kopii, więc
+pracuj w niej. Jeżeli nie widzisz żadnego okna z serwerem, kopia działa w tle,
+na przykład została uruchomiona bez widocznego okna konsoli albo w oknie, które
+zamknęło się, a proces trwa. Żeby ją zatrzymać, wypisz procesy Pythona poleceniem
+`Get-Process python | Select-Object Id, StartTime, Path` i zakończ właściwy
+poleceniem `Stop-Process -Id NUMER`. Ten sam proces możesz znaleźć w Menedżerze
+zadań, na liście procesów w tle. Po zakończeniu procesu kolejne uruchomienie
+zadziała od razu; na Windows system potrafi zwolnić blokadę z opóźnieniem rzędu
+sekundy.
+
+Jeżeli system nie pozwala założyć blokady, bo nie ma uprawnień do katalogu danych,
+polecenie kończy się innym zdaniem, z nazwą katalogu, i kodem 1. Wtedy sprawdź
+uprawnienia do tego katalogu.

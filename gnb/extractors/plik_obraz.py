@@ -1,9 +1,9 @@
 """Ekstrakcja treści z plików obrazów: opis merytoryczny oraz tekst z OCR.
 
 Obsługiwane są JPG, PNG, WebP, TIFF, BMP oraz statyczna klatka GIF. Formaty HEIC
-i HEIF wymagają biblioteki opcjonalnej pillow-heif; jej brak zgłaszany jest jako
-`FormatNieobslugiwany` z informacją, jak dołożyć obsługę tych dwóch formatów,
-a nie wyłącza całego ekstraktora.
+i HEIF wymagają biblioteki opcjonalnej pillow-heif; jej brak albo zablokowanie przez
+system zgłaszane jest jako `BrakNarzedzia`, więc plik HEIC dostaje status
+„pominiete” z informacją, co zrobić, a nie „blad”. Pozostałe formaty działają.
 
 Wynik ekstrakcji obrazu to opis merytoryczny zbudowany z dostępnego materiału
 tekstowego oraz, osobną oznaczoną sekcją, tekst rozpoznany przez OCR. Treść
@@ -32,7 +32,7 @@ from PIL.ExifTags import Base as EtykietaExif
 
 from gnb.core.model import DokumentWyekstrahowany
 from gnb.core.stale import PoziomPewnosciStruktury, TypZrodla
-from gnb.core.wyjatki import FormatNieobslugiwany
+from gnb.core.wyjatki import BrakNarzedzia, FormatNieobslugiwany
 from gnb.extractors.bazowy import PostepEkstrakcji
 from gnb.images.ocena_ocr import OcenaOcr, ocen_ocr
 from gnb.images.opis import BRAK_OPISU, MaterialDoOpisu, zbuduj_opis
@@ -157,14 +157,12 @@ class EkstraktorObrazu:
                     if heif_zablokowany
                     else KOMUNIKAT_BRAK_PILLOW_HEIF
                 )
-                raise FormatNieobslugiwany(komunikat, identyfikator_zrodla) from blad
+                raise BrakNarzedzia(komunikat, identyfikator_zrodla) from blad
             raise FormatNieobslugiwany(KOMUNIKAT_USZKODZONY_OBRAZ, identyfikator_zrodla) from blad
         except ImportError as blad:
             # Nieudana rejestracja pillow-heif zostawia w Pillow otwieracz HEIF,
             # który przy otwarciu pliku zgłasza ten sam błąd ładowania biblioteki.
-            raise FormatNieobslugiwany(
-                KOMUNIKAT_ZABLOKOWANY_PILLOW_HEIF, identyfikator_zrodla
-            ) from blad
+            raise BrakNarzedzia(KOMUNIKAT_ZABLOKOWANY_PILLOW_HEIF, identyfikator_zrodla) from blad
         except OSError as blad:
             raise FormatNieobslugiwany(KOMUNIKAT_USZKODZONY_OBRAZ, identyfikator_zrodla) from blad
         return obraz, (obraz.format or "").lower()

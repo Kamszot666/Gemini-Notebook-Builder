@@ -340,3 +340,29 @@ def test_obraz_bez_tesseracta_ale_z_wylaczonym_ocr_nadal_jest_zapisywany(
 
     assert wynik.liczba_pominietych == 0
     assert wynik.liczba_przetworzonych == 1
+
+
+@pytest.mark.parametrize("heif_zablokowany", [False, True])
+def test_plik_heic_bez_biblioteki_pillow_heif_jest_pominiety_a_nie_bledem(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    heif_zablokowany: bool,
+) -> None:
+    from gnb.extractors import plik_obraz
+
+    monkeypatch.setattr(plik_obraz, "_zarejestruj_heif_jesli_dostepne", lambda: heif_zablokowany)
+    plik_heic = tmp_path / "zdjecie.heic"
+    plik_heic.write_bytes(b"\x00\x00\x00\x18ftypheic" + b"\x00" * 64)
+
+    wynik = przetworz_projekt(
+        [przyjmij_plik(plik_heic, _MOMENT)],
+        Konfiguracja(katalog_wynikow=tmp_path / "wyniki"),
+        nazwa_projektu="HEIC bez biblioteki",
+        zegar=_zegar_krokowy(),
+    )
+
+    assert wynik.liczba_bledow == 0
+    assert wynik.liczba_pominietych == 1
+    manifest = json.loads(wynik.sciezka_manifestu.read_text(encoding="utf-8"))
+    assert manifest["zrodla"][0]["status"] == "pominiete"
+    assert "pillow-heif" in wynik.sciezka_raportu.read_text(encoding="utf-8")

@@ -105,8 +105,9 @@ pre {
 """.strip()
 
 
-def _dokument(tytul: str, tresc: str, *, skrypt: str = "") -> str:
+def _dokument(tytul: str, tresc: str, *, skrypt: str = "", styl_dodatkowy: str = "") -> str:
     """Składa pełny dokument HTML wokół treści strony."""
+    dodatek_stylu = f"\n{styl_dodatkowy}" if styl_dodatkowy else ""
     fragment_skryptu = f"\n<script>\n{skrypt}\n</script>" if skrypt else ""
     return (
         "<!DOCTYPE html>\n"
@@ -114,7 +115,7 @@ def _dokument(tytul: str, tresc: str, *, skrypt: str = "") -> str:
         '<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"<title>{escapuj(tytul)}</title>\n"
-        f"<style>\n{_STYLE}\n</style>\n"
+        f"<style>\n{_STYLE}{dodatek_stylu}\n</style>\n"
         "</head>\n<body>\n<main>\n"
         f"{tresc}\n"
         "</main>"
@@ -268,6 +269,7 @@ def strona_glowna(
     )
 
     formularz = f"""<h1>Gemini Notebook Builder</h1>
+<p><a href="/ustawienia">Ustawienia</a></p>
 <form class="blok" id="formularz-glowny" method="post" action="/projekt/nowy"
   enctype="multipart/form-data">
 {_pole_csrf(token_csrf)}
@@ -402,6 +404,7 @@ def strona_projektu(
     trwa = informacja is not None and informacja.stan is StanZadania.TRWA
     czesci = [
         f"<h1>Projekt: {escapuj(nazwa)}</h1>",
+        '<p><a href="/ustawienia">Ustawienia</a></p>',
         _sekcja_stanu_projektu(sciezka, opis_projektu, not trwa, token_csrf),
         _sekcja_postepu(sciezka, informacja),
     ]

@@ -45,7 +45,7 @@ from __future__ import annotations
 import os
 import tomllib
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 from gnb.core.wyjatki import BladTrwaly
@@ -300,6 +300,38 @@ _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
 _ZNANE_POLA = frozenset(_ZMIENNE_SRODOWISKOWE.values())
 
 
+def pola_konfiguracji() -> tuple[str, ...]:
+    """Nazwy wszystkich pól konfiguracji, w kolejności deklaracji w klasie ``Konfiguracja``."""
+    return tuple(pole.name for pole in fields(Konfiguracja))
+
+
+def pola_ustawione_w_srodowisku(
+    srodowisko: Mapping[str, str] | None = None,
+) -> dict[str, tuple[str, str]]:
+    """Zwraca pola, których wartość pochodzi ze zmiennej środowiskowej.
+
+    Wynik mapuje nazwę pola na parę: nazwa zmiennej i jej wartość. Zmienna
+    z pustą wartością nie liczy się, tak samo jak przy wczytywaniu konfiguracji.
+    Strona ustawień pokazuje takie pola jako niezmienialne, bo zmienna ma
+    pierwszeństwo przed plikiem i zmiana w pliku niczego by nie dała.
+    """
+    srodowisko = os.environ if srodowisko is None else srodowisko
+    wynik: dict[str, tuple[str, str]] = {}
+    for zmienna, pole in _ZMIENNE_SRODOWISKOWE.items():
+        wartosc = srodowisko.get(zmienna, "").strip()
+        if wartosc:
+            wynik[pole] = (zmienna, wartosc)
+    return wynik
+
+
+def zmienna_srodowiskowa_pola(pole: str) -> str:
+    """Nazwa zmiennej środowiskowej, która ustawia dane pole konfiguracji."""
+    for zmienna, nazwa in _ZMIENNE_SRODOWISKOWE.items():
+        if nazwa == pole:
+            return zmienna
+    raise KeyError(pole)
+
+
 def _domyslny_katalog_wynikow() -> Path:
     """Domyślny katalog nadrzędny wyników: podkatalog w katalogu Dokumenty.
 
@@ -474,6 +506,11 @@ def wczytaj_konfiguracje(
             scalone, "polaczenia_na_domene", domyslna.polaczenia_na_domene
         ),
         respektuj_robots=_jako_prawda_falsz(scalone, "respektuj_robots", domyslna.respektuj_robots),
+        wyjatek_robots_dla_zrodel_jawnych=_jako_prawda_falsz(
+            scalone,
+            "wyjatek_robots_dla_zrodel_jawnych",
+            domyslna.wyjatek_robots_dla_zrodel_jawnych,
+        ),
         maksymalny_rozmiar_pobrania_mb=_jako_liczba(
             scalone, "maksymalny_rozmiar_pobrania_mb", domyslna.maksymalny_rozmiar_pobrania_mb
         ),

@@ -1,4 +1,4 @@
-# Konfiguracja — stan po etapie piętnastym, część D
+# Konfiguracja — stan po etapie piętnastym, część E
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
 obsługuje po etapie trzynastym. Z listy w sekcji jedenastej a pliku
@@ -21,6 +21,49 @@ najsłabszego do najsilniejszego:
 
 Brak pliku konfiguracji nie jest błędem. Obowiązują wtedy wartości domyślne,
 ewentualnie nadpisane zmiennymi środowiskowymi.
+
+## Strona ustawień
+
+Wszystkie pola z tego dokumentu, poza dwoma wyjątkami, można zmienić na stronie
+`/ustawienia`, do której prowadzi odnośnik „Ustawienia” na stronie głównej i na
+stronie każdego projektu. Pola są podzielone na zakładki: Limity notatnika,
+Pobieranie stron, YouTube i napisy, Deduplikacja, OCR i obrazy, Transkrypcja
+mowy, Nuty, Formaty biurowe i archiwa ZIP, Pliki wynikowe, Skrót klawiszowy
+oraz Serwer. Każde pole konfiguracji leży w dokładnie jednej zakładce; pilnuje
+tego test. Zakładki wyglądu jeszcze nie ma.
+
+Zasady strony:
+
+1. Każda zakładka ma własny przycisk „Zapisz ustawienia” i przycisk „Przywróć
+   ustawienia domyślne tej zakładki”. Zapis dotyczy tylko pól tej zakładki.
+2. Wyjątki. Adres nasłuchu jest tylko pokazany, bez możliwości zmiany, bo
+   interfejs nie ma uwierzytelniania i musi nasłuchiwać na pętli zwrotnej.
+   Aktywny projekt globalnego skrótu nie jest polem konfiguracji: zapisuje się
+   go w pliku `stan_skrotu.json` obok pliku konfiguracji i wybiera na stronie
+   projektu albo listą „Projekt” na stronie głównej.
+3. Pole, którego wartość pochodzi ze zmiennej środowiskowej, jest pokazane jako
+   tekst z nazwą zmiennej. Zmienna ma pierwszeństwo przed plikiem, więc zmiana
+   w pliku niczego by nie dała; trzeba zmienić zmienną poza aplikacją.
+4. Opis każdego pola podaje wartość domyślną i od kiedy działa zmiana. Zmiana
+   działa od następnego przebiegu, z wyjątkiem pól wymagających ponownego
+   uruchomienia serwera: port, globalny skrót, katalog wyników i plik pamięci
+   podręcznej. Dla tych pól serwer zachowuje wartość, z którą wystartował.
+5. Zapis w trakcie przetwarzania jest odrzucany z komunikatem, tak jak ręczne
+   działania na źródłach.
+6. Plik jest zapisywany atomowo: nowa treść trafia do pliku tymczasowego,
+   przechodzi te same reguły co przy wczytywaniu (bez zmiennych środowiskowych),
+   a dopiero potem zastępuje plik przez `os.replace`. Poprzednia wersja zostaje
+   jako jedna kopia zapasowa w pliku `konfiguracja.toml.bak`. Niepoprawna
+   wartość kończy się komunikatem przy polu, a plik zostaje bez zmian.
+7. Zapis edytuje plik biblioteką `tomlkit` (czysty Python, licencja MIT), więc
+   komentarze, kolejność i klucze nieznane aplikacji zostają. Wartość równa
+   domyślnej nie jest dopisywana do pliku, jeśli jego wcześniej tam nie było,
+   żeby zmiana wartości domyślnej w nowej wersji dosięgała użytkownika, który
+   jej nie ustawiał.
+8. Lista modeli transkrypcji zawiera modele wielojęzyczne przyjmowane przez
+   bibliotekę faster-whisper (funkcja `available_models` w wersji 1.2.x):
+   tiny, base, small, medium, large-v3-turbo, large-v2 i large-v3. Nie podajemy
+   liczb zajętości pamięci ani czasu pracy, bo nie mamy ich ze źródła.
 
 ## Gdzie leży plik konfiguracji
 

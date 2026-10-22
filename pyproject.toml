@@ -36,6 +36,12 @@ dependencies = [
     # dekodowanie audio FFmpegiem działa bez faster-whisper, a fala musi wtedy
     # mieć w co trafić.
     "numpy>=1.26",
+    # Zapis ustawień ze strony /ustawienia do pliku konfiguracji TOML z zachowaniem
+    # komentarzy i kluczy nieznanych aplikacji. Biblioteka tomlkit jest w czystym
+    # Pythonie (wyłącznie koło „py3-none-any”, bez plików DLL ani PYD), licencja
+    # MIT, więc jest zgodna z regułą kontroli aplikacji Windows z sekcji 18d
+    # CLAUDE.md; jej import sprawdzono zaraz po instalacji.
+    "tomlkit>=0.13",
     "Pillow>=10.4",
     "pypdf>=5.0",
     "pypdfium2>=4.30",

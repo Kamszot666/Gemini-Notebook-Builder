@@ -1,4 +1,4 @@
-# Architektura — stan po etapie piętnastym, część C2
+# Architektura — stan po etapie piętnastym, część E
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
 zakończeniu etapu czternastego. Pełny docelowy podział na pakiety opisuje
@@ -449,6 +449,15 @@ istniejący potok z żądaniem HTTP przez semantyczny, dostępny HTML.
   brakujących plików wynikowych. Zależy od
   `widoki.py`, a nie odwrotnie: gotowy fragment jest przekazywany do strony
   projektu jako napis. Sekcja brakujących plików tylko pokazuje rozbieżność.
+- `gnb/ui/ustawienia.py`, `gnb/ui/widoki_ustawien.py` — strona `/ustawienia`.
+  Pierwszy moduł jest tablicą pól konfiguracji: zakładka, etykieta, opis, rodzaj
+  kontrolki, informacja o restarcie, oraz odczyt wartości z formularza. Drugi
+  buduje HTML z zakładkami. Każde pole `Konfiguracja` ma leżeć w dokładnie
+  jednej zakładce; pilnuje tego test. Zapis idzie przez `gnb/core/zapis_konfiguracji.py`
+  (edycja pliku TOML biblioteką `tomlkit`, sprawdzenie regułami wczytywania,
+  zapis atomowy, jedna kopia zapasowa) pod `RejestrZadan.wylacznie()`. Po zapisie
+  serwer podmienia konfigurację pól niewymagających restartu, także w obsłudze
+  globalnego skrótu (`ustaw_konfiguracje`).
 - `gnb/ui/server.py` — punkt wejścia `python -m gnb.ui.server`. Nazwa pliku jest
   angielska, bo to część kontraktu komend; logika i komunikaty są po polsku.
 - `gnb/ui/stan_skrotu.py` — `AktywnyProjektSkrotu` i `OstatniKomunikatSkrotu`,

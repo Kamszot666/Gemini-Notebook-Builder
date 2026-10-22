@@ -101,6 +101,10 @@ if sys.platform == "win32":
                 )
             return udalo_sie
 
+        def ustaw_konfiguracje(self, konfiguracja: Konfiguracja) -> None:
+            """Podmienia konfigurację po zapisie ze strony ustawień (przypisanie jest atomowe)."""
+            self._konfiguracja = konfiguracja
+
         def zatrzymaj(self) -> None:
             self._watek.zatrzymaj()
             self._zglos_utracone_pozycje()

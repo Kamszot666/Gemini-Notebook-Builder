@@ -13,6 +13,7 @@ bez przekierowania.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import socket
@@ -24,10 +25,16 @@ from pathlib import Path
 from typing import Protocol, cast
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from gnb.core.konfiguracja import Konfiguracja, sciezka_pliku_konfiguracji
+from gnb.core.konfiguracja import (
+    Konfiguracja,
+    pola_ustawione_w_srodowisku,
+    sciezka_pliku_konfiguracji,
+    wczytaj_konfiguracje,
+)
 from gnb.core.nazwy import sanityzuj_nazwe_projektu
 from gnb.core.postep import WywolanieZwrotnePostepu
-from gnb.core.wyjatki import BladGnb
+from gnb.core.wyjatki import BladGnb, BladTrwaly
+from gnb.core.zapis_konfiguracji import zapisz_ustawienia
 from gnb.ingestion.adresy_z_plikow import dolacz_adresy_znalezione, przyjmij_plik_z_adresami
 from gnb.ingestion.lista_url import AdresWejsciowy
 from gnb.ingestion.wejscie import (
@@ -56,7 +63,7 @@ from gnb.potok import (
     pozycja_z_wejscia,
     przetworz_projekt,
 )
-from gnb.ui import csrf, formularze, widoki
+from gnb.ui import csrf, formularze, widoki, widoki_ustawien
 from gnb.ui.blokada import BlokadaInstancji
 from gnb.ui.projekty import opisz_projekt, znajdz_projekty
 from gnb.ui.stan_skrotu import (
@@ -64,6 +71,13 @@ from gnb.ui.stan_skrotu import (
     AktywnyProjektSkrotu,
     OstatniKomunikatSkrotu,
     SzkicTekstuSkrotu,
+)
+from gnb.ui.ustawienia import (
+    ZAKLADKI,
+    Rodzaj,
+    Zakladka,
+    odczytaj_zakladke,
+    zakladka_o_identyfikatorze,
 )
 from gnb.ui.widoki import BladPola, DaneFormularzaProjektu, PodsumowanieWyniku, sciezka_projektu
 from gnb.ui.widoki_zrodel import (
@@ -99,6 +113,7 @@ class _Serwer(ThreadingHTTPServer):
         aktywny_projekt_skrotu: AktywnyProjektSkrotu,
         ostatni_komunikat_skrotu: OstatniKomunikatSkrotu,
         szkic_tekstu_skrotu: SzkicTekstuSkrotu,
+        sciezka_konfiguracji: Path,
     ) -> None:
         if ":" in adres[0]:
             self.address_family = socket.AF_INET6
@@ -108,6 +123,9 @@ class _Serwer(ThreadingHTTPServer):
         self.aktywny_projekt_skrotu = aktywny_projekt_skrotu
         self.ostatni_komunikat_skrotu = ostatni_komunikat_skrotu
         self.szkic_tekstu_skrotu = szkic_tekstu_skrotu
+        self.sciezka_konfiguracji = sciezka_konfiguracji
+        # Ustawiane po uruchomieniu skrótu; strona ustawień przekazuje mu nową konfigurację.
+        self.obsluga_skrotu: _ObslugaSkrotuLike | None = None
 
     def server_bind(self) -> None:
         """Wiąże gniazdo; na Windows wyłącznie, bez współdzielenia portu z innym procesem."""
@@ -123,6 +141,7 @@ def zbuduj_serwer(
     aktywny_projekt_skrotu: AktywnyProjektSkrotu | None = None,
     ostatni_komunikat_skrotu: OstatniKomunikatSkrotu | None = None,
     szkic_tekstu_skrotu: SzkicTekstuSkrotu | None = None,
+    sciezka_konfiguracji: Path | None = None,
 ) -> ThreadingHTTPServer:
     """Buduje serwer bez uruchamiania go. Wydzielone z ``uruchom_serwer`` na potrzeby testów."""
     return _Serwer(
@@ -132,6 +151,7 @@ def zbuduj_serwer(
         aktywny_projekt_skrotu or AktywnyProjektSkrotu(),
         ostatni_komunikat_skrotu or OstatniKomunikatSkrotu(),
         szkic_tekstu_skrotu or SzkicTekstuSkrotu(),
+        sciezka_konfiguracji or sciezka_pliku_konfiguracji(),
     )
 
 
@@ -205,6 +225,7 @@ def uruchom_serwer(
         flush=True,
     )
     obsluga_skrotu = _uruchom_globalny_skrot(serwer)
+    serwer.obsluga_skrotu = obsluga_skrotu
     try:
         serwer.serve_forever()
     except KeyboardInterrupt:
@@ -227,6 +248,8 @@ class _ObslugaSkrotuLike(Protocol):
     """
 
     def zatrzymaj(self) -> None: ...
+
+    def ustaw_konfiguracje(self, konfiguracja: Konfiguracja) -> None: ...
 
 
 def _uruchom_globalny_skrot(serwer: _Serwer) -> _ObslugaSkrotuLike | None:
@@ -298,6 +321,8 @@ class _Handler(BaseHTTPRequestHandler):
             self._pokaz_postep()
         elif sciezka == widoki.SCIEZKA_WYBORU_PROJEKTU:
             self._przejdz_do_projektu()
+        elif sciezka == widoki_ustawien.SCIEZKA_USTAWIEN:
+            self._pokaz_ustawienia()
         elif sciezka.startswith("/projekt/") and sciezka.endswith("/grupy"):
             self._pokaz_grupy_projektu(
                 self._nazwa_z_url(sciezka[len("/projekt/") : -len("/grupy")])
@@ -317,6 +342,10 @@ class _Handler(BaseHTTPRequestHandler):
             self._utworz_projekt()
         elif sciezka == widoki.SCIEZKA_WYBORU_PROJEKTU:
             self._przejdz_do_projektu_z_ustawieniem_aktywnego()
+        elif sciezka == widoki_ustawien.SCIEZKA_ZAPISU_USTAWIEN:
+            self._zapisz_ustawienia_zakladki(przywroc=False)
+        elif sciezka == widoki_ustawien.SCIEZKA_PRZYWRACANIA_USTAWIEN:
+            self._zapisz_ustawienia_zakladki(przywroc=True)
         elif (adres_zrodla := self._rozbij_adres_zrodla(sciezka)) is not None:
             self._obsluz_dzialanie_na_zrodle(*adres_zrodla)
         elif sciezka.startswith("/projekt/") and sciezka.endswith("/wznow"):
@@ -883,6 +912,132 @@ class _Handler(BaseHTTPRequestHandler):
             return
         self._przekieruj(sciezka_projektu(uklad.nazwa_projektu))
 
+    # --- ustawienia ----------------------------------------------------
+
+    def _pokaz_ustawienia(
+        self,
+        *,
+        kod: int = 200,
+        bledy: list[BladPola] | None = None,
+        wpisane: dict[str, str] | None = None,
+        zakladka_z_bledami: str = "",
+    ) -> None:
+        """Strona ustawień. Wartości pochodzą z pliku konfiguracji i zmiennych środowiskowych.
+
+        Komunikat o zapisie wybiera serwer po identyfikatorze zakładki z adresu;
+        do strony nigdy nie trafia tekst przysłany w adresie.
+        """
+        zapytanie = parse_qs(urlsplit(self.path).query)
+        zakladka = zakladka_o_identyfikatorze((zapytanie.get("zakladka") or [""])[0])
+        wynik = (zapytanie.get("wynik") or [""])[0]
+        komunikat = ""
+        if zakladka is not None and wynik == "zapisano":
+            komunikat = f"Zapisano ustawienia zakładki {zakladka.tytul}."
+        elif zakladka is not None and wynik == "przywrocono":
+            komunikat = f"Przywrócono ustawienia domyślne zakładki {zakladka.tytul}."
+        sciezka = self._serwer.sciezka_konfiguracji
+        ostrzezenie = ""
+        try:
+            konfiguracja = wczytaj_konfiguracje(sciezka)
+        except BladTrwaly as blad:
+            konfiguracja = self._konfiguracja
+            ostrzezenie = (
+                f"Nie udało się wczytać pliku konfiguracji: {blad.komunikat} "
+                "Pokazane są ustawienia z chwili uruchomienia serwera."
+            )
+        token = self._token_sesji()
+        html = widoki_ustawien.strona_ustawien(
+            konfiguracja=konfiguracja,
+            zablokowane=pola_ustawione_w_srodowisku(),
+            token_csrf=token,
+            sciezka_pliku=str(sciezka),
+            aktywna_zakladka=zakladka.identyfikator if zakladka is not None else "",
+            komunikat=komunikat,
+            ostrzezenie=ostrzezenie,
+            bledy=bledy,
+            wpisane=wpisane,
+            zakladka_z_bledami=zakladka_z_bledami,
+        )
+        self._wyslij_html(kod, html, token=token)
+
+    def _zapisz_ustawienia_zakladki(self, *, przywroc: bool) -> None:
+        """Zapisuje pola jednej zakładki albo przywraca ich wartości domyślne.
+
+        Zapis idzie przez rejestr zadań, więc w trakcie przetwarzania jest
+        odrzucany z komunikatem, tak jak ręczne działania na źródłach. Plik
+        zapisuje ``zapisz_ustawienia``: atomowo i po sprawdzeniu tymi samymi
+        regułami co przy wczytywaniu.
+        """
+        wynik_formularza = self._parsuj_formularz()
+        if wynik_formularza is None:
+            return
+        if not self._csrf_ok(wynik_formularza.pole(csrf.NAZWA_POLA_FORMULARZA)):
+            return
+        zakladka = zakladka_o_identyfikatorze(wynik_formularza.pole("zakladka"))
+        if zakladka is None:
+            self._blad(404, "Nie znaleziono zakładki", "Nie ma zakładki ustawień o tej nazwie.")
+            return
+        zablokowane = frozenset(pola_ustawione_w_srodowisku())
+        formularz = {nazwa: wartosci[0] for nazwa, wartosci in wynik_formularza.pola.items()}
+        zmiany: dict[str, object] = {}
+        usuwane: list[str] = []
+        if przywroc:
+            usuwane = _pola_do_zapisu(zakladka, zablokowane)
+        else:
+            zmiany, bledy_typu = odczytaj_zakladke(zakladka, formularz, zablokowane)
+            if bledy_typu:
+                self._pokaz_ustawienia(
+                    kod=400,
+                    bledy=[BladPola(blad.pole, blad.komunikat) for blad in bledy_typu],
+                    wpisane=formularz,
+                    zakladka_z_bledami=zakladka.identyfikator,
+                )
+                return
+        try:
+            with self._serwer.rejestr.wylacznie():
+                zapisz_ustawienia(self._serwer.sciezka_konfiguracji, zmiany, usuwane)
+        except ZadanieJuzTrwa as blad:
+            self._blad(409, "Inne przetwarzanie w toku", str(blad))
+            return
+        except BladTrwaly as blad:
+            self._pokaz_ustawienia(
+                kod=400,
+                bledy=[_blad_pola_z_komunikatu(zakladka, blad.komunikat)],
+                wpisane=formularz,
+                zakladka_z_bledami=zakladka.identyfikator,
+            )
+            return
+        self._zastosuj_ustawienia()
+        wynik = "przywrocono" if przywroc else "zapisano"
+        self._przekieruj(
+            f"{widoki_ustawien.SCIEZKA_USTAWIEN}?zakladka={zakladka.identyfikator}"
+            f"&wynik={wynik}#naglowek-{zakladka.identyfikator}"
+        )
+
+    def _zastosuj_ustawienia(self) -> None:
+        """Przenosi zapisane ustawienia do działającego serwera.
+
+        Pola, których zmiana wymaga restartu (adres, port, skrót, katalog
+        wyników, plik pamięci podręcznej), zostają takie, z jakimi serwer
+        wystartował. Błąd wczytania, na przykład niepoprawna zmienna
+        środowiskowa, nie zmienia działającej konfiguracji.
+        """
+        try:
+            nowa = wczytaj_konfiguracje(self._serwer.sciezka_konfiguracji)
+        except BladTrwaly:
+            _LOG.exception("Zapisane ustawienia nie dają poprawnej konfiguracji.")
+            return
+        bez_restartu = {
+            pole.nazwa: getattr(nowa, pole.nazwa)
+            for zakladka in ZAKLADKI
+            for pole in zakladka.pola
+            if not pole.restart and pole.rodzaj is not Rodzaj.TYLKO_ODCZYT
+        }
+        zmieniona = dataclasses.replace(self._serwer.konfiguracja, **bez_restartu)
+        self._serwer.konfiguracja = zmieniona
+        if self._serwer.obsluga_skrotu is not None:
+            self._serwer.obsluga_skrotu.ustaw_konfiguracje(zmieniona)
+
     # --- ręczne działania na źródłach ---------------------------------
 
     def _rozbij_adres_zrodla(self, sciezka: str) -> tuple[str, str, str] | None:
@@ -1214,6 +1369,23 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(cialo)
+
+
+def _pola_do_zapisu(zakladka: Zakladka, zablokowane: frozenset[str]) -> list[str]:
+    """Nazwy pól zakładki, które można zmieniać: bez zablokowanych i tylko do odczytu."""
+    return [
+        pole.nazwa
+        for pole in zakladka.pola
+        if pole.rodzaj is not Rodzaj.TYLKO_ODCZYT and pole.nazwa not in zablokowane
+    ]
+
+
+def _blad_pola_z_komunikatu(zakladka: Zakladka, komunikat: str) -> BladPola:
+    """Wiąże komunikat z walidacji konfiguracji z polem, którego nazwa w nim występuje."""
+    for pole in zakladka.pola:
+        if f"„{pole.nazwa}”" in komunikat:
+            return BladPola(pole.nazwa, komunikat)
+    return BladPola(zakladka.pola[0].nazwa, komunikat)
 
 
 def _odczytaj_tekst(sciezka: Path) -> str | None:

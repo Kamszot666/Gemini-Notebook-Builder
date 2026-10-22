@@ -1,4 +1,4 @@
-# Konfiguracja — stan po etapie czternastym i naprawach po nim
+# Konfiguracja — stan po etapie piętnastym, część D
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
 obsługuje po etapie trzynastym. Z listy w sekcji jedenastej a pliku
@@ -376,6 +376,7 @@ Interfejs uruchamiasz poleceniem `python -m gnb.ui.server`.
    do jawnie wybranego aktywnego projektu skrótu adres bieżącej strony w Chrome
    albo Firefoksie, albo zaznaczone pliki w Eksploratorze Windows; szczegóły
    opisuje `docs/ACCESSIBILITY.md`, sekcja „Globalny skrót klawiszowy”.
+   Aktywny projekt skrótu nie jest polem konfiguracji. Jest zapamiętywany w osobnym pliku stanu `stan_skrotu.json` w tym samym katalogu danych aplikacji co plik konfiguracji, nigdy w katalogu repozytorium ani w katalogu projektu.
 
 ## Pamięć podręczna pobranych stron
 

@@ -217,11 +217,11 @@ Plik TXT, MD albo DOCX złożony z samych adresów wysłany w formularzu jest li
 
 Control plus Shift plus F12 działa w dowolnym programie, kiedy serwer jest uruchomiony. Możesz dodawać strony jedna po drugiej, nie wchodząc do samego programu.
 
-1. W Chrome albo Firefoksie dodaje adres strony, na której jesteś.
+1. W Chrome albo Firefoksie dodaje adres strony, na której jesteś. Jeśli coś zaznaczysz: same adresy http i https stają się źródłami, a zwykły tekst trafia do pola „Tu wklej tekst” (na stronie głównej, gdy wybrano ten projekt, i w formularzu dosyłania na stronie projektu). Skrót kopiuje zaznaczenie przez schowek i przywraca jego poprzednią zawartość.
 2. W Eksploratorze Windows dodaje zaznaczone pliki.
-3. W innych programach nic nie dodaje i gra dźwięk porażki. Powód jest zapisany na stronie.
+3. W innych programach nic nie dodaje i gra dźwięk porażki. Powód jest zapisany na stronie. Adresu samego interfejsu skrót też nie dodaje.
 
-Materiał trafia do aktywnego projektu skrótu, który wybierasz przyciskiem „Ustaw jako aktywny projekt skrótu” na stronie projektu. Jeśli żadnego nie wybrałeś, wpada do projektu „Adresy ze skrótu”. Dwa krótkie rosnące tony to sukces, jeden niski dłuższy to porażka. Ostatni wynik jest też napisany na stronie głównej i na stronie projektu. Jeśli akurat trwa przetwarzanie, materiał czeka w kolejce i zostanie przetworzony zaraz po nim.
+Materiał trafia do aktywnego projektu skrótu, który wybierasz przyciskiem „Ustaw jako aktywny projekt skrótu” na stronie projektu albo listą „Projekt” na stronie głównej. Wybór jest pamiętany po restarcie serwera i komputera. Bez aktywnego projektu skrót niczego nie zapisuje i gra dźwięk porażki. Dwa krótkie rosnące tony to sukces, jeden niski dłuższy to porażka. Ostatni wynik jest też napisany na stronie głównej i na stronie projektu. Jeśli akurat trwa przetwarzanie, materiał czeka w kolejce i zostanie przetworzony zaraz po nim.
 
 Gdyby NVDA przechwytywało tę kombinację, zmień jej przypisanie w Preferencje, Gesty wejściowe. Skrót wyłączysz kluczem `globalny_skrot_wlaczony`.
 

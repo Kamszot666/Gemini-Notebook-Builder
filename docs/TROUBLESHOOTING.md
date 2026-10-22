@@ -1,4 +1,4 @@
-# Rozwiązywanie problemów — stan po etapie piętnastym, część C
+# Rozwiązywanie problemów — stan po etapie piętnastym, część D
 
 Ten dokument opisuje problemy, które wystąpiły w rzeczywistej pracy z aplikacją,
 oraz te, które wynikają wprost z jej budowy. Każdy przypadek ma tę samą budowę:
@@ -547,13 +547,16 @@ na stronie głównej albo stronie projektu wyjaśnia dlaczego.
 
 Przyczyna i co zrobić, według treści komunikatu:
 
-1. Skrót milczy albo gra dźwięk porażki po ponownym uruchomieniu serwera.
-   Bez wybranego projektu skrót dodaje źródła do projektu „Adresy ze skrótu”,
-   więc jego brak nie jest już powodem porażki. Sprawdź, czy nie działa drugi,
-   stary serwer: trzyma zarejestrowany skrót i nowy serwer nie może go zająć
-   (w logu jest wtedy kod błędu 1409). Zamknij wszystkie procesy
-   `python -m gnb.ui.server` i uruchom jeden. Inny projekt wybierzesz
-   przyciskiem „Ustaw jako aktywny projekt skrótu”.
+1. „Brak aktywnego projektu skrótu” — skrót nie ma projektu zapasowego, więc
+   bez aktywnego projektu niczego nie zapisuje. Ustaw aktywny projekt
+   przyciskiem „Ustaw jako aktywny projekt skrótu” na stronie projektu albo
+   wybierz projekt na liście „Projekt” na stronie głównej. Wybór jest
+   pamiętany po restarcie, ale jeżeli komunikat mówi, że zapamiętanego
+   projektu „już nie ma na dysku”, katalog projektu usunięto i trzeba wybrać
+   inny. Jeżeli skrót milczy zupełnie, sprawdź, czy nie działa drugi, stary
+   serwer: trzyma zarejestrowany skrót i nowy serwer nie może go zająć (w logu
+   jest wtedy kod błędu 1409). Zamknij wszystkie procesy
+   `python -m gnb.ui.server` i uruchom jeden.
 2. „Nie udało się odczytać paska adresu” — okno przeglądarki jest aktywne, ale
    UI Automation nie znalazło w nim kontrolki paska adresu, na przykład bo
    pasek jest w trakcie przejścia w tryb pełnoekranowy. Wróć do zwykłego
@@ -563,10 +566,24 @@ Przyczyna i co zrobić, według treści komunikatu:
 4. „Aktywne okno to Eksplorator plików bez zaznaczenia” — zaznacz plik albo
    pliki w Eksploratorze przed naciśnięciem skrótu.
 5. „Aktywny program to NAZWA, nie wiem, jak z niego coś dodać” — skrót
-   w części A obsługuje wyłącznie Chrome, Firefox i Eksplorator Windows.
-   Przełącz się do jednego z nich albo, dla stron wymagających zalogowania,
-   użyj obejścia z zapisem strony opisanego w `docs/ACCESSIBILITY.md`, sekcja
-   „Globalny skrót klawiszowy”.
+   obsługuje wyłącznie Chrome, Firefox i Eksplorator Windows. Przełącz się do
+   jednego z nich. Dla stron wymagających zalogowania zaznacz tekst na stronie
+   i naciśnij skrót — opisuje to `docs/ACCESSIBILITY.md`, sekcja „Globalny
+   skrót klawiszowy”.
+6. „To jest adres interfejsu Gemini Notebook Builder, nie dodano go jako
+   źródła” — okno przeglądarki pokazuje sam interfejs aplikacji. Przełącz się
+   na stronę, którą chcesz dodać.
+7. „Schowek zawiera dane, których nie da się bezpiecznie przywrócić” — w schowku
+   jest na przykład metaplik z Worda albo Excela. Skrót nie kopiuje wtedy
+   zaznaczenia, żeby ich nie zgubić, i bierze adres strony. Skopiuj coś
+   zwykłego, na przykład kawałek tekstu, i naciśnij skrót jeszcze raz.
+8. „Nie puszczono klawiszy skrótu” — skrót czeka do dwóch sekund na puszczenie
+   Control, Shift, Alt i F12 przed kopiowaniem zaznaczenia. Naciśnij skrót
+   krótko i puść klawisze.
+9. Po naciśnięciu skrótu w Chrome otworzyły się narzędzia deweloperskie — to
+   znaczy, że kopiowanie poszło przy wciśniętych klawiszach skrótu. Zgłoś to
+   z dokładnym opisem, jak naciskasz skrót; zachowanie ma być wykryte
+   w teście ręcznym części D.
 
 ## 25. Zamknąłem serwer, a skrót właśnie coś dodał — co się stało z tym źródłem
 

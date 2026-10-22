@@ -280,3 +280,5 @@ Program działa w całości lokalnie. Nie wysyła danych do zewnętrznych usług
 Apache License 2.0. Pełny tekst jest w pliku `LICENSE`.
 
 Wyjątek: plik `tests/dane/LICENCJA_PyGuitarPro.txt` dotyczy tylko plików testowych formatu Guitar Pro pochodzących z biblioteki PyGuitarPro, która jest na licencji LGPL w wersji trzeciej.
+
+Drugi wyjątek: katalog `gnb/ui/czcionki/` zawiera krój Atkinson Hyperlegible (cztery pliki WOFF2) Braille Institute of America na licencji SIL Open Font License 1.1. Pełny tekst licencji jest w pliku `gnb/ui/czcionki/OFL.txt`, a pochodzenie plików (repozytorium googlefonts/atkinson-hyperlegible, commit 1cb311624b2ddf88e9e37873999d165a8cd28b46) opisuje `docs/ACCESSIBILITY.md`. Krój jest domyślnym krojem interfejsu i działa bez internetu; w zakładce Wygląd możesz wybrać krój systemowy.

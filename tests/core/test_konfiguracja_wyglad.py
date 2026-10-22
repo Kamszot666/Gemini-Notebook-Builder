@@ -20,12 +20,12 @@ def _plik(katalog: Path, tresc: str) -> Path:
     return sciezka
 
 
-def test_domyslny_wyglad_to_ciemny_schemat_w_rozmiarze_domyslnym() -> None:
+def test_domyslny_wyglad_to_ciemny_schemat_krojem_atkinson() -> None:
     konfiguracja = Konfiguracja()
 
     assert konfiguracja.wyglad_schemat == "ciemny"
     assert konfiguracja.wyglad_rozmiar_czcionki == 100
-    assert konfiguracja.wyglad_kroj_pisma == "systemowy"
+    assert konfiguracja.wyglad_kroj_pisma == "atkinson"
 
 
 def test_wyglad_z_pliku_i_zmienna_srodowiskowa_ma_pierwszenstwo(tmp_path: Path) -> None:

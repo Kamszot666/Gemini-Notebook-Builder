@@ -154,11 +154,13 @@ SCHEMATY: tuple[SchematKolorow, ...] = (
         "zblizony_do_gemini",
         "Zbliżony do Gemini Notebook",
         # Przybliżenie na podstawie ciemnej palety bazowej Material Design 3
-        # (Google): powierzchnia, tekst na powierzchni, kolor główny, tekst na
-        # kolorze głównym, kontur, kolor trzeciorzędny i kolor błędu.
+        # (Google), według tokenów ColorDarkTokens i PaletteTokens z kodu Material 3
+        # w AndroidX: powierzchnia (Neutral6), tekst na powierzchni (Neutral90),
+        # kolor główny (Primary80), tekst na kolorze głównym (Primary20), kontur
+        # (NeutralVariant60), kolor trzeciorzędny (Tertiary80) i kolor błędu (Error80).
         KoloryInterfejsu(
-            tlo="#1c1b1f",
-            tekst="#e6e1e5",
+            tlo="#141218",
+            tekst="#e6e0e9",
             odnosnik="#d0bcff",
             przycisk_tlo="#d0bcff",
             przycisk_tekst="#381e72",
@@ -174,6 +176,7 @@ _SCHEMAT_DOMYSLNY = SCHEMATY[0]
 # Stosy krojów: zawsze kończą się rodziną ogólną, więc brak kroju w systemie
 # daje czytelny krój bez szeryfów, a nie krój przeglądarki z szeryfami.
 STOSY_KROJOW: dict[str, str] = {
+    "atkinson": '"Atkinson Hyperlegible", system-ui, "Segoe UI", sans-serif',
     "systemowy": 'system-ui, "Segoe UI", sans-serif',
     "verdana": 'Verdana, "DejaVu Sans", sans-serif',
     "tahoma": 'Tahoma, "Segoe UI", sans-serif',
@@ -181,12 +184,41 @@ STOSY_KROJOW: dict[str, str] = {
     "calibri": 'Calibri, "Segoe UI", sans-serif',
 }
 NAZWY_KROJOW: dict[str, str] = {
+    "atkinson": "Atkinson Hyperlegible",
     "systemowy": "Systemowy (Segoe UI w Windows)",
     "verdana": "Verdana",
     "tahoma": "Tahoma",
     "arial": "Arial",
     "calibri": "Calibri",
 }
+
+
+# Pliki kroju Atkinson Hyperlegible (SIL Open Font License 1.1) leżą w pakiecie
+# i są serwowane lokalnie pod adresem /czcionki/NAZWA; bez zewnętrznego CDN.
+SCIEZKA_CZCIONEK = "/czcionki/"
+PLIKI_CZCIONEK: dict[str, tuple[str, str]] = {
+    "AtkinsonHyperlegible-Regular.woff2": ("normal", "400"),
+    "AtkinsonHyperlegible-Bold.woff2": ("normal", "700"),
+    "AtkinsonHyperlegible-Italic.woff2": ("italic", "400"),
+    "AtkinsonHyperlegible-BoldItalic.woff2": ("italic", "700"),
+}
+
+
+def deklaracje_czcionek() -> str:
+    """Reguły ``@font-face`` kroju Atkinson Hyperlegible.
+
+    Gdy plik kroju się nie wczyta, przeglądarka przechodzi na dalsze kroje
+    z listy ``--czcionka``, czyli na krój systemowy.
+    """
+    reguly = [
+        "@font-face {\n"
+        '  font-family: "Atkinson Hyperlegible";\n'
+        f"  font-style: {styl}; font-weight: {grubosc}; font-display: swap;\n"
+        f'  src: url("{SCIEZKA_CZCIONEK}{plik}") format("woff2");\n'
+        "}"
+        for plik, (styl, grubosc) in PLIKI_CZCIONEK.items()
+    ]
+    return "\n".join(reguly)
 
 
 def luminancja(kolor: str) -> float:

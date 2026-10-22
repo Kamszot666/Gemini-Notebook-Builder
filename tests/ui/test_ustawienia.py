@@ -850,3 +850,62 @@ def test_zapis_poprawnej_nazwy_klienta_dziala(
 
     assert odpowiedz.status == 303
     assert wczytaj_konfiguracje(plik, srodowisko={}).nazwa_klienta == "Moj klient 1.0"
+
+
+# --- kolejność zakładek i serwowanie kroju -----------------------------------
+
+
+def test_zakladka_wyglad_jest_ostatnia_a_pierwsza_jest_limity() -> None:
+    assert ZAKLADKI[0].identyfikator == "limity"
+    assert ZAKLADKI[-1].identyfikator == "wyglad"
+
+
+def test_domyslnie_aktywna_jest_zakladka_limity_a_ratunek_zostaje_przed_zakladkami() -> None:
+    strona = _strona()
+    wlasne = _strona(konfiguracja=Konfiguracja(wyglad_schemat="wlasny"))
+
+    assert 'data-aktywna="0"' in strona
+    assert 'id="karta-limity" aria-controls="panel-limity" aria-selected="true"' in strona
+    assert wlasne.index('id="przywroc-schemat-gora"') < wlasne.index('id="zakladki-ustawien"')
+
+
+@pytest.mark.parametrize(
+    "nazwa", sorted(__import__("gnb.ui.wyglad", fromlist=["x"]).PLIKI_CZCIONEK)
+)
+def test_serwer_wysyla_pliki_kroju_lokalnie(
+    srodowisko: tuple[_Klient, Path, RejestrZadan, object], nazwa: str
+) -> None:
+    klient, _plik, _rejestr, _instancja = srodowisko
+
+    polaczenie = http.client.HTTPConnection(klient._host, klient._port, timeout=5)  # pyright: ignore[reportPrivateUsage]
+    polaczenie.request("GET", f"/czcionki/{nazwa}")
+    odpowiedz = polaczenie.getresponse()
+    tresc = odpowiedz.read()
+
+    assert odpowiedz.status == 200
+    assert odpowiedz.getheader("Content-Type") == "font/woff2"
+    assert tresc[:4] == b"wOF2"
+
+
+@pytest.mark.parametrize(
+    "sciezka",
+    [
+        "/czcionki/OFL.txt",
+        "/czcionki/../serwer.py",
+        "/czcionki/..%2Fserwer.py",
+        "/czcionki/",
+        "/czcionki/Nieznany.woff2",
+        "/czcionki/AtkinsonHyperlegible-Regular.woff2/../../serwer.py",
+    ],
+)
+def test_serwer_nie_wysyla_niczego_poza_czterema_plikami_kroju(
+    srodowisko: tuple[_Klient, Path, RejestrZadan, object], sciezka: str
+) -> None:
+    klient, _plik, _rejestr, _instancja = srodowisko
+
+    odpowiedz, tresc = klient.get(sciezka)
+
+    assert odpowiedz.status == 404
+    assert not tresc.startswith("wOF2")
+    assert "from __future__" not in tresc
+    assert "SIL OPEN FONT LICENSE" not in tresc

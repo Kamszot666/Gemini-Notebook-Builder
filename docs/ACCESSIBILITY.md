@@ -1,4 +1,4 @@
-# Dostępność interfejsu WWW — stan po etapie piętnastym, część C2
+# Dostępność interfejsu WWW — stan po etapie piętnastym, część D
 
 Ten dokument opisuje, jak obsługiwać interfejs Gemini Notebook Builder
 z klawiatury i z czytnikiem ekranu, oraz co interfejs ogłasza i jak często.
@@ -300,26 +300,34 @@ zamknięciu.
 Naciśnięcie skrótu, w dowolnym programie na pulpicie, dodaje jedną rzecz do
 aktywnego projektu skrótu:
 
-1. W Chrome albo w Firefoksie — adres bieżącej strony.
-2. W Eksploratorze Windows — zaznaczone pliki.
-3. W każdym innym programie, na pulpicie albo bez zaznaczenia w Eksploratorze —
+1. W Chrome albo w Firefoksie, gdy zaznaczono tekst — zaznaczone adresy
+   (jako źródła) albo zaznaczony zwykły tekst (do pola „Tu wklej tekst”).
+   Szczegóły w podsekcji „Zaznaczony tekst”.
+2. W Chrome albo w Firefoksie bez zaznaczenia — adres bieżącej strony.
+3. W Eksploratorze Windows — zaznaczone pliki.
+4. W każdym innym programie, na pulpicie albo bez zaznaczenia w Eksploratorze —
    nic. Skrót wtedy gra dźwięk porażki i zapisuje czytelny powód.
 
 ### Aktywny projekt skrótu
 
-Skrót dodaje materiał do jednego projektu, nigdy do „ostatnio otwartego”. Jeżeli
-nie wybrałeś żadnego, trafia on do projektu „Adresy ze skrótu”, który staje się
-wtedy aktywnym projektem skrótu. Wybierasz go przyciskiem „Ustaw jako aktywny projekt skrótu” na
-stronie danego projektu. Strona główna i strona każdego projektu pokazują
+Skrót dodaje materiał do jednego projektu, nigdy do „ostatnio otwartego” i nigdy
+do projektu zapasowego. Wybierasz go przyciskiem „Ustaw jako aktywny projekt
+skrótu” na stronie danego projektu albo wyborem projektu na liście „Projekt” na
+stronie głównej. Strona główna i strona każdego projektu pokazują
 tekst „Aktywny projekt skrótu: nazwa” albo „Brak aktywnego projektu skrótu” —
 region ten sam, co reszta stanu skrótu, więc czytnik ekranu odczyta go razem
-z resztą strony przy zwykłym przechodzeniu po treści. Po ponownym uruchomieniu
-serwera interfejsu wybór jest pusty, dopóki go nie ustawisz ponownie: nic nie
-trafi po cichu do projektu wybranego przed restartem.
+z resztą strony przy zwykłym przechodzeniu po treści.
+
+Wybór jest zapamiętywany trwale, w pliku stanu w katalogu danych aplikacji,
+obok pliku konfiguracji. Po ponownym uruchomieniu serwera albo komputera
+zapamiętany projekt znów jest aktywny, o ile jego katalog nadal istnieje. Jeżeli
+go usunięto z dysku albo plik stanu jest uszkodzony, nie ma aktywnego projektu,
+a komunikat w sekcji „Globalny skrót klawiszowy” mówi o tym i prosi o ustawienie
+nowego. Katalog nigdy nie powstaje od nowa tylko dlatego, że był zapamiętany.
 
 Naciśnięcie skrótu bez ustawionego aktywnego projektu jest porażką skrótu —
-nic nie zostaje dodane, a komunikat mówi wprost, że trzeba najpierw wybrać
-projekt.
+nic nie zostaje dodane, skrót gra dźwięk porażki, a komunikat mówi wprost, że
+trzeba ustawić aktywny projekt skrótu na stronie projektu.
 
 ### Potwierdzenie bez przenoszenia fokusu
 
@@ -354,18 +362,59 @@ komunikatu skrótu widocznego w interfejsie. Jeżeli po ponownym uruchomieniu
 serwera zobaczysz taki komunikat, dodaj brakujący materiał ponownie —
 program go nie odzyska sam.
 
+### Zaznaczony tekst
+
+W Chrome i w Firefoksie skrót odczytuje zaznaczony tekst przez schowek: sam
+wysyła do przeglądarki kopiowanie, odczytuje tekst i przywraca poprzednią
+zawartość schowka, także pustą, razem z plikami i obrazami, które w nim były.
+Jeżeli schowek zawiera coś, czego nie da się bezpiecznie przywrócić, skrót
+niczego nie kopiuje, zachowuje się tak, jak gdyby nic nie zaznaczono, i mówi
+o tym w komunikacie.
+
+Przed kopiowaniem skrót czeka, aż puścisz klawisze skrótu. Dzięki temu do
+przeglądarki dociera samo Control plus C, a nie Control plus Shift plus C, które
+w Chrome otwiera narzędzia deweloperskie. Trzymaj więc klawisze krótko.
+
+Co skrót zrobi z zaznaczeniem:
+
+1. Nic nie zaznaczono — skrót bierze adres bieżącej strony z paska adresu, jak
+   dawniej.
+2. Same adresy `http` albo `https`, jeden lub kilka w osobnych wierszach —
+   zostają dodane jako źródła aktywnego projektu, tak jak adres strony.
+3. Zwykły tekst — nie jest źródłem. Trafia na koniec pola „Tu wklej tekst”:
+   w formularzu na stronie głównej, gdy na liście „Projekt” wybrano aktywny
+   projekt, oraz w formularzu „Dodaj kolejne źródła” na stronie projektu. Oba
+   pola pokazują ten sam tekst, bo szkic jest jeden na projekt. Każdy kolejny
+   tekst jest dopisywany pod poprzednim, a kursor stoi w nowym, pustym wierszu.
+
+Jeżeli strona z polem jest już otwarta, nowy tekst pojawia się w polu bez
+przeładowania, w ciągu trzech sekund. Fokus nie jest przenoszony, a jeżeli
+akurat piszesz w tym polu, pozycja kursora nie zmienia się w trakcie pisania.
+Region stanu, czyli ten z rolą „status” i ustawieniem `aria-live` „polite”,
+ogłasza „Dodano zaznaczony tekst do pola Tu wklej tekst.”, najwyżej raz na
+cztery sekundy; kilka dopisań naraz daje jeden komunikat. Komunikat skrótu
+w sekcji „Globalny skrót klawiszowy” mówi, ile znaków dopisano i do którego
+projektu, bez cytowania treści. Bez JavaScriptu pole jest wypełnione szkicem
+przy każdym wczytaniu strony, ale nowy tekst widać dopiero po jej odświeżeniu.
+
+Szkic żyje w pamięci serwera, tak jak kolejka skrótu: zamknięcie serwera go
+kasuje. Wysłanie formularza dosyłania albo formularza ze strony głównej dla
+istniejącego projektu czyści szkic tego projektu, także gdy tekst z pola
+usunąłeś ręcznie. Jeżeli wysłanie się nie powiedzie, szkic zostaje.
+
+### Adres samego interfejsu
+
+Skrót nie dodaje jako źródła adresu samego interfejsu: żadnego adresu pętli
+zwrotnej (`127.0.0.1`, `localhost`, `::1`) ani adresu i portu nasłuchu z konfiguracji. Gra
+wtedy dźwięk porażki i zapisuje komunikat „To jest adres interfejsu Gemini
+Notebook Builder, nie dodano go jako źródła.”.
+
 ### Strony wymagające zalogowania
 
-Skrót czyta adres strony i zaznaczone pliki, nigdy zaznaczony tekst na
-stronie — pomiar na komputerze użytkownika wykazał, że wzorzec tekstowy UI
-Automation jest w Chrome i w Firefoksie dostępny, ale nie zwraca niepustego
-zaznaczenia treści strony; przyczyna nie została ustalona, a temat pozostaje
-otwarty w `CLAUDE.md`. Do tego czasu strona wymagająca zalogowania, na której
-sam adres nie wystarczy jako źródło, korzysta z obejścia bez żadnego nowego
-mechanizmu: zapisz stronę z przeglądarki klawiszami Control plus S jako plik
-HTML (Firefox i Chrome zapisują wtedy również obrazy strony w osobnym
-podkatalogu — to jest w porządku, do notatnika trafia sama treść tekstowa),
-a potem w Eksploratorze zaznacz zapisany plik HTML i naciśnij skrót jeszcze
+Zaznaczony na takiej stronie tekst trafia do pola „Tu wklej tekst” opisanym
+wyżej sposobem, więc dawne obejście z zapisem strony jako pliku HTML nie jest
+już potrzebne. Obejście nadal działa: zapisz stronę klawiszami Control plus S
+jako plik HTML, w Eksploratorze zaznacz zapisany plik i naciśnij skrót jeszcze
 raz, tym razem w oknie Eksploratora.
 
 ### Wyłączenie

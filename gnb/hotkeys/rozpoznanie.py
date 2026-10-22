@@ -15,12 +15,20 @@ ta druga nigdy nie dodaje niczego po cichu.
 
 from __future__ import annotations
 
+import ipaddress
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from gnb.core.url import czy_wyglada_na_adres
-from gnb.hotkeys.model import DodanieZeSkrotu, InformacjeOOknie, TypDodania
+from gnb.hotkeys.model import (
+    DodanieZeSkrotu,
+    InformacjeOOknie,
+    RodzajZaznaczenia,
+    TypDodania,
+    ZaznaczonyTekst,
+)
 
 # Nazwy procesów przeglądarek obsługiwanych w części A etapu jedenastego,
 # zgodnie z decyzją użytkownika: to dwie przeglądarki używane na co dzień.
@@ -37,6 +45,11 @@ _KLASA_OKNA_EKSPLORATORA = "CabinetWClass"
 _KLASY_PULPITU = frozenset({"Progman", "WorkerW", "Shell_TrayWnd"})
 
 _SCHEMATY_ROZPOZNAWANE = ("http://", "https://", "ftp://", "file://")
+_SCHEMATY_ZAZNACZONYCH_ADRESOW = ("http://", "https://")
+
+KOMUNIKAT_ADRES_INTERFEJSU = (
+    "To jest adres interfejsu Gemini Notebook Builder, nie dodano go jako źródła."
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +63,10 @@ def rozpoznaj(
     okno: InformacjeOOknie,
     adres_paska: str | None,
     pliki_zaznaczone: Sequence[Path],
+    *,
+    zaznaczony_tekst: str | None = None,
+    adres_nasluchu: str = "127.0.0.1",
+    port_nasluchu: int | None = None,
 ) -> DodanieZeSkrotu | PorazkaRozpoznania:
     """Ustala, co dodać do aktywnego projektu na podstawie stanu aktywnego okna.
 
@@ -57,9 +74,17 @@ def rozpoznaj(
     obciętymi to odczytany adres, pusty napis to odczytany, ale pusty pasek
     adresu, a ``None`` oznacza, że paska adresu w ogóle nie dało się odczytać.
     Tylko pierwsza sytuacja kończy się dodaniem adresu.
+
+    Argument ``zaznaczony_tekst`` dotyczy wyłącznie przeglądarek. Niepusty
+    tekst ma pierwszeństwo przed paskiem adresu; ``None`` albo tekst złożony
+    z samych białych znaków oznacza, że nic nie zaznaczono, i skrót działa jak
+    dotąd. Adres interfejsu, czyli pętla zwrotna albo adres i port nasłuchu
+    z konfiguracji, nigdy nie jest przyjmowany jako źródło.
     """
     if okno.nazwa_procesu in _PRZEGLADARKI:
-        return _rozpoznaj_przegladarke(okno, adres_paska)
+        return _rozpoznaj_przegladarke(
+            okno, adres_paska, zaznaczony_tekst, adres_nasluchu, port_nasluchu
+        )
     if okno.nazwa_klasy == _KLASA_OKNA_EKSPLORATORA:
         return _rozpoznaj_eksplorator(pliki_zaznaczone)
     if okno.nazwa_klasy in _KLASY_PULPITU:
@@ -69,8 +94,16 @@ def rozpoznaj(
 
 
 def _rozpoznaj_przegladarke(
-    okno: InformacjeOOknie, adres_paska: str | None
+    okno: InformacjeOOknie,
+    adres_paska: str | None,
+    zaznaczony_tekst: str | None,
+    adres_nasluchu: str,
+    port_nasluchu: int | None,
 ) -> DodanieZeSkrotu | PorazkaRozpoznania:
+    if zaznaczony_tekst is not None:
+        zaznaczenie = sklasyfikuj_zaznaczenie(zaznaczony_tekst)
+        if zaznaczenie is not None:
+            return _rozpoznaj_zaznaczenie(zaznaczenie, adres_nasluchu, port_nasluchu)
     if adres_paska is None:
         return PorazkaRozpoznania(
             f"Nie udało się odczytać paska adresu w oknie „{okno.tytul}”. Nic nie dodano."
@@ -93,7 +126,89 @@ def _rozpoznaj_przegladarke(
             f"Zawartość paska adresu w oknie „{okno.tytul}” nie wygląda na adres "
             "strony. Nic nie dodano."
         )
+    if czy_adres_interfejsu(znormalizowany, adres_nasluchu, port_nasluchu):
+        return PorazkaRozpoznania(KOMUNIKAT_ADRES_INTERFEJSU)
     return DodanieZeSkrotu(typ=TypDodania.ADRES, opis=okno.tytul or adres, adres=znormalizowany)
+
+
+def sklasyfikuj_zaznaczenie(tekst: str) -> ZaznaczonyTekst | None:
+    """Rozpoznaje, czy zaznaczony tekst to same adresy, czy zwykły tekst.
+
+    Zwraca ``None`` dla tekstu pustego po usunięciu białych znaków, bo wtedy
+    nic nie jest zaznaczone. Rodzaj ``ADRESY`` wymaga, żeby każdy niepusty
+    wiersz był adresem ``http`` albo ``https`` bez spacji w środku; jedno
+    słowo więcej w którymkolwiek wierszu czyni całość zwykłym tekstem. Końce
+    wierszy ze schowka Windows są sprowadzane do pojedynczego znaku nowego
+    wiersza.
+    """
+    ujednolicony = tekst.replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not ujednolicony:
+        return None
+    wiersze = [wiersz.strip() for wiersz in ujednolicony.split("\n") if wiersz.strip()]
+    if all(_jest_adresem_http(wiersz) for wiersz in wiersze):
+        return ZaznaczonyTekst(
+            rodzaj=RodzajZaznaczenia.ADRESY, adresy=tuple(dict.fromkeys(wiersze))
+        )
+    return ZaznaczonyTekst(rodzaj=RodzajZaznaczenia.TEKST, tekst=ujednolicony)
+
+
+def _jest_adresem_http(wiersz: str) -> bool:
+    return (
+        wiersz.lower().startswith(_SCHEMATY_ZAZNACZONYCH_ADRESOW)
+        and not any(znak.isspace() for znak in wiersz)
+        and czy_wyglada_na_adres(wiersz)
+    )
+
+
+def _rozpoznaj_zaznaczenie(
+    zaznaczenie: ZaznaczonyTekst, adres_nasluchu: str, port_nasluchu: int | None
+) -> DodanieZeSkrotu | PorazkaRozpoznania:
+    if zaznaczenie.rodzaj is RodzajZaznaczenia.TEKST:
+        return DodanieZeSkrotu(
+            typ=TypDodania.TEKST, opis="zaznaczony tekst", tekst=zaznaczenie.tekst
+        )
+    dozwolone = tuple(
+        adres
+        for adres in zaznaczenie.adresy
+        if not czy_adres_interfejsu(adres, adres_nasluchu, port_nasluchu)
+    )
+    if not dozwolone:
+        return PorazkaRozpoznania(KOMUNIKAT_ADRES_INTERFEJSU)
+    return DodanieZeSkrotu(
+        typ=TypDodania.ADRESY_Z_ZAZNACZENIA,
+        opis=dozwolone[0] if len(dozwolone) == 1 else f"{len(dozwolone)} adresów",
+        adresy=dozwolone,
+        liczba_pominietych_adresow_interfejsu=len(zaznaczenie.adresy) - len(dozwolone),
+    )
+
+
+def czy_adres_interfejsu(adres: str, adres_nasluchu: str, port_nasluchu: int | None) -> bool:
+    """Prawda, gdy adres wskazuje na interfejs aplikacji, a nie na zewnętrzną stronę.
+
+    Interfejsem jest każdy adres pętli zwrotnej (``127.0.0.1``, ``localhost``,
+    ``::1``), niezależnie od portu, oraz adres i port nasłuchu z konfiguracji.
+    Schemat nie ma znaczenia: ``https://127.0.0.1:8765/`` to ta sama strona
+    co ``http://127.0.0.1:8765/``.
+    """
+    try:
+        czesci = urlsplit(adres)
+        host = (czesci.hostname or "").lower()
+        port = czesci.port
+    except ValueError:
+        return False
+    if not host:
+        return False
+    if host == "localhost":
+        return True
+    try:
+        if ipaddress.ip_address(host).is_loopback:
+            return True
+    except ValueError:
+        pass
+    if port_nasluchu is None:
+        return False
+    domyslny_port = 443 if czesci.scheme.lower() == "https" else 80
+    return host == adres_nasluchu.lower() and (port or domyslny_port) == port_nasluchu
 
 
 def _rozpoznaj_eksplorator(

@@ -24,7 +24,7 @@ if sys.platform == "win32":
 
     from gnb.core.konfiguracja import Konfiguracja
     from gnb.hotkeys import obsluga
-    from gnb.hotkeys.model import InformacjeOOknie
+    from gnb.hotkeys.model import InformacjeOOknie, RodzajWynikuKopiowania, WynikKopiowania
     from gnb.hotkeys.obsluga import ObslugaSkrotu
     from gnb.ingestion.wejscie import przyjmij_tekst
     from gnb.persistence.projekt import ustal_uklad
@@ -79,6 +79,8 @@ def _obsluga(
     pliki_zaznaczone: tuple[Path, ...] = (),
     rejestr: _FalszywyRejestr | None = None,
     konfiguracja: Konfiguracja | None = None,
+    wynik_kopiowania: WynikKopiowania | None = None,
+    wywolania_schowka: list[str] | None = None,
 ) -> tuple[
     ObslugaSkrotu, list[str], OstatniKomunikatSkrotu, _FalszywyRejestr, AktywnyProjektSkrotu
 ]:
@@ -89,6 +91,14 @@ def _obsluga(
     monkeypatch.setattr(
         obsluga._eksplorator, "odczytaj_zaznaczenie", lambda _uchwyt: pliki_zaznaczone
     )
+    nic_nie_zaznaczono = WynikKopiowania(RodzajWynikuKopiowania.NIC_NIE_ZAZNACZONO)
+
+    def falszywe_kopiowanie() -> WynikKopiowania:
+        if wywolania_schowka is not None:
+            wywolania_schowka.append("kopiowanie")
+        return wynik_kopiowania or nic_nie_zaznaczono
+
+    monkeypatch.setattr(obsluga._schowek, "skopiuj_zaznaczenie", falszywe_kopiowanie)
     dzwieki: list[str] = []
     monkeypatch.setattr(obsluga._dzwieki, "zagraj_sukces", lambda: dzwieki.append("sukces"))
     monkeypatch.setattr(obsluga._dzwieki, "zagraj_porazke", lambda: dzwieki.append("porazka"))
@@ -102,19 +112,27 @@ def _obsluga(
     return instancja, dzwieki, ostatni_komunikat, fikcyjny_rejestr, aktywny_projekt
 
 
-def test_brak_aktywnego_projektu_uzywa_projektu_domyslnego(
+def test_brak_aktywnego_projektu_gra_porazke_i_nic_nie_zapisuje(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     okno = _okno(nazwa_procesu="chrome", tytul="Przykładowa strona")
-    instancja, dzwieki, _komunikat, _rejestr, aktywny = _obsluga(
-        monkeypatch, okno=okno, adres_paska="przyklad.pl/artykul"
+    wywolania: list[str] = []
+    instancja, dzwieki, ostatni_komunikat, rejestr, aktywny = _obsluga(
+        monkeypatch, okno=okno, adres_paska="przyklad.pl/artykul", wywolania_schowka=wywolania
     )
-    assert aktywny.aktualny() is None
 
     instancja._obsluz_nacisniecie()
 
-    assert dzwieki == ["sukces"]
-    assert aktywny.aktualny() == "Adresy ze skrótu"
+    assert dzwieki == ["porazka"]
+    assert aktywny.aktualny() is None
+    assert rejestr.uruchomienia == []
+    assert instancja._kolejka.liczba_oczekujacych() == 0
+    # Bez projektu nie ma po co dotykać schowka użytkownika.
+    assert wywolania == []
+    komunikat = ostatni_komunikat.aktualny()
+    assert komunikat is not None
+    assert komunikat.sukces is False
+    assert "Ustaw aktywny projekt skrótu na stronie projektu" in komunikat.tekst
 
 
 def test_adres_z_przegladarki_trafia_do_kolejki_i_gra_sukces(
@@ -337,3 +355,164 @@ def test_zatrzymaj_z_kilkoma_projektami_w_kolejce_wymienia_wszystkie(
     assert komunikat is not None
     assert "Projekt A (1)" in komunikat.tekst
     assert "Projekt B (1)" in komunikat.tekst
+
+
+# --- zaznaczony tekst przez schowek (etap piętnasty, część D2) ---------------
+
+
+def _zaznaczono(tekst: str, uwaga: str = "") -> WynikKopiowania:
+    return WynikKopiowania(RodzajWynikuKopiowania.ZAZNACZONO, tekst=tekst, uwaga=uwaga)
+
+
+def test_zaznaczony_zwykly_tekst_trafia_do_szkicu_a_nie_do_kolejki(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    okno = _okno(nazwa_procesu="chrome", tytul="Strona")
+    instancja, dzwieki, ostatni_komunikat, rejestr, aktywny = _obsluga(
+        monkeypatch, okno=okno, adres_paska="przyklad.pl", wynik_kopiowania=_zaznaczono("Zdanie.")
+    )
+    aktywny.ustaw("Projekt A")
+
+    instancja._obsluz_nacisniecie()
+
+    assert dzwieki == ["sukces"]
+    assert instancja._szkic_tekstu.pobierz("Projekt A").tekst == "Zdanie.\n"
+    assert instancja._kolejka.liczba_oczekujacych() == 0
+    assert rejestr.uruchomienia == []
+    komunikat = ostatni_komunikat.aktualny()
+    assert komunikat is not None and komunikat.sukces is True
+    # Komunikat mówi, ile znaków i do którego projektu, bez cytowania treści.
+    assert "7 znaków" in komunikat.tekst
+    assert "Projekt A" in komunikat.tekst
+    assert "Zdanie." not in komunikat.tekst
+
+
+def test_kolejne_zaznaczenia_sa_dopisywane_na_koncu_szkicu(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    okno = _okno(nazwa_procesu="firefox", tytul="Strona")
+    instancja, _dzwieki, _komunikat, _rejestr, aktywny = _obsluga(
+        monkeypatch, okno=okno, wynik_kopiowania=_zaznaczono("Pierwszy.")
+    )
+    aktywny.ustaw("Projekt A")
+    instancja._obsluz_nacisniecie()
+    monkeypatch.setattr(obsluga._schowek, "skopiuj_zaznaczenie", lambda: _zaznaczono("Drugi."))
+
+    instancja._obsluz_nacisniecie()
+
+    assert instancja._szkic_tekstu.pobierz("Projekt A").tekst == "Pierwszy.\nDrugi.\n"
+
+
+def test_zaznaczone_adresy_trafiaja_do_kolejki_jak_adres_strony(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    okno = _okno(nazwa_procesu="chrome", tytul="Strona")
+    instancja, dzwieki, ostatni_komunikat, rejestr, aktywny = _obsluga(
+        monkeypatch,
+        okno=okno,
+        adres_paska="inna.example",
+        wynik_kopiowania=_zaznaczono("https://a.example/x\nhttps://b.example/y"),
+    )
+    aktywny.ustaw("Projekt A")
+
+    instancja._obsluz_nacisniecie()
+
+    assert dzwieki == ["sukces"]
+    assert rejestr.uruchomienia == ["Projekt A"]
+    assert instancja._szkic_tekstu.pobierz("Projekt A").tekst == ""
+    komunikat = ostatni_komunikat.aktualny()
+    assert komunikat is not None
+    assert "Dodano adresy z zaznaczenia: 2" in komunikat.tekst
+
+
+def test_brak_zaznaczenia_dziala_jak_dotad_i_bierze_adres_z_paska(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    okno = _okno(nazwa_procesu="chrome", tytul="Strona")
+    instancja, dzwieki, ostatni_komunikat, rejestr, aktywny = _obsluga(
+        monkeypatch, okno=okno, adres_paska="przyklad.pl/artykul"
+    )
+    aktywny.ustaw("Projekt A")
+
+    instancja._obsluz_nacisniecie()
+
+    assert dzwieki == ["sukces"]
+    assert rejestr.uruchomienia == ["Projekt A"]
+    komunikat = ostatni_komunikat.aktualny()
+    assert komunikat is not None and "Dodano adres strony" in komunikat.tekst
+
+
+def test_schowek_nie_do_przywrocenia_zachowuje_sie_jak_brak_zaznaczenia_i_mowi_o_tym(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    okno = _okno(nazwa_procesu="chrome", tytul="Strona")
+    uwaga = "Schowek zawiera dane, których nie da się bezpiecznie przywrócić."
+    instancja, dzwieki, ostatni_komunikat, rejestr, aktywny = _obsluga(
+        monkeypatch,
+        okno=okno,
+        adres_paska="przyklad.pl/artykul",
+        wynik_kopiowania=WynikKopiowania(
+            RodzajWynikuKopiowania.SCHOWEK_NIE_DO_PRZYWROCENIA, uwaga=uwaga
+        ),
+    )
+    aktywny.ustaw("Projekt A")
+
+    instancja._obsluz_nacisniecie()
+
+    assert dzwieki == ["sukces"]
+    assert rejestr.uruchomienia == ["Projekt A"]
+    komunikat = ostatni_komunikat.aktualny()
+    assert komunikat is not None
+    assert "Dodano adres strony" in komunikat.tekst
+    assert uwaga in komunikat.tekst
+
+
+def test_adres_interfejsu_w_pasku_adresu_gra_porazke(monkeypatch: pytest.MonkeyPatch) -> None:
+    okno = _okno(nazwa_procesu="chrome", tytul="Gemini Notebook Builder")
+    konfiguracja = Konfiguracja(port_nasluchu=8765)
+    instancja, dzwieki, ostatni_komunikat, rejestr, aktywny = _obsluga(
+        monkeypatch, okno=okno, adres_paska="127.0.0.1:8765", konfiguracja=konfiguracja
+    )
+    aktywny.ustaw("Projekt A")
+
+    instancja._obsluz_nacisniecie()
+
+    assert dzwieki == ["porazka"]
+    assert rejestr.uruchomienia == []
+    assert instancja._kolejka.liczba_oczekujacych() == 0
+    komunikat = ostatni_komunikat.aktualny()
+    assert komunikat is not None
+    assert "To jest adres interfejsu Gemini Notebook Builder" in komunikat.tekst
+
+
+def test_zaznaczenie_nie_jest_odczytywane_w_eksploratorze(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    okno = _okno(nazwa_klasy="CabinetWClass")
+    wywolania: list[str] = []
+    instancja, _dzwieki, _komunikat, _rejestr, aktywny = _obsluga(
+        monkeypatch,
+        okno=okno,
+        pliki_zaznaczone=(Path("a.txt"),),
+        wywolania_schowka=wywolania,
+    )
+    aktywny.ustaw("Projekt B")
+
+    instancja._obsluz_nacisniecie()
+
+    assert wywolania == []
+
+
+def test_zbyt_dlugi_tekst_gra_porazke_i_nie_zmienia_szkicu(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    okno = _okno(nazwa_procesu="chrome", tytul="Strona")
+    instancja, dzwieki, _komunikat, _rejestr, aktywny = _obsluga(
+        monkeypatch, okno=okno, wynik_kopiowania=_zaznaczono("x" * 600_000)
+    )
+    aktywny.ustaw("Projekt A")
+
+    instancja._obsluz_nacisniecie()
+
+    assert dzwieki == ["porazka"]
+    assert instancja._szkic_tekstu.pobierz("Projekt A").tekst == ""

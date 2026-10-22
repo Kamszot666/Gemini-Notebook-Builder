@@ -304,6 +304,10 @@ stronie głównej i na stronie każdego projektu.
    błąd walidacji, trwałość po restarcie, przywracanie i zmienna środowiskowa).
    Zachowanie strony bez JavaScriptu nie było testowane przez użytkownika.
 6. Zakładka „Wygląd” (część F) jest opisana w sekcji „Motyw, kolory i ruch”.
+   Użytkownik sprawdził ją w NVDA 22 października 2026: zakładkę, listy, pola
+   kolorów, zapis z komunikatem o kontraście (oceniony jako zrozumiały), przycisk
+   ratunkowy i błędny kolor. Nie były sprawdzane: ocena wizualna schematów przez
+   osobę widzącą, tryb wysokiego kontrastu Windows i praca bez JavaScriptu.
 
 ## Motyw, kolory i ruch
 

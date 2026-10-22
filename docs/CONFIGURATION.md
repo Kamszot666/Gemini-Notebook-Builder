@@ -1,4 +1,4 @@
-# Konfiguracja — stan po etapie piętnastym, część E
+# Konfiguracja — stan po etapie piętnastym, część F
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
 obsługuje po etapie trzynastym. Z listy w sekcji jedenastej a pliku
@@ -28,9 +28,9 @@ Wszystkie pola z tego dokumentu, poza dwoma wyjątkami, można zmienić na stron
 `/ustawienia`, do której prowadzi odnośnik „Ustawienia” na stronie głównej i na
 stronie każdego projektu. Pola są podzielone na zakładki: Limity notatnika,
 Pobieranie stron, YouTube i napisy, Deduplikacja, OCR i obrazy, Transkrypcja
-mowy, Nuty, Formaty biurowe i archiwa ZIP, Pliki wynikowe, Skrót klawiszowy
-oraz Serwer. Każde pole konfiguracji leży w dokładnie jednej zakładce; pilnuje
-tego test. Zakładki wyglądu jeszcze nie ma.
+mowy, Nuty, Formaty biurowe i archiwa ZIP, Pliki wynikowe, Skrót klawiszowy,
+Serwer oraz, od części F, Wygląd (opis niżej). Każde pole konfiguracji leży
+w dokładnie jednej zakładce; pilnuje tego test.
 
 Zasady strony:
 
@@ -64,6 +64,50 @@ Zasady strony:
    bibliotekę faster-whisper (funkcja `available_models` w wersji 1.2.x):
    tiny, base, small, medium, large-v3-turbo, large-v2 i large-v3. Nie podajemy
    liczb zajętości pamięci ani czasu pracy, bo nie mamy ich ze źródła.
+9. Pola tekstowe nie przyjmują znaków sterujących (kategoria Unicode Cc, na
+   przykład koniec wiersza, powrót karetki, tabulacja). Reguła działa tak samo
+   przy zapisie z interfejsu i przy wczytywaniu pliku oraz zmiennych
+   środowiskowych, z komunikatem po polsku przy nazwie pola. Powód: na przykład
+   nazwa klienta trafia do nagłówka `User-Agent`, a znak końca wiersza w nagłówku
+   psuje każde następne połączenie. Plik, który już taki znak zawiera, nie
+   wczytuje się, dopóki go nie usuniesz z wartości.
+10. Pole „Dołącz na końcu tekstu wykaz odnośników” (klucz `zachowuj_odnosniki`,
+   bez zmiany nazwy) steruje wyłącznie końcową sekcją „Odnośniki” w tekście
+   pobranej strony. Adresy odnośników w samej treści artykułu nie zależą od tego
+   ustawienia.
+
+## Wygląd interfejsu
+
+Zakładka „Wygląd” strony ustawień zmienia wygląd wszystkich stron interfejsu.
+Ustawienia zapisują się w pliku konfiguracji jak pozostałe, nie wymagają
+ponownego uruchomienia serwera i działają od następnego otwarcia strony. Strony
+używają zmiennych CSS, więc jeden zapis zmienia wszystkie naraz.
+
+Klucze w pliku konfiguracji (każdy ma też zmienną środowiskową z prefiksem
+`GNB_`, na przykład `GNB_WYGLAD_SCHEMAT`):
+
+1. `wyglad_schemat`, domyślnie `ciemny`. Wartości: `ciemny`, `zolty_na_czarnym`,
+   `bialy_na_czarnym`, `czarny_na_bialym`, `ciemny_na_kremowym`,
+   `bezpieczny_dla_barw`, `zblizony_do_gemini` oraz `wlasny` (kolory własne).
+2. `wyglad_rozmiar_czcionki`, domyślnie 100. Procent rozmiaru domyślnego
+   (20 pikseli przy zwykłym ustawieniu przeglądarki): 100, 125, 150, 175 albo 200.
+3. `wyglad_kroj_pisma`, domyślnie `systemowy`. Wartości: `systemowy`, `verdana`,
+   `tahoma`, `arial`, `calibri`. Brak kroju w systemie daje krój bez szeryfów.
+4. Kolory własne, używane tylko przy schemacie `wlasny`: `wyglad_kolor_tla`,
+   `wyglad_kolor_tekstu`, `wyglad_kolor_odnosnikow`, `wyglad_kolor_przycisku_tla`,
+   `wyglad_kolor_przycisku_tekstu`, `wyglad_kolor_obramowania`,
+   `wyglad_kolor_fokusu`, `wyglad_kolor_bledu`. Wartość w postaci `#RRGGBB`,
+   dokładnie sześć cyfr szesnastkowych; każda inna (skrót `#fff`, nazwa koloru,
+   dopisek) jest odrzucana, żeby przez to pole nie dało się wstrzyknąć kodu CSS.
+   Domyślnie to kolory schematu domyślnego.
+
+Przy kolorach własnych strona ustawień pokazuje wyliczony kontrast tekstu do tła
+i ostrzega, gdy któraś para tekst i tło ma mniej niż 4,5 do 1, a obramowanie albo
+wskaźnik fokusu mniej niż 3 do 1. Ostrzeżenie nie blokuje zapisu. Gdy kolor
+wskaźnika fokusu ma wobec tła mniej niż 3 do 1, strona sama rysuje wskaźnik
+w czerni albo bieli. Przycisk „Przywróć schemat domyślny” usuwa z pliku klucz
+`wyglad_schemat`; kolory własne zostają w pliku na później. Jak wrócić do wyglądu
+domyślnego przez plik, opisuje `TROUBLESHOOTING.md`, przypadek 36.
 
 ## Gdzie leży plik konfiguracji
 

@@ -1,4 +1,4 @@
-# Dostępność interfejsu WWW — stan po etapie piętnastym, część E
+# Dostępność interfejsu WWW — stan po etapie piętnastym, część F
 
 Ten dokument opisuje, jak obsługiwać interfejs Gemini Notebook Builder
 z klawiatury i z czytnikiem ekranu, oraz co interfejs ogłasza i jak często.
@@ -299,14 +299,74 @@ stronie głównej i na stronie każdego projektu.
    trafia na komunikat „Zapisano ustawienia zakładki …” (region `role="status"`).
    To odstępstwo od zasady „nie przenoś fokusu” jest świadome: nowo wczytana
    strona zaczynałaby od początku dokumentu, a użytkownik czytnika ekranu nie
-   usłyszałby, że zapis się udał. Czy takie rozwiązanie odczytuje NVDA zrozumiale,
-   sprawdza użytkownik; to nie jest jeszcze sprawdzone.
+   usłyszałby, że zapis się udał. Rozwiązanie zatwierdził użytkownik po odsłuchu
+   w NVDA 22 października 2026 (zakładki, odczyt pól, zapis, komunikat po zapisie,
+   błąd walidacji, trwałość po restarcie, przywracanie i zmienna środowiskowa).
+   Zachowanie strony bez JavaScriptu nie było testowane przez użytkownika.
+6. Zakładka „Wygląd” (część F) jest opisana w sekcji „Motyw, kolory i ruch”.
 
-## Motyw i ruch
+## Motyw, kolory i ruch
 
-Interfejs ma ciemny motyw z jasnym tekstem i wysokim kontrastem, dużą czcionką
-podstawową. Żadna informacja nie jest przekazywana wyłącznie kolorem. Interfejs
-nie używa animacji utrudniających pracę z czytnikiem ekranu i respektuje
+Domyślnie interfejs ma ciemne tło i jasny tekst. Zakładka „Wygląd” na stronie
+ustawień pozwala wybrać schemat kolorów, rozmiar czcionki, krój pisma i własne
+kolory. Ustawienia działają na wszystkich stronach przez zmienne CSS.
+
+1. Progi kontrastu. Każdy gotowy schemat spełnia: tekst, odnośniki, tekst
+   przycisków na tle przycisków i komunikaty o błędach co najmniej 7 do 1
+   (poziom AAA WCAG 2); obramowania i wskaźnik fokusu co najmniej 3 do 1 wobec
+   tła. Pilnuje tego test, który liczy kontrast według wzoru WCAG 2 dla każdego
+   schematu.
+2. Schematy: ciemny domyślny; wysoki kontrast, żółty na czarnym; biały na czarnym;
+   czarny na białym; ciemny tekst na kremowym tle; bezpieczny przy zaburzeniach
+   rozpoznawania barw; zbliżony do Gemini Notebook. Schemat bezpieczny dla barw
+   korzysta z niebieskiego, pomarańczowego i żółtego (paleta Okabe i Ito) i nie
+   odróżnia stanów czerwienią i zielenią.
+3. Schemat „Zbliżony do Gemini Notebook” jest przybliżeniem, a nie kopią. Google
+   nie publikuje palety kolorów Gemini Notebook. Schemat opiera się na ciemnej
+   palecie bazowej Material Design 3, systemu projektowego Google (m3.material.io):
+   powierzchnia #1c1b1f, tekst na powierzchni #e6e1e5, kolor główny #d0bcff,
+   tekst na kolorze głównym #381e72, kontur #938f99, kolor trzeciorzędny #efb8c8
+   i kolor błędu #f2b8b5. Wartości #d0bcff, #381e72 i #4f378b (kontener koloru
+   głównego) potwierdzono w wyszukiwaniu w sieci; pozostałe zapisano z pamięci
+   o tej palecie i nie potwierdzono w oficjalnym źródle w trakcie tej pracy.
+   Nie używamy logo ani nazw handlowych poza opisową nazwą schematu.
+4. Rozmiar czcionki: 100, 125, 150, 175 i 200 procent rozmiaru domyślnego.
+   Rozmiar domyślny to 1,25 rem, czyli 20 pikseli przy zwykłym ustawieniu
+   przeglądarki (wcześniej 1,125 rem). Wszystkie rozmiary i odstępy są w
+   jednostkach względnych, więc powiększenie strony w przeglądarce działa
+   dodatkowo; długie słowa łamią się, a lista zakładek zawija się, żeby przy
+   powiększeniu nie trzeba było przewijać w poziomie.
+5. Krój pisma: systemowy (Segoe UI w Windows), Verdana, Tahoma, Arial i Calibri,
+   zawsze z awaryjnym krojem bez szeryfów. Kroju Atkinson Hyperlegible nie
+   dołączono; decyzja czeka na użytkownika (licencja i dołączenie pliku).
+6. Cele kliknięcia mają co najmniej 2,75 rem (55 pikseli przy rozmiarze
+   domyślnym), interlinia wynosi 1,6, a odstępy między polami i przyciskami są
+   wyraźne.
+7. Żadna informacja nie jest przekazywana wyłącznie kolorem, w żadnym schemacie:
+   odnośniki są podkreślone, wybrana zakładka ma grubą ramkę i podkreślenie, błąd
+   ma grubszą ramkę, nagłówek „Formularz zawiera błędy” i opis tekstem, a przycisk
+   pod wskaźnikiem myszy dostaje podkreślenie.
+8. Tryb wysokiego kontrastu Windows (`forced-colors: active`): przeglądarka
+   podstawia kolory systemowe, a arkusz zostawia wyraźne obramowania przycisków,
+   zakładek i bloków oraz wskaźnik fokusu w kolorze systemowym `Highlight`. To
+   jest zapisane w arkuszu, ale nie było jeszcze sprawdzone na prawdziwym
+   ustawieniu wysokiego kontrastu.
+9. Kolory własne. Każda z ośmiu ról (tło, tekst, odnośniki, tło i tekst
+   przycisków, obramowania, wskaźnik fokusu, komunikaty o błędach) ma pole
+   tekstowe na kod w postaci #RRGGBB z widoczną etykietą. Natywnego próbnika
+   koloru nie dodano, bo słabo współpracuje z czytnikami ekranu. Wartość jest
+   sprawdzana ściśle, więc nie da się przez nią wstrzyknąć kodu CSS. Strona
+   pokazuje wyliczony kontrast tekstu do tła i ostrzega przy wartości poniżej
+   4,5 do 1; ostrzeżenie nie blokuje zapisu. Wskaźnik fokusu o kontraście poniżej
+   3 do 1 jest zastępowany czernią albo bielą, więc fokus nie znika.
+10. Powrót do schematu domyślnego. Przycisk „Przywróć schemat domyślny” jest
+    w zakładce „Wygląd”, a przy kolorach własnych także na początku strony
+    ustawień, przed zakładkami. Ma stałe, własne kolory (czarne tło, biały tekst,
+    żółta ramka), niezależne od schematu, więc jest widoczny nawet wtedy, gdy
+    kolory własne zrobiły resztę strony nieczytelną. Powrót przez plik opisuje
+    `TROUBLESHOOTING.md`, przypadek 36.
+
+Interfejs nie używa animacji utrudniających pracę z czytnikiem ekranu i respektuje
 systemowe ustawienie ograniczenia ruchu.
 
 ## Bezpieczeństwo w kontekście dostępności

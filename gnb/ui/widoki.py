@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from urllib.parse import quote
 
 from gnb.persistence.pola_notatnika import PolaNotatnika
+from gnb.ui import wyglad
 from gnb.ui.csrf import NAZWA_POLA_FORMULARZA
 from gnb.ui.html import escapuj, tekst_z_odnosnikami
 from gnb.ui.projekty import ProjektNaLiscie
@@ -27,6 +28,8 @@ from gnb.ui.stan_skrotu import KomunikatSkrotu, StanSzkicu
 from gnb.ui.zadania import InformacjaOZadaniu, StanZadania
 
 SCIEZKA_POSTEPU = "/postep"
+# Miejsce, w które serwer wstawia arkusz z wyglądem wybranym przez użytkownika.
+ZNACZNIK_WYGLADU = "<!--gnb-wyglad-->"
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,48 +64,65 @@ class PodsumowanieWyniku:
     wznowiono: bool
 
 
-_STYLE = """
-:root { color-scheme: dark; }
+_STYLE = (
+    wyglad.zmienne_domyslne()
+    + """
 * { box-sizing: border-box; }
+html { font-size: calc(125% * var(--skala)); }
 body {
   margin: 0; padding: 1.5rem;
-  background: #10131a; color: #f2f4f8;
-  font: 1.125rem/1.6 system-ui, "Segoe UI", sans-serif;
+  background: var(--tlo); color: var(--tekst);
+  font-family: var(--czcionka); font-size: 1rem; line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 main { max-width: 52rem; margin: 0 auto; }
-h1, h2 { line-height: 1.25; }
-a { color: #9ecbff; }
-a:focus-visible, button:focus-visible, input:focus-visible,
-textarea:focus-visible, [tabindex]:focus-visible {
-  outline: 3px solid #ffd54a; outline-offset: 2px;
+h1, h2, h3 { line-height: 1.3; }
+a { color: var(--odnosnik); text-decoration: underline; text-underline-offset: 0.15em; }
+:focus-visible, [tabindex="-1"]:focus {
+  outline: 3px solid var(--fokus); outline-offset: 2px;
 }
 label { display: block; font-weight: 600; margin-top: 1.25rem; }
-input[type="text"], textarea {
-  width: 100%; margin-top: 0.35rem; padding: 0.6rem;
-  background: #1b2130; color: #f2f4f8;
-  border: 1px solid #4a5878; border-radius: 4px;
+input[type="text"], input[type="number"], select, textarea {
+  width: 100%; max-width: 100%; min-height: 2.75rem; margin-top: 0.35rem; padding: 0.6rem;
+  background: var(--tlo); color: var(--tekst);
+  border: 2px solid var(--ramka); border-radius: 4px;
   font: inherit;
 }
+input[type="checkbox"] { accent-color: var(--odnosnik); }
 textarea { min-height: 8rem; }
 button {
-  margin-top: 1.25rem; padding: 0.6rem 1.2rem;
-  background: #2b6cb0; color: #fff;
-  border: 1px solid #9ecbff; border-radius: 4px;
+  margin-top: 1.25rem; padding: 0.6rem 1.2rem; min-height: 2.75rem; min-width: 2.75rem;
+  background: var(--przycisk-tlo); color: var(--przycisk-tekst);
+  border: 2px solid var(--ramka); border-radius: 4px;
   font: inherit; cursor: pointer;
 }
-button:hover { background: #3182ce; }
-.blok { margin: 2rem 0; padding: 1.25rem; border: 1px solid #2c3752; border-radius: 6px; }
-.bledy { border-color: #f2a0a0; }
+button:hover { text-decoration: underline; }
+.blok { margin: 2rem 0; padding: 1.25rem; border: 2px solid var(--ramka); border-radius: 6px; }
+.bledy { border: 3px solid var(--blad); }
+.bledy h2, .bledy h3 { color: var(--blad); }
 .bledy ul { margin: 0.5rem 0 0; }
 [role="status"] { margin-top: 0.5rem; font-weight: 600; }
 pre {
   white-space: pre-wrap; word-wrap: break-word;
-  background: #1b2130; padding: 1rem; border-radius: 4px;
+  background: var(--tlo); border: 2px solid var(--ramka); padding: 1rem; border-radius: 4px;
   font: 1rem/1.5 ui-monospace, "Consolas", monospace;
 }
-.pomoc { color: #c4cbe0; font-weight: 400; font-size: 0.95rem; }
+.pomoc { color: var(--tekst); font-weight: 400; font-size: 0.95rem; }
+.ratunek {
+  margin: 1.5rem 0; padding: 1rem; background: #000000; color: #ffffff;
+  border: 3px solid #ffff00; border-radius: 6px;
+}
+.ratunek button {
+  background: #ffff00; color: #000000; border: 3px solid #ffffff;
+}
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media (forced-colors: active) {
+  button, [role="tab"], .blok { border: 2px solid ButtonText; }
+  [role="tab"][aria-selected="true"] { border: 4px solid Highlight; }
+  :focus-visible, [tabindex="-1"]:focus { outline: 3px solid Highlight; }
+}
 """.strip()
+)
 
 
 def _dokument(tytul: str, tresc: str, *, skrypt: str = "", styl_dodatkowy: str = "") -> str:
@@ -116,6 +136,7 @@ def _dokument(tytul: str, tresc: str, *, skrypt: str = "", styl_dodatkowy: str =
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"<title>{escapuj(tytul)}</title>\n"
         f"<style>\n{_STYLE}{dodatek_stylu}\n</style>\n"
+        f"{ZNACZNIK_WYGLADU}\n"
         "</head>\n<body>\n<main>\n"
         f"{tresc}\n"
         "</main>"

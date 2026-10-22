@@ -1,4 +1,4 @@
-# Rozwiązywanie problemów — stan po etapie piętnastym, część D
+# Rozwiązywanie problemów — stan po etapie piętnastym, część F
 
 Ten dokument opisuje problemy, które wystąpiły w rzeczywistej pracy z aplikacją,
 oraz te, które wynikają wprost z jej budowy. Każdy przypadek ma tę samą budowę:
@@ -49,6 +49,7 @@ ozdobników, a polecenia do wpisania są w osobnych blokach.
 33. Z archiwum ZIP przyjęto mniej plików, niż w nim jest.
 34. Pliki z archiwum ZIP zajęły wiele slotów notatnika.
 35. Uruchomienie interfejsu kończy się zdaniem, że interfejs już działa.
+36. Strona stała się nieczytelna po zmianie kolorów albo rozmiaru czcionki.
 
 ## 1. Windows blokuje plik wykonywalny narzędzia deweloperskiego
 
@@ -780,3 +781,35 @@ sekundy.
 Jeżeli system nie pozwala założyć blokady, bo nie ma uprawnień do katalogu danych,
 polecenie kończy się innym zdaniem, z nazwą katalogu, i kodem 1. Wtedy sprawdź
 uprawnienia do tego katalogu.
+
+## 36. Strona stała się nieczytelna po zmianie kolorów albo rozmiaru czcionki
+
+Objaw. Po zapisaniu własnych kolorów, bardzo dużej czcionki albo nieudanego
+doboru schematu tekst zlewa się z tłem albo strona jest trudna do obsługi.
+
+Przyczyna. Kolory własne są dowolne, a ostrzeżenie o kontraście nie blokuje
+zapisu, bo użytkownik ma mieć swobodę. Zdarza się więc kolor tekstu równy kolorowi
+tła.
+
+Co zrobić, od najprostszego sposobu.
+
+1. Na stronie ustawień użyj przycisku „Przywróć schemat domyślny”. Przy kolorach
+   własnych jest on na początku strony, przed zakładkami, i ma stałe kolory
+   (czarne tło, biały tekst, żółta ramka), więc widać go nawet przy nieczytelnej
+   reszcie. Przycisk usuwa z pliku wybór schematu, a kolory własne zostają w pliku
+   na później. Nie działa w trakcie przetwarzania (komunikat o innym
+   przetwarzaniu w toku); poczekaj wtedy na jego koniec.
+2. Przywróć całą zakładkę „Wygląd” przyciskiem „Przywróć ustawienia domyślne tej
+   zakładki”. To usuwa z pliku wszystkie ustawienia wyglądu, także rozmiar
+   czcionki i kolory własne.
+3. Jeżeli strony nie da się obsłużyć wcale, edytuj plik konfiguracji ręcznie.
+   Jego ścieżka jest w `CONFIGURATION.md` (na Windows
+   `%APPDATA%\Gemini Notebook Builder\konfiguracja.toml`). Zamknij serwer, otwórz
+   plik w Notatniku i usuń wiersze zaczynające się od `wyglad_` (albo tylko
+   `wyglad_schemat`, żeby zostawić rozmiar i krój). Zapisz plik i uruchom serwer
+   ponownie. Strona wraca do schematu domyślnego. Jeśli wygląd jest ustawiony
+   zmienną środowiskową `GNB_WYGLAD_SCHEMAT` (albo inną zmienną `GNB_WYGLAD_*`),
+   zmienna ma pierwszeństwo przed plikiem; usuń ją, na przykład w PowerShellu
+   poleceniem `Remove-Item Env:GNB_WYGLAD_SCHEMAT`.
+4. Jeżeli plik jest uszkodzony, aplikacja nie wczyta go i powie, co jest nie tak.
+   Poprzednia wersja pliku leży obok jako `konfiguracja.toml.bak`.

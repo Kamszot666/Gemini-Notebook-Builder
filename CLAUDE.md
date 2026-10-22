@@ -244,7 +244,7 @@ Wymagania techniczne:
 1. Semantyczny HTML5. Elementy interaktywne to prawdziwe `button`, `a`, `input`, `select`, nie `div` z obsługą kliknięcia.
 2. Każde pole tekstowe (`input` typu tekstowego i `textarea`) ma dokładnie jedną widoczną etykietę `label for` z nazwą pola, wyraźną i kontrastową, a nie ma `placeholder` ani `aria-label`; opis pomocniczy pola jest przypięty przez `aria-describedby`, wymóg wyraża atrybut `required`, a nie dopisek w etykiecie. Pozostałe pola, czyli wybór pliku, pola wyboru i listy, też mają zwykłą etykietę `label for`. Powód: gdy nazwę niosły `aria-label` i `placeholder` jednocześnie, NVDA czytał ją dwa razy w pustym polu.
 3. Logiczna kolejność fokusu, widoczny wskaźnik fokusu, pełna obsługa z klawiatury, brak wymogu myszy.
-4. Ciemny motyw, jasny tekst, wysoki kontrast, duża czcionka, brak informacji przekazywanej wyłącznie kolorem.
+4. Domyślnie ciemny motyw, jasny tekst, wysoki kontrast (tekst co najmniej 7 do 1, obramowania i wskaźnik fokusu co najmniej 3 do 1), duża czcionka (1,25 rem), brak informacji przekazywanej wyłącznie kolorem. Użytkownik może wybrać inny schemat, rozmiar i krój oraz kolory własne w zakładce „Wygląd” strony ustawień; każdy gotowy schemat spełnia te same progi, a styl używa wyłącznie zmiennych CSS.
 5. Błędy walidacji powiązane z polem przez `aria-describedby` oraz `aria-invalid`, a lista błędów dostępna również jako tekst.
 6. Postęp długich operacji w regionie `role="status"` z `aria-live="polite"`. Nie używaj `aria-live="assertive"` do zwykłego postępu.
 7. Komunikaty o postępie muszą być dławione. Maksymalnie jeden komunikat na trzy do pięciu sekund, w formie podsumowania, na przykład „Przetworzono 12 z 40 źródeł”. Ogłaszanie każdego pojedynczego zdarzenia czyni interfejs bezużytecznym z czytnikiem ekranu.
@@ -407,6 +407,8 @@ Pełny zapis każdej pozycji, z objawem, przyczyną i propozycją, jest w `docs/
 9. Zamknięte, naprawa `naprawa-brak-danych-jezyka-ocr`: brak danych językowych Tesseracta daje status `pominiete` z komunikatem, którego języka brakuje.
 10. Jednoczesny przebieg z wiersza poleceń i z interfejsu na tym samym projekcie może nadpisać checkpoint. Decyzja użytkownika: blokada per projekt, w katalogu projektu, zakładana przez interfejs i wiersz poleceń; osobny, mały etap po części F etapu piętnastego, nie wcześniej.
 11. Skrót dopisuje `https://` do adresu bez schematu, co psuje stronę działającą wyłącznie po http. Decyzja użytkownika: pobieranie próbuje https, a po błędzie połączenia http; osobna, mała naprawa po części F etapu piętnastego, obok blokady z punktu 10, nie wcześniej.
+12. Skrót klawiszowy wybierany w ustawieniach (cztery pola wyboru Control, Alt, Shift, Windows i lista „Klawisz”, bez pola przechwytującego; nowy skrót działa od razu, a gdy Windows odmówi, zostaje poprzedni; co najmniej jeden modyfikator, bez Caps Lock i Insert; domyślnie nadal Control plus Shift plus F12). Decyzja użytkownika: osobny, mały etap po części F etapu piętnastego, nie wcześniej.
+13. Reklamy, napisy „REKLAMA” i bloki „Czytaj także” przechodzą przez trafilaturę do tekstu wynikowego i wykazu odnośników. Kierunek: deterministyczny filtr po trafilaturze z zapisem usuniętych fragmentów w wynikach pośrednich. Decyzja użytkownika: odłożone na przyszłość; najpierw recenzent zbierze prawdziwe przykłady stron. Nic nie implementuj.
 
 ## 19. Kryterium ukończenia funkcji
 

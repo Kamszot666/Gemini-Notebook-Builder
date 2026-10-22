@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from gnb.core.konfiguracja import Konfiguracja
+from gnb.core.konfiguracja import SCHEMAT_KOLOROW_WLASNY, Konfiguracja
 from gnb.ui.html import escapuj
 from gnb.ui.ustawienia import (
     ZAKLADKI,
@@ -33,10 +33,14 @@ from gnb.ui.widoki import (
     _dokument,  # pyright: ignore[reportPrivateUsage]
     _pole_csrf,  # pyright: ignore[reportPrivateUsage]
 )
+from gnb.ui.wyglad import kolory_wlasne, opis_kontrastu_tekstu, ostrzezenia_kontrastu
 
 SCIEZKA_USTAWIEN = "/ustawienia"
 SCIEZKA_ZAPISU_USTAWIEN = "/ustawienia/zapisz"
 SCIEZKA_PRZYWRACANIA_USTAWIEN = "/ustawienia/przywroc"
+SCIEZKA_PRZYWRACANIA_SCHEMATU = "/ustawienia/przywroc-schemat"
+NAZWA_PRZYCISKU_SCHEMATU = "Przywróć schemat domyślny"
+IDENTYFIKATOR_ZAKLADKI_WYGLADU = "wyglad"
 NAZWA_PRZYCISKU_ZAPISU = "Zapisz ustawienia"
 NAZWA_PRZYCISKU_PRZYWRACANIA = "Przywróć ustawienia domyślne tej zakładki"
 
@@ -44,20 +48,19 @@ _STYL_USTAWIEN = """
 [role="tablist"] { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1.5rem 0 0; }
 [role="tablist"][hidden] { display: none; }
 [role="tab"] {
-  margin: 0; min-height: 2.75rem; background: #1b2130; color: #f2f4f8;
-  border: 2px solid #4a5878;
+  margin: 0; min-height: 2.75rem; background: var(--tlo); color: var(--tekst);
+  border: 2px solid var(--ramka);
 }
 [role="tab"][aria-selected="true"] {
-  background: #2b6cb0; border-color: #ffd54a; text-decoration: underline;
+  background: var(--przycisk-tlo); color: var(--przycisk-tekst);
+  border: 4px solid var(--fokus); text-decoration: underline;
 }
-.pole-wyboru { display: flex; align-items: flex-start; gap: 0.6rem; margin-top: 1.25rem; }
+.pole-wyboru {
+  display: flex; align-items: flex-start; gap: 0.6rem; margin-top: 1.25rem; min-height: 2.75rem;
+}
 .pole-wyboru input { width: 1.5rem; height: 1.5rem; margin-top: 0.3rem; flex: none; }
 .pole-wyboru label { margin-top: 0; }
-input[type="number"], select {
-  width: 100%; max-width: 20rem; margin-top: 0.35rem; padding: 0.6rem;
-  background: #1b2130; color: #f2f4f8; border: 1px solid #4a5878; border-radius: 4px;
-  font: inherit;
-}
+input[type="number"], select { max-width: 20rem; }
 .przyciski-zakladki { display: flex; flex-wrap: wrap; gap: 0.75rem; }
 .wartosc-stala { margin: 1.25rem 0 0; font-weight: 600; }
 """.strip()
@@ -163,6 +166,8 @@ def strona_ustawien(
             f'<div class="blok" id="komunikat-ustawien" role="status" aria-live="polite" '
             f'tabindex="-1">{escapuj(komunikat)}</div>'
         )
+    if konfiguracja.wyglad_schemat == SCHEMAT_KOLOROW_WLASNY:
+        czesci.insert(1, formularz_przywracania_schematu(token_csrf, "przywroc-schemat-gora"))
     czesci.append(
         f'<div role="tablist" id="zakladki-ustawien" aria-label="Zakładki ustawień" hidden '
         f'data-aktywna="{numer_aktywnej}">\n{przyciski}\n</div>'
@@ -204,11 +209,17 @@ def _panel(
             '<div class="blok bledy" id="bledy-formularza" role="alert" tabindex="-1">\n'
             f"<h3>Formularz zawiera błędy</h3>\n<ul>{pozycje}</ul>\n</div>\n"
         )
+    dodatek_wygladu = ""
+    po_formularzu = ""
+    if zakladka.identyfikator == IDENTYFIKATOR_ZAKLADKI_WYGLADU:
+        dodatek_wygladu = _informacja_o_kontrascie(konfiguracja)
+        po_formularzu = "\n" + formularz_przywracania_schematu(token_csrf, "przywroc-schemat-panel")
     return (
         f'<section role="tabpanel" id="panel-{identyfikator}" '
         f'aria-labelledby="naglowek-{identyfikator}">\n'
         f'<h2 id="naglowek-{identyfikator}">{escapuj(zakladka.tytul)}</h2>\n'
         f'<p class="pomoc">{escapuj(zakladka.wstep)}</p>\n'
+        f"{dodatek_wygladu}"
         f'<form method="post" action="{SCIEZKA_ZAPISU_USTAWIEN}" '
         f'enctype="application/x-www-form-urlencoded">\n'
         f"{_pole_csrf(token_csrf)}\n"
@@ -218,8 +229,37 @@ def _panel(
         f'<button type="submit">{NAZWA_PRZYCISKU_ZAPISU}</button>\n'
         f'<button type="submit" formaction="{SCIEZKA_PRZYWRACANIA_USTAWIEN}" formnovalidate>'
         f"{NAZWA_PRZYCISKU_PRZYWRACANIA}</button>\n"
-        "</div>\n</form>\n</section>"
+        f"</div>\n</form>{po_formularzu}\n</section>"
     )
+
+
+def formularz_przywracania_schematu(token_csrf: str, identyfikator: str) -> str:
+    """Osobny formularz z przyciskiem powrotu do schematu domyślnego.
+
+    Blok ma stałe, własne kolory (klasa ``ratunek``), niezależne od wybranego
+    schematu, żeby przycisk był widoczny nawet wtedy, gdy kolory własne
+    zrobiły z reszty strony nieczytelną plamę.
+    """
+    return (
+        f'<form method="post" action="{SCIEZKA_PRZYWRACANIA_SCHEMATU}" class="ratunek" '
+        f'id="{escapuj(identyfikator)}">\n'
+        f"{_pole_csrf(token_csrf)}\n"
+        f'<button type="submit">{NAZWA_PRZYCISKU_SCHEMATU}</button>\n'
+        "<p>Ustawia schemat Ciemny, domyślny. Zapisane kolory własne zostają w pliku.</p>\n"
+        "</form>"
+    )
+
+
+def _informacja_o_kontrascie(konfiguracja: Konfiguracja) -> str:
+    """Akapit o kontraście kolorów własnych; dla gotowych schematów pusty."""
+    if konfiguracja.wyglad_schemat != SCHEMAT_KOLOROW_WLASNY:
+        return ""
+    kolory = kolory_wlasne(konfiguracja)
+    zdania = [
+        f"Używasz kolorów własnych. {opis_kontrastu_tekstu(kolory)}",
+        *ostrzezenia_kontrastu(kolory),
+    ]
+    return f'<p class="pomoc" id="kontrast-kolorow">{escapuj(" ".join(zdania))}</p>\n'
 
 
 def _opis(pole: PoleUstawien, *, zablokowane: bool) -> str:
@@ -287,14 +327,14 @@ def _pole(
 
     wartosc = wpisane.get(pole.nazwa, wartosc_do_pola_formularza(pole, aktualna))
     etykieta = f'<label for="{identyfikator}">{escapuj(pole.etykieta)}</label>'
-    if pole.rodzaj is Rodzaj.WYBOR:
-        opcje = list(pole.opcje)
-        if wartosc and wartosc not in opcje:
-            opcje.append(wartosc)
+    if pole.rodzaj in (Rodzaj.WYBOR, Rodzaj.WYBOR_LICZBY):
+        nazwy = dict(zip(pole.opcje, pole.nazwy_opcji or pole.opcje, strict=True))
+        if wartosc and wartosc not in nazwy:
+            nazwy[wartosc] = wartosc
         pozycje = "\n".join(
             f'<option value="{escapuj(opcja)}"{" selected" if opcja == wartosc else ""}>'
-            f"{escapuj(opcja)}</option>"
-            for opcja in opcje
+            f"{escapuj(nazwa_opcji)}</option>"
+            for opcja, nazwa_opcji in nazwy.items()
         )
         kontrolka = f'<select id="{identyfikator}" name="{nazwa}"{opisany}>\n{pozycje}\n</select>'
     elif pole.rodzaj in (Rodzaj.LICZBA, Rodzaj.LICZBA_RZECZYWISTA):

@@ -56,9 +56,9 @@ def test_kazde_pole_konfiguracji_jest_w_dokladnie_jednej_zakladce() -> None:
     assert len(umieszczone) == len(set(umieszczone))
 
 
-def test_nie_ma_zakladki_wyglad_ani_pustych_zakladek() -> None:
+def test_zakladka_wyglad_istnieje_i_nie_ma_pustych_zakladek() -> None:
     assert all(zakladka.pola for zakladka in ZAKLADKI)
-    assert "wyglad" not in {zakladka.identyfikator for zakladka in ZAKLADKI}
+    assert "wyglad" in {zakladka.identyfikator for zakladka in ZAKLADKI}
     identyfikatory = [zakladka.identyfikator for zakladka in ZAKLADKI]
     assert len(identyfikatory) == len(set(identyfikatory))
 
@@ -235,10 +235,12 @@ def test_pole_ze_zmiennej_srodowiskowej_jest_tylko_do_odczytu_z_nazwa_zmiennej()
 def test_kazda_zakladka_ma_zapis_i_przywracanie_z_tokenem() -> None:
     strona = _strona()
 
-    assert strona.count("<form ") == len(ZAKLADKI)
+    assert strona.count('<form method="post" action="/ustawienia/zapisz"') == len(ZAKLADKI)
     assert strona.count(">Zapisz ustawienia</button>") == len(ZAKLADKI)
     assert strona.count(">Przywróć ustawienia domyślne tej zakładki</button>") == len(ZAKLADKI)
-    assert strona.count('value="tokentestowy"') == len(ZAKLADKI)
+    # Każda zakładka ma token w swoim formularzu, a zakładka Wygląd także w formularzu
+    # przywracania schematu.
+    assert strona.count('value="tokentestowy"') == len(ZAKLADKI) + 1
 
 
 def test_wartosc_z_konfiguracji_jest_escapowana() -> None:
@@ -565,3 +567,286 @@ def test_przywracanie_nie_usuwa_pol_zablokowanych_zmienna_ani_tylko_do_odczytu(
     assert "limit_zrodel = 50" in tresc
     assert 'adres_nasluchu = "localhost"' in tresc
     assert "port_nasluchu" not in tresc
+
+
+# --- zakładka Wygląd ---------------------------------------------------------
+
+
+def test_opis_pola_odnosnikow_mowi_o_wykazie_a_nie_o_adresach_w_tekscie() -> None:
+    pole = pole_ustawien("zachowuj_odnosniki")
+
+    assert "wykaz odnośników" in pole.etykieta
+    assert "wykaz" in pole.opis
+    assert "nie zależą" in pole.opis
+    assert "Zachowuje adresy" not in pole.opis
+
+
+def test_zakladka_wyglad_ma_liste_schematow_rozmiarow_i_kroi_oraz_osiem_kolorow() -> None:
+    zakladka = zakladka_o_identyfikatorze("wyglad")
+    assert zakladka is not None
+    pola = {pole.nazwa: pole for pole in zakladka.pola}
+
+    assert pola["wyglad_schemat"].rodzaj is Rodzaj.WYBOR
+    assert pola["wyglad_rozmiar_czcionki"].rodzaj is Rodzaj.WYBOR_LICZBY
+    assert pola["wyglad_kroj_pisma"].rodzaj is Rodzaj.WYBOR
+    kolory = [nazwa for nazwa in pola if nazwa.startswith("wyglad_kolor_")]
+    assert len(kolory) == 8
+    assert all(pola[nazwa].rodzaj is Rodzaj.TEKST for nazwa in kolory)
+    assert not any(pole.restart for pole in zakladka.pola)
+
+
+def test_widok_wygladu_ma_nazwane_schematy_i_pola_kolorow_z_etykietami() -> None:
+    panel = _html_zakladki(_strona(), "wyglad")
+
+    assert "Zbliżony do Gemini Notebook" in panel
+    assert "Kolory własne" in panel
+    assert "150 procent" in panel
+    assert '<label for="pole-wyglad_kolor_tla">Kolor tła</label>' in panel
+    assert "placeholder" not in panel
+    assert ' aria-label="' not in panel
+    assert 'name="wyglad_rozmiar_czcionki"' in panel
+    assert "Przywróć schemat domyślny" in panel
+
+
+def test_przycisk_przywracania_schematu_jest_w_osobnym_formularzu_z_tokenem() -> None:
+    panel = _html_zakladki(_strona(), "wyglad")
+
+    assert 'action="/ustawienia/przywroc-schemat"' in panel
+    assert 'class="ratunek"' in panel
+    assert 'name="token_csrf" value="tokentestowy"' in panel
+
+
+def test_przy_kolorach_wlasnych_przycisk_ratunkowy_jest_tez_na_poczatku_strony() -> None:
+    wlasne = Konfiguracja(wyglad_schemat="wlasny")
+
+    domyslna = _strona()
+    z_wlasnymi = _strona(konfiguracja=wlasne)
+
+    assert 'id="przywroc-schemat-gora"' not in domyslna
+    gora = z_wlasnymi.index('id="przywroc-schemat-gora"')
+    assert gora < z_wlasnymi.index('id="zakladki-ustawien"')
+
+
+def test_strona_pokazuje_kontrast_i_ostrzezenie_tylko_przy_kolorach_wlasnych() -> None:
+    nieczytelne = Konfiguracja(
+        wyglad_schemat="wlasny", wyglad_kolor_tla="#777777", wyglad_kolor_tekstu="#888888"
+    )
+
+    z_ostrzezeniem = _html_zakladki(_strona(konfiguracja=nieczytelne), "wyglad")
+    bez = _html_zakladki(_strona(), "wyglad")
+
+    assert "Kontrast tekstu do tła:" in z_ostrzezeniem
+    assert "mniej niż 4,5 do 1" in z_ostrzezeniem
+    assert "Kontrast tekstu do tła:" not in bez
+
+
+def test_odczyt_wyboru_liczbowego_daje_liczbe_a_zly_tekst_daje_blad() -> None:
+    zakladka = zakladka_o_identyfikatorze("wyglad")
+    assert zakladka is not None
+
+    wartosci, bledy = odczytaj_zakladke(zakladka, {"wyglad_rozmiar_czcionki": "150"}, frozenset())
+    assert not [blad for blad in bledy if blad.pole == "wyglad_rozmiar_czcionki"]
+    assert wartosci["wyglad_rozmiar_czcionki"] == 150
+
+    _, bledy = odczytaj_zakladke(zakladka, {"wyglad_rozmiar_czcionki": "duzy"}, frozenset())
+    assert "wyglad_rozmiar_czcionki" in {blad.pole for blad in bledy}
+
+
+def test_zapis_wygladu_dziala_na_wszystkich_stronach_od_razu(
+    srodowisko: tuple[_Klient, Path, RejestrZadan, object],
+) -> None:
+    klient, plik, _rejestr, _instancja = srodowisko
+
+    odpowiedz, _ = klient.post(
+        "/ustawienia/zapisz",
+        _formularz_zakladki(
+            "wyglad", wyglad_schemat="czarny_na_bialym", wyglad_rozmiar_czcionki="150"
+        ),
+    )
+
+    assert odpowiedz.status == 303
+    assert 'wyglad_schemat = "czarny_na_bialym"' in plik.read_text(encoding="utf-8")
+    for adres in ("/", "/ustawienia", "/nie-ma-takiej-strony"):
+        _, strona = klient.get(adres)
+        assert '<style id="wyglad-uzytkownika">' in strona, adres
+        assert "--tlo: #ffffff;" in strona, adres
+        assert "--skala: 1.5;" in strona, adres
+
+
+def test_kolory_wlasne_zapisuja_sie_a_ostrzezenie_nie_blokuje_zapisu(
+    srodowisko: tuple[_Klient, Path, RejestrZadan, object],
+) -> None:
+    klient, plik, _rejestr, _instancja = srodowisko
+
+    odpowiedz, _ = klient.post(
+        "/ustawienia/zapisz",
+        _formularz_zakladki(
+            "wyglad",
+            wyglad_schemat="wlasny",
+            wyglad_kolor_tla="#777777",
+            wyglad_kolor_tekstu="#888888",
+        ),
+    )
+
+    assert odpowiedz.status == 303
+    zapisane = wczytaj_konfiguracje(plik, srodowisko={})
+    assert zapisane.wyglad_kolor_tla == "#777777"
+    _, strona = klient.get(odpowiedz.getheader("Location") or "")
+    assert "Zapisano ustawienia zakładki Wygląd." in strona
+    assert "Uwaga:" in strona
+    assert "mniej niż 4,5 do 1" in strona
+
+
+@pytest.mark.parametrize(
+    "zly_kolor",
+    [
+        "red",
+        "#fff",
+        "#12345g",
+        "#1234567",
+        "#fff;}</style><script>alert(1)</script>",
+        "#ffffff; background: url(http://zlosliwy.example/x)",
+        "#ffffff\n#000000",
+    ],
+)
+def test_zly_kolor_daje_400_z_bledem_przy_polu_i_nie_zmienia_pliku(
+    srodowisko: tuple[_Klient, Path, RejestrZadan, object], zly_kolor: str
+) -> None:
+    klient, plik, _rejestr, _instancja = srodowisko
+    przed = plik.read_text(encoding="utf-8")
+
+    odpowiedz, strona = klient.post(
+        "/ustawienia/zapisz",
+        _formularz_zakladki("wyglad", wyglad_schemat="wlasny", wyglad_kolor_tla=zly_kolor),
+    )
+
+    assert odpowiedz.status == 400
+    assert plik.read_text(encoding="utf-8") == przed
+    assert "wyglad_kolor_tla" in strona
+    assert "<script>alert(1)" not in strona
+    _, inna = klient.get("/")
+    assert "zlosliwy.example" not in inna
+    assert "<script>alert(1)" not in inna
+
+
+def test_przywracanie_schematu_usuwa_wybor_schematu_ale_zostawia_kolory_wlasne(
+    srodowisko: tuple[_Klient, Path, RejestrZadan, object],
+) -> None:
+    klient, plik, _rejestr, _instancja = srodowisko
+    klient.post(
+        "/ustawienia/zapisz",
+        _formularz_zakladki(
+            "wyglad",
+            wyglad_schemat="wlasny",
+            wyglad_kolor_tla="#112233",
+            wyglad_kolor_tekstu="#112233",
+        ),
+    )
+
+    odpowiedz, _ = klient.post("/ustawienia/przywroc-schemat", {})
+
+    assert odpowiedz.status == 303
+    tresc = plik.read_text(encoding="utf-8")
+    assert "wyglad_schemat" not in tresc
+    assert 'wyglad_kolor_tla = "#112233"' in tresc
+    assert "# Komentarz użytkownika" in tresc
+    _, strona = klient.get("/")
+    assert "--tlo: #10131a;" in strona
+    _, ustawienia = klient.get(odpowiedz.getheader("Location") or "")
+    assert "Przywrócono schemat domyślny." in ustawienia
+
+
+def test_przywracanie_schematu_wymaga_tokenu_csrf(
+    srodowisko: tuple[_Klient, Path, RejestrZadan, object],
+) -> None:
+    klient, plik, _rejestr, _instancja = srodowisko
+    klient.post("/ustawienia/zapisz", _formularz_zakladki("wyglad", wyglad_schemat="wlasny"))
+    przed = plik.read_text(encoding="utf-8")
+
+    odpowiedz, _ = klient.post("/ustawienia/przywroc-schemat", {}, token="zly")
+
+    assert odpowiedz.status == 403
+    assert plik.read_text(encoding="utf-8") == przed
+
+
+def test_przywracanie_schematu_jest_odrzucane_w_trakcie_przetwarzania(
+    srodowisko: tuple[_Klient, Path, RejestrZadan, object],
+) -> None:
+    klient, plik, rejestr, _instancja = srodowisko
+    klient.post("/ustawienia/zapisz", _formularz_zakladki("wyglad", wyglad_schemat="wlasny"))
+    przed = plik.read_text(encoding="utf-8")
+
+    czeka = threading.Event()
+    rejestr.uruchom("Projekt", lambda _postep: czeka.wait(5) and None)  # type: ignore[arg-type,return-value]
+    try:
+        odpowiedz, _ = klient.post("/ustawienia/przywroc-schemat", {})
+    finally:
+        czeka.set()
+
+    assert odpowiedz.status == 409
+    assert plik.read_text(encoding="utf-8") == przed
+
+
+def test_przywracanie_schematu_przy_zmiennej_srodowiskowej_mowi_o_zmiennej(
+    srodowisko: tuple[_Klient, Path, RejestrZadan, object], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    klient, plik, _rejestr, _instancja = srodowisko
+    monkeypatch.setenv("GNB_WYGLAD_SCHEMAT", "bialy_na_czarnym")
+    przed = plik.read_text(encoding="utf-8")
+
+    odpowiedz, strona = klient.post("/ustawienia/przywroc-schemat", {})
+
+    assert odpowiedz.status == 400
+    assert "GNB_WYGLAD_SCHEMAT" in strona
+    assert plik.read_text(encoding="utf-8") == przed
+
+
+def test_przywracanie_zakladki_wyglad_czysci_wszystkie_pola_wygladu(
+    srodowisko: tuple[_Klient, Path, RejestrZadan, object],
+) -> None:
+    klient, plik, _rejestr, _instancja = srodowisko
+    klient.post(
+        "/ustawienia/zapisz",
+        _formularz_zakladki(
+            "wyglad", wyglad_schemat="zolty_na_czarnym", wyglad_rozmiar_czcionki="200"
+        ),
+    )
+
+    odpowiedz, _ = klient.post("/ustawienia/przywroc", {"zakladka": "wyglad"})
+
+    assert odpowiedz.status == 303
+    assert "wyglad_" not in plik.read_text(encoding="utf-8")
+
+
+# --- znaki sterujące w polach tekstowych ------------------------------------
+
+
+def test_zapis_pola_tekstowego_ze_znakami_sterujacymi_jest_odrzucany(
+    srodowisko: tuple[_Klient, Path, RejestrZadan, object],
+) -> None:
+    klient, plik, _rejestr, _instancja = srodowisko
+    przed = plik.read_text(encoding="utf-8")
+
+    odpowiedz, strona = klient.post(
+        "/ustawienia/zapisz",
+        _formularz_zakladki("pobieranie", nazwa_klienta="Klient\r\nX-Wstrzykniety: tak"),
+    )
+
+    assert odpowiedz.status == 400
+    assert "znak sterujący" in strona
+    assert plik.read_text(encoding="utf-8") == przed
+    pozniej, _ = klient.get("/")
+    assert pozniej.status == 200
+
+
+def test_zapis_poprawnej_nazwy_klienta_dziala(
+    srodowisko: tuple[_Klient, Path, RejestrZadan, object],
+) -> None:
+    klient, plik, _rejestr, _instancja = srodowisko
+
+    odpowiedz, _ = klient.post(
+        "/ustawienia/zapisz", _formularz_zakladki("pobieranie", nazwa_klienta="Moj klient 1.0")
+    )
+
+    assert odpowiedz.status == 303
+    assert wczytaj_konfiguracje(plik, srodowisko={}).nazwa_klienta == "Moj klient 1.0"

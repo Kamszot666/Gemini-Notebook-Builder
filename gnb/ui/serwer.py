@@ -91,6 +91,7 @@ from gnb.ui.zadania import RejestrZadan, StanZadania, ZadanieJuzTrwa
 _LOG = logging.getLogger("gnb.ui")
 _TYP_HTML = "text/html; charset=utf-8"
 _TYP_JSON = "application/json; charset=utf-8"
+_KATALOG_CZCIONEK = Path(__file__).parent / "czcionki"
 _KATALOG_PLIKOW_ZASTEPCZYCH = "zastepcze"
 _NADWYZKA_LIMITU_BAJTOW = 1_048_576
 _BAJTOW_W_MEGABAJCIE = 1024 * 1024
@@ -324,6 +325,8 @@ class _Handler(BaseHTTPRequestHandler):
             self._przejdz_do_projektu()
         elif sciezka == widoki_ustawien.SCIEZKA_USTAWIEN:
             self._pokaz_ustawienia()
+        elif sciezka.startswith(wyglad.SCIEZKA_CZCIONEK):
+            self._wyslij_czcionke(sciezka[len(wyglad.SCIEZKA_CZCIONEK) :])
         elif sciezka.startswith("/projekt/") and sciezka.endswith("/grupy"):
             self._pokaz_grupy_projektu(
                 self._nazwa_z_url(sciezka[len("/projekt/") : -len("/grupy")])
@@ -1393,6 +1396,19 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _blad(self, kod: int, tytul: str, komunikat: str) -> None:
         self._wyslij_html(kod, widoki.strona_bledu(kod=kod, tytul=tytul, komunikat=komunikat))
+
+    def _wyslij_czcionke(self, nazwa: str) -> None:
+        """Wysyła plik kroju z pakietu. Nazwa musi być jedną ze znanych, bez ścieżek z adresu."""
+        if nazwa not in wyglad.PLIKI_CZCIONEK:
+            self._blad(404, "Nie znaleziono", "Pod tym adresem nie ma żadnej strony.")
+            return
+        try:
+            tresc = (_KATALOG_CZCIONEK / nazwa).read_bytes()
+        except OSError:
+            _LOG.exception("Nie udało się odczytać pliku kroju %s.", nazwa)
+            self._blad(404, "Nie znaleziono", "Pod tym adresem nie ma żadnej strony.")
+            return
+        self._wyslij(200, tresc, "font/woff2", [("Cache-Control", "public, max-age=86400")])
 
     def _wyslij_html(self, kod: int, html: str, *, token: str | None = None) -> None:
         dodatkowe = [("Set-Cookie", csrf.naglowek_ustawienia_ciasteczka(token))] if token else None

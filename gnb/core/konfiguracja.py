@@ -152,8 +152,15 @@ DOMYSLNY_WYGLAD_SCHEMAT = "ciemny"
 # Rozmiar czcionki jako procent wartości domyślnej (1,25 rem, czyli 20 pikseli).
 STOPNIE_CZCIONKI: tuple[int, ...] = (100, 125, 150, 175, 200)
 DOMYSLNY_WYGLAD_ROZMIAR_CZCIONKI = 100
-KROJE_PISMA: tuple[str, ...] = ("systemowy", "verdana", "tahoma", "arial", "calibri")
-DOMYSLNY_WYGLAD_KROJ_PISMA = "systemowy"
+KROJE_PISMA: tuple[str, ...] = (
+    "atkinson",
+    "systemowy",
+    "verdana",
+    "tahoma",
+    "arial",
+    "calibri",
+)
+DOMYSLNY_WYGLAD_KROJ_PISMA = "atkinson"
 # Kolory własne zaczynają od kolorów schematu domyślnego, żeby pierwsza zmiana
 # jednej roli nie dawała strony w przypadkowych barwach.
 DOMYSLNY_KOLOR_TLA = "#10131a"

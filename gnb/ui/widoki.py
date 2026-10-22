@@ -65,7 +65,9 @@ class PodsumowanieWyniku:
 
 
 _STYLE = (
-    wyglad.zmienne_domyslne()
+    wyglad.deklaracje_czcionek()
+    + "\n"
+    + wyglad.zmienne_domyslne()
     + """
 * { box-sizing: border-box; }
 html { font-size: calc(125% * var(--skala)); }

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import fields
+from pathlib import Path
 
 import pytest
 
@@ -284,3 +285,62 @@ def test_typ_schematu_ma_nazwy_polskie_i_unikalne() -> None:
 
     assert len(nazwy) == len(set(nazwy))
     assert all(isinstance(schemat, SchematKolorow) for schemat in SCHEMATY)
+
+
+# --- krój Atkinson Hyperlegible i kolory Material 3 ---------------------------
+
+_KATALOG_CZCIONEK = Path(__file__).parents[2] / "gnb" / "ui" / "czcionki"
+
+
+def test_krojem_domyslnym_jest_atkinson_a_kroj_systemowy_zostaje_na_liscie() -> None:
+    assert Konfiguracja().wyglad_kroj_pisma == "atkinson"
+    assert "systemowy" in KROJE_PISMA
+    assert wyglad.STOSY_KROJOW["atkinson"].startswith('"Atkinson Hyperlegible"')
+
+
+def test_stos_atkinsona_spada_na_kroj_systemowy_gdy_plik_sie_nie_wczyta() -> None:
+    stos = wyglad.STOSY_KROJOW["atkinson"]
+
+    assert "system-ui" in stos
+    assert stos.endswith("sans-serif")
+    assert "--czcionka: " + stos in zmienne_css(Konfiguracja())
+    assert "--czcionka: " + wyglad.STOSY_KROJOW["verdana"] in zmienne_css(
+        Konfiguracja(wyglad_kroj_pisma="verdana")
+    )
+
+
+def test_pliki_kroju_i_licencja_sa_w_pakiecie() -> None:
+    for nazwa in wyglad.PLIKI_CZCIONEK:
+        zawartosc = (_KATALOG_CZCIONEK / nazwa).read_bytes()
+        assert zawartosc[:4] == b"wOF2", nazwa
+        assert len(zawartosc) > 10_000, nazwa
+    licencja = (_KATALOG_CZCIONEK / "OFL.txt").read_text(encoding="utf-8")
+    assert "SIL OPEN FONT LICENSE Version 1.1" in licencja
+    assert "Braille Institute of America" in licencja
+
+
+def test_pliki_kroju_sa_w_danych_pakietu_pyproject() -> None:
+    tresc = (Path(__file__).parents[2] / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert '"gnb.ui" = ["czcionki/*.woff2", "czcionki/*.txt"]' in tresc
+
+
+def test_arkusz_laduje_kroj_tylko_lokalnie_bez_zewnetrznych_adresow() -> None:
+    arkusz = widoki._STYLE  # pyright: ignore[reportPrivateUsage]
+
+    assert arkusz.count("@font-face") == 4
+    adresy = re.findall(r'url\("([^"]+)"\)', arkusz)
+    assert len(adresy) == 4
+    assert all(adres.startswith("/czcionki/") for adres in adresy)
+    assert "http://" not in arkusz and "https://" not in arkusz
+    assert "font-display: swap" in arkusz
+
+
+def test_schemat_zblizony_do_gemini_ma_kolory_z_tokenow_material_3() -> None:
+    k = next(s for s in SCHEMATY if s.identyfikator == "zblizony_do_gemini").kolory
+
+    assert (k.tlo, k.tekst) == ("#141218", "#e6e0e9")
+    assert (k.odnosnik, k.przycisk_tlo, k.przycisk_tekst) == ("#d0bcff", "#d0bcff", "#381e72")
+    assert (k.obramowanie, k.fokus, k.blad) == ("#938f99", "#efb8c8", "#f2b8b5")
+    assert kontrast(k.tekst, k.tlo) == pytest.approx(14.35, abs=0.01)
+    assert kontrast(k.obramowanie, k.tlo) == pytest.approx(5.87, abs=0.01)

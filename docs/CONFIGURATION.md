@@ -1,4 +1,4 @@
-# Konfiguracja — stan po etapie piętnastym, część F
+# Konfiguracja — stan po etapie piętnastym, część F i naprawie po niej
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
 obsługuje po etapie trzynastym. Z listy w sekcji jedenastej a pliku
@@ -91,8 +91,11 @@ Klucze w pliku konfiguracji (każdy ma też zmienną środowiskową z prefiksem
    `bezpieczny_dla_barw`, `zblizony_do_gemini` oraz `wlasny` (kolory własne).
 2. `wyglad_rozmiar_czcionki`, domyślnie 100. Procent rozmiaru domyślnego
    (20 pikseli przy zwykłym ustawieniu przeglądarki): 100, 125, 150, 175 albo 200.
-3. `wyglad_kroj_pisma`, domyślnie `systemowy`. Wartości: `systemowy`, `verdana`,
-   `tahoma`, `arial`, `calibri`. Brak kroju w systemie daje krój bez szeryfów.
+3. `wyglad_kroj_pisma`, domyślnie `atkinson` (Atkinson Hyperlegible, dołączony do
+   aplikacji i serwowany lokalnie). Wartości: `atkinson`, `systemowy`, `verdana`,
+   `tahoma`, `arial`, `calibri`. Gdy krój nie wczyta się albo go nie ma w systemie,
+   strona używa kroju systemowego bez szeryfów. Pochodzenie i licencja kroju:
+   `ACCESSIBILITY.md`.
 4. Kolory własne, używane tylko przy schemacie `wlasny`: `wyglad_kolor_tla`,
    `wyglad_kolor_tekstu`, `wyglad_kolor_odnosnikow`, `wyglad_kolor_przycisku_tla`,
    `wyglad_kolor_przycisku_tekstu`, `wyglad_kolor_obramowania`,

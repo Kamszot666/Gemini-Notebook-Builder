@@ -97,6 +97,8 @@ include = ["gnb*"]
 [tool.setuptools.package-data]
 # Czcionka TrueType osadzana w generowanych plikach PDF wraz z jej licencją.
 "gnb.images" = ["czcionki/*.ttf", "czcionki/*.txt"]
+# Krój Atkinson Hyperlegible serwowany lokalnie przez interfejs, wraz z licencją.
+"gnb.ui" = ["czcionki/*.woff2", "czcionki/*.txt"]
 
 [tool.ruff]
 line-length = 100

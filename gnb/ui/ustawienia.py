@@ -144,51 +144,6 @@ _NAZWY_SCHEMATOW = nazwy_schematow()
 
 ZAKLADKI: tuple[Zakladka, ...] = (
     Zakladka(
-        "wyglad",
-        "Wygląd",
-        "Schemat kolorów, rozmiar i krój pisma oraz własne kolory interfejsu. Zmiany działają "
-        "na wszystkich stronach od następnego otwarcia strony.",
-        (
-            PoleUstawien(
-                "wyglad_schemat",
-                "Schemat kolorów",
-                "Gotowy zestaw kolorów albo Kolory własne, ustawiane niżej. Każdy gotowy schemat "
-                "ma kontrast tekstu co najmniej 7 do 1.",
-                Rodzaj.WYBOR,
-                opcje=tuple(_NAZWY_SCHEMATOW),
-                nazwy_opcji=tuple(_NAZWY_SCHEMATOW.values()),
-            ),
-            PoleUstawien(
-                "wyglad_rozmiar_czcionki",
-                "Rozmiar czcionki",
-                "Procent rozmiaru domyślnego. Rozmiar domyślny to 20 pikseli przy zwykłym "
-                "ustawieniu przeglądarki; powiększenie strony w przeglądarce działa dodatkowo.",
-                Rodzaj.WYBOR_LICZBY,
-                opcje=tuple(str(stopien) for stopien in STOPNIE_CZCIONKI),
-                nazwy_opcji=tuple(f"{stopien} procent" for stopien in STOPNIE_CZCIONKI),
-            ),
-            PoleUstawien(
-                "wyglad_kroj_pisma",
-                "Krój pisma",
-                "Krój bez szeryfów. Jeśli wybranego kroju nie ma w systemie, strona użyje "
-                "kroju systemowego.",
-                Rodzaj.WYBOR,
-                opcje=KROJE_PISMA,
-                nazwy_opcji=tuple(NAZWY_KROJOW[kroj] for kroj in KROJE_PISMA),
-            ),
-            _kolor("wyglad_kolor_tla", "Kolor tła", "tła strony"),
-            _kolor("wyglad_kolor_tekstu", "Kolor tekstu", "tekstu"),
-            _kolor("wyglad_kolor_odnosnikow", "Kolor odnośników", "odnośników"),
-            _kolor("wyglad_kolor_przycisku_tla", "Kolor tła przycisków", "tła przycisków"),
-            _kolor(
-                "wyglad_kolor_przycisku_tekstu", "Kolor tekstu przycisków", "tekstu na przyciskach"
-            ),
-            _kolor("wyglad_kolor_obramowania", "Kolor obramowań", "obramowań pól i przycisków"),
-            _kolor("wyglad_kolor_fokusu", "Kolor wskaźnika fokusu", "wskaźnika fokusu"),
-            _kolor("wyglad_kolor_bledu", "Kolor komunikatów o błędach", "komunikatów o błędach"),
-        ),
-    ),
-    Zakladka(
         "limity",
         "Limity notatnika",
         "Limity liczby źródeł i wielkości plików, dopasowane do planu Gemini Notebook.",
@@ -640,6 +595,51 @@ ZAKLADKI: tuple[Zakladka, ...] = (
                 "Największy rozmiar wysyłanych plików w megabajtach",
                 "Większa wysyłka z formularza jest odrzucana.",
             ),
+        ),
+    ),
+    Zakladka(
+        "wyglad",
+        "Wygląd",
+        "Schemat kolorów, rozmiar i krój pisma oraz własne kolory interfejsu. Zmiany działają "
+        "na wszystkich stronach od następnego otwarcia strony.",
+        (
+            PoleUstawien(
+                "wyglad_schemat",
+                "Schemat kolorów",
+                "Gotowy zestaw kolorów albo Kolory własne, ustawiane niżej. Każdy gotowy schemat "
+                "ma kontrast tekstu co najmniej 7 do 1.",
+                Rodzaj.WYBOR,
+                opcje=tuple(_NAZWY_SCHEMATOW),
+                nazwy_opcji=tuple(_NAZWY_SCHEMATOW.values()),
+            ),
+            PoleUstawien(
+                "wyglad_rozmiar_czcionki",
+                "Rozmiar czcionki",
+                "Procent rozmiaru domyślnego. Rozmiar domyślny to 20 pikseli przy zwykłym "
+                "ustawieniu przeglądarki; powiększenie strony w przeglądarce działa dodatkowo.",
+                Rodzaj.WYBOR_LICZBY,
+                opcje=tuple(str(stopien) for stopien in STOPNIE_CZCIONKI),
+                nazwy_opcji=tuple(f"{stopien} procent" for stopien in STOPNIE_CZCIONKI),
+            ),
+            PoleUstawien(
+                "wyglad_kroj_pisma",
+                "Krój pisma",
+                "Krój bez szeryfów. Jeśli wybranego kroju nie ma w systemie, strona użyje "
+                "kroju systemowego.",
+                Rodzaj.WYBOR,
+                opcje=KROJE_PISMA,
+                nazwy_opcji=tuple(NAZWY_KROJOW[kroj] for kroj in KROJE_PISMA),
+            ),
+            _kolor("wyglad_kolor_tla", "Kolor tła", "tła strony"),
+            _kolor("wyglad_kolor_tekstu", "Kolor tekstu", "tekstu"),
+            _kolor("wyglad_kolor_odnosnikow", "Kolor odnośników", "odnośników"),
+            _kolor("wyglad_kolor_przycisku_tla", "Kolor tła przycisków", "tła przycisków"),
+            _kolor(
+                "wyglad_kolor_przycisku_tekstu", "Kolor tekstu przycisków", "tekstu na przyciskach"
+            ),
+            _kolor("wyglad_kolor_obramowania", "Kolor obramowań", "obramowań pól i przycisków"),
+            _kolor("wyglad_kolor_fokusu", "Kolor wskaźnika fokusu", "wskaźnika fokusu"),
+            _kolor("wyglad_kolor_bledu", "Kolor komunikatów o błędach", "komunikatów o błędach"),
         ),
     ),
 )

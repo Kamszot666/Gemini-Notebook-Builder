@@ -1,4 +1,4 @@
-# Dostępność interfejsu WWW — stan po etapie piętnastym, część F
+# Dostępność interfejsu WWW — stan po etapie piętnastym, część F i naprawie po niej
 
 Ten dokument opisuje, jak obsługiwać interfejs Gemini Notebook Builder
 z klawiatury i z czytnikiem ekranu, oraz co interfejs ogłasza i jak często.
@@ -323,22 +323,39 @@ kolory. Ustawienia działają na wszystkich stronach przez zmienne CSS.
    odróżnia stanów czerwienią i zielenią.
 3. Schemat „Zbliżony do Gemini Notebook” jest przybliżeniem, a nie kopią. Google
    nie publikuje palety kolorów Gemini Notebook. Schemat opiera się na ciemnej
-   palecie bazowej Material Design 3, systemu projektowego Google (m3.material.io):
-   powierzchnia #1c1b1f, tekst na powierzchni #e6e1e5, kolor główny #d0bcff,
-   tekst na kolorze głównym #381e72, kontur #938f99, kolor trzeciorzędny #efb8c8
-   i kolor błędu #f2b8b5. Wartości #d0bcff, #381e72 i #4f378b (kontener koloru
-   głównego) potwierdzono w wyszukiwaniu w sieci; pozostałe zapisano z pamięci
-   o tej palecie i nie potwierdzono w oficjalnym źródle w trakcie tej pracy.
-   Nie używamy logo ani nazw handlowych poza opisową nazwą schematu.
+   palecie bazowej Material Design 3, systemu projektowego Google:
+   powierzchnia #141218 (Neutral6), tekst na powierzchni #e6e0e9 (Neutral90),
+   kolor główny #d0bcff (Primary80), tekst na kolorze głównym #381e72 (Primary20),
+   kontur #938f99 (NeutralVariant60), kolor trzeciorzędny #efb8c8 (Tertiary80)
+   i kolor błędu #f2b8b5 (Error80). Wszystkie te wartości sprawdzono w oficjalnym
+   kodzie źródłowym Material 3 w AndroidX, w plikach `ColorDarkTokens.kt` i
+   `PaletteTokens.kt` (katalog `compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/tokens`,
+   gałąź androidx-main, repozytorium https://android.googlesource.com/platform/frameworks/support
+   z lustrem na GitHubie). Kontrast tekstu do tła wynosi 14,35 do 1, a
+   obramowania 5,87 do 1. Nadal jest to przybliżenie wyglądu Gemini Notebook, a nie
+   jego kopia. Nie używamy logo ani nazw handlowych poza opisową nazwą schematu.
 4. Rozmiar czcionki: 100, 125, 150, 175 i 200 procent rozmiaru domyślnego.
    Rozmiar domyślny to 1,25 rem, czyli 20 pikseli przy zwykłym ustawieniu
    przeglądarki (wcześniej 1,125 rem). Wszystkie rozmiary i odstępy są w
    jednostkach względnych, więc powiększenie strony w przeglądarce działa
    dodatkowo; długie słowa łamią się, a lista zakładek zawija się, żeby przy
    powiększeniu nie trzeba było przewijać w poziomie.
-5. Krój pisma: systemowy (Segoe UI w Windows), Verdana, Tahoma, Arial i Calibri,
-   zawsze z awaryjnym krojem bez szeryfów. Kroju Atkinson Hyperlegible nie
-   dołączono; decyzja czeka na użytkownika (licencja i dołączenie pliku).
+5. Krój pisma: domyślnie Atkinson Hyperlegible, krój zaprojektowany dla osób
+   słabowidzących; na liście są też systemowy (Segoe UI w Windows), Verdana, Tahoma,
+   Arial i Calibri, zawsze z awaryjnym krojem bez szeryfów. Pochodzenie i licencja
+   kroju Atkinson Hyperlegible: czcionka Braille Institute of America, licencja
+   SIL Open Font License 1.1, bez zastrzeżonej nazwy kroju. Cztery pliki WOFF2
+   (Regular, Bold, Italic, BoldItalic) i pełny tekst licencji `OFL.txt` leżą
+   w `gnb/ui/czcionki/` i pochodzą z repozytorium
+   https://github.com/googlefonts/atkinson-hyperlegible, commit
+   1cb311624b2ddf88e9e37873999d165a8cd28b46 (katalog `fonts/webfonts`). Serwer
+   interfejsu wysyła je lokalnie pod adresem `/czcionki/NAZWA` (tylko cztery znane
+   nazwy), bez zewnętrznego CDN. Gdy plik kroju nie wczyta się, przeglądarka używa
+   kroju systemowego. To pliki danych, nie kod i nie biblioteki natywne, więc nie
+   dotyczy ich reguła doboru zależności pod kontrolą aplikacji Windows.
+   Zakładka „Wygląd” jest ostatnia, za zakładką „Serwer”; osoba słabowidząca
+   dochodzi do niej klawiszem End. Przycisk „Przywróć schemat domyślny” przy
+   kolorach własnych zostaje na początku strony, przed zakładkami.
 6. Cele kliknięcia mają co najmniej 2,75 rem (55 pikseli przy rozmiarze
    domyślnym), interlinia wynosi 1,6, a odstępy między polami i przyciskami są
    wyraźne.

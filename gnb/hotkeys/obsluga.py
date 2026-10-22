@@ -25,6 +25,7 @@ if sys.platform == "win32":
 
     from gnb.core.konfiguracja import Konfiguracja
     from gnb.core.postep import WywolanieZwrotnePostepu
+    from gnb.core.skrot import KombinacjaSkrotu, WynikZmianySkrotu, rozbierz_kombinacje
     from gnb.hotkeys import _automatyzacja, _dzwieki, _eksplorator, _schowek, _win32
     from gnb.hotkeys.kolejka import KolejkaSkrotu
     from gnb.hotkeys.model import InformacjeOOknie, RodzajWynikuKopiowania, TypDodania
@@ -72,7 +73,10 @@ if sys.platform == "win32":
             self._ostatni_komunikat = ostatni_komunikat
             self._szkic_tekstu = szkic_tekstu if szkic_tekstu is not None else SzkicTekstuSkrotu()
             self._kolejka = KolejkaSkrotu()
-            self._watek = _win32.WatekSkrotu(self._obsluz_nacisniecie)
+            self._watek = _win32.WatekSkrotu(
+                self._obsluz_nacisniecie,
+                rozbierz_kombinacje(konfiguracja.globalny_skrot_kombinacja),
+            )
             rejestr.dodaj_nasluch_zakonczenia(self._sprobuj_oproznic_kolejke)
 
         def uruchom(self) -> bool:
@@ -82,24 +86,61 @@ if sys.platform == "win32":
             z decyzją czwartą sekcji dwunastej CLAUDE.md.
             """
             udalo_sie = self._watek.uruchom()
+            zadana = self._konfiguracja.globalny_skrot_kombinacja
+            slowa = rozbierz_kombinacje(zadana).jako_slowa()
             if udalo_sie:
-                _LOG.info("Globalny skrót Control plus Shift plus F12 zarejestrowany.")
+                _LOG.info("Globalny skrót %s zarejestrowany.", slowa)
             elif self._watek.kod_bledu_rejestracji == _win32.ERROR_HOTKEY_ALREADY_REGISTERED:
                 _LOG.warning(
-                    "Nie udało się zarejestrować globalnego skrótu Control plus Shift "
-                    "plus F12: kombinacja jest już zajęta przez inny program. Jeżeli "
-                    "korzystasz z NVDA w układzie laptopowym albo przypisałeś własny "
-                    "gest do tej kombinacji, sprawdź to w oknie NVDA: Preferencje, "
-                    "Gesty wejściowe — programowo nie da się zajrzeć do gestów innego "
-                    "procesu."
+                    "Nie udało się zarejestrować globalnego skrótu %s: kombinacja jest już "
+                    "zajęta przez inny program. Wybierz inną kombinację na stronie ustawień, "
+                    "w zakładce Skrót klawiszowy. Jeżeli korzystasz z NVDA w układzie "
+                    "laptopowym albo przypisałeś własny gest do tej kombinacji, sprawdź to "
+                    "w oknie NVDA: Preferencje, Gesty wejściowe — programowo nie da się "
+                    "zajrzeć do gestów innego procesu.",
+                    slowa,
                 )
             else:
                 _LOG.warning(
-                    "Nie udało się zarejestrować globalnego skrótu Control plus Shift "
-                    "plus F12. Kod błędu Windows: %s.",
+                    "Nie udało się zarejestrować globalnego skrótu %s. Kod błędu Windows: %s.",
+                    slowa,
                     self._watek.kod_bledu_rejestracji,
                 )
             return udalo_sie
+
+        def kombinacja_dzialajaca(self) -> str | None:
+            """Napis kombinacji zarejestrowanej teraz albo ``None``, gdy żadna nie jest."""
+            aktualna = self._watek.aktualna_kombinacja
+            return aktualna.jako_napis() if aktualna is not None else None
+
+        def zmien_kombinacje(self, kombinacja: KombinacjaSkrotu) -> WynikZmianySkrotu:
+            """Rejestruje nową kombinację w działającym serwerze; przy odmowie zostaje stara.
+
+            Nowa kombinacja jest rejestrowana, zanim stara zostanie
+            wyrejestrowana, więc przy odmowie Windows nic się nie zmienia.
+            Komunikat wynikowy jest gotowy do pokazania użytkownikowi.
+            """
+            wynik = self._watek.zmien_kombinacje(kombinacja)
+            dziala = self.kombinacja_dzialajaca()
+            if wynik.udalo_sie:
+                _LOG.info("Zmieniono globalny skrót na %s.", kombinacja.jako_slowa())
+                return WynikZmianySkrotu(
+                    True, f"Nowy skrót działa od razu: {kombinacja.jako_slowa()}.", dziala
+                )
+            if wynik.kod_bledu == _win32.ERROR_HOTKEY_ALREADY_REGISTERED:
+                powod = "Kombinacja jest już zajęta przez inny program."
+            elif wynik.kod_bledu is not None:
+                powod = f"Windows odmówił rejestracji (kod błędu {wynik.kod_bledu})."
+            else:
+                powod = "Nie udało się zarejestrować kombinacji."
+            if dziala is not None:
+                slowa_dzialajacej = rozbierz_kombinacje(dziala).jako_slowa()
+                nadal = f"Nadal działa poprzednia kombinacja: {slowa_dzialajacej}."
+            else:
+                nadal = "Obecnie żadna kombinacja nie jest zarejestrowana."
+            komunikat = f"Nie zmieniono skrótu na {kombinacja.jako_slowa()}. {powod} {nadal}"
+            _LOG.warning(komunikat)
+            return WynikZmianySkrotu(False, komunikat, dziala)
 
         def ustaw_konfiguracje(self, konfiguracja: Konfiguracja) -> None:
             """Podmienia konfigurację po zapisie ze strony ustawień (przypisanie jest atomowe)."""
@@ -267,7 +308,10 @@ if sys.platform == "win32":
             się sprawdzić, i wtedy skrót działa jak dotąd, czyli bierze adres
             strony z paska adresu. Powód niepowodzenia trafia do ``uwagi``.
             """
-            wynik = _schowek.skopiuj_zaznaczenie()
+            biezaca = self._watek.aktualna_kombinacja or rozbierz_kombinacje(
+                self._konfiguracja.globalny_skrot_kombinacja
+            )
+            wynik = _schowek.skopiuj_zaznaczenie(biezaca)
             if wynik.uwaga:
                 uwagi.append(wynik.uwaga)
             if wynik.rodzaj is RodzajWynikuKopiowania.ZAZNACZONO:

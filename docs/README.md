@@ -1,4 +1,4 @@
-# Dokumentacja Gemini Notebook Builder — stan po etapie czternastym
+# Dokumentacja Gemini Notebook Builder — stan po etapie szesnastym
 
 Ten katalog zawiera dokumentację użytkową projektu, po polsku. Pełne zasady
 projektu, kontrakty danych i kolejność etapów opisuje `CLAUDE.md` w katalogu
@@ -32,7 +32,7 @@ Po etapie dwunastym, obok tego pliku, istnieje sześć dokumentów:
 5. `ACCESSIBILITY.md` — obsługa dostępnego interfejsu WWW z klawiatury i z NVDA,
    zachowanie regionów o roli „status”, dławienie komunikatów postępu, pola
    instrukcji systemowej i promptu wyszukiwania, wznowienie projektu oraz
-   globalny skrót klawiszowy Control plus Shift plus F12 z etapu jedenastego.
+   globalny skrót klawiszowy z etapu jedenastego (domyślnie Control plus Shift plus F12, kombinację zmienia się w ustawieniach).
 6. `TROUBLESHOOTING.md` — objaw, przyczyna i sposób postępowania dla problemów
    napotkanych w rzeczywistej pracy: blokady narzędzi deweloperskich i biblioteki
    PyAV przez kontrolę aplikacji Windows, błędów weryfikacji certyfikatu, pracy

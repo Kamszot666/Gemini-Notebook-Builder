@@ -22,6 +22,8 @@ from gnb.core.konfiguracja import (
     Konfiguracja,
     pola_konfiguracji,
 )
+from gnb.core.skrot import rozbierz_kombinacje, zbuduj_kombinacje
+from gnb.core.wyjatki import BladTrwaly
 from gnb.ui.wyglad import NAZWY_KROJOW, nazwy_schematow
 
 
@@ -37,6 +39,7 @@ class Rodzaj(StrEnum):
     LISTA = "lista"
     FORMATY = "formaty"
     TYLKO_ODCZYT = "tylko_odczyt"
+    SKROT = "skrot"
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +56,8 @@ class PoleUstawien:
     restart: bool = False
     # Nazwy opcji pokazywane użytkownikowi, gdy różnią się od wartości zapisywanych w pliku.
     nazwy_opcji: tuple[str, ...] = ()
+    # Zmiana działa od razu po zapisie, bez restartu i bez czekania na następny przebieg.
+    zmiana_od_razu: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,7 +87,17 @@ MODELE_TRANSKRYPCJI = ("tiny", "base", "small", "medium", "large-v3-turbo", "lar
 TYPY_OBLICZEN_PROCESORA = ("int8", "int8_float32", "float32")
 URZADZENIA_TRANSKRYPCJI = ("procesor",)
 
+# Nazwy kontrolek jednego pola kombinacji skrótu: cztery pola wyboru modyfikatorów
+# i lista klawisza. Pole konfiguracji ``globalny_skrot_kombinacja`` jest jedno,
+# a formularz wysyła je w pięciu częściach.
+PRZYROSTKI_MODYFIKATOROW_SKROTU = ("control", "alt", "shift", "windows")
+PRZYROSTEK_KLAWISZA_SKROTU = "klawisz"
+
 _NASTEPNY_PRZEBIEG = "Zmiana działa od następnego przebiegu."
+_OD_RAZU = (
+    "Zmiana działa od razu po zapisie, bez ponownego uruchamiania serwera, o ile Windows "
+    "przyjmie nową kombinację."
+)
 _PO_RESTARCIE = "Zmiana działa dopiero po ponownym uruchomieniu serwera."
 
 
@@ -554,7 +569,8 @@ ZAKLADKI: tuple[Zakladka, ...] = (
     Zakladka(
         "skrot",
         "Skrót klawiszowy",
-        "Globalny skrót Control plus Shift plus F12. Działa wyłącznie na Windows.",
+        "Globalny skrót klawiszowy dodaje do aktywnego projektu to, co jest otwarte w aktywnym "
+        "oknie. Domyślna kombinacja to Control plus Shift plus F12. Działa wyłącznie na Windows.",
         (
             _logiczne(
                 "globalny_skrot_wlaczony",
@@ -562,6 +578,18 @@ ZAKLADKI: tuple[Zakladka, ...] = (
                 "Na innym systemie niż Windows to ustawienie nie ma skutku. Aktywny projekt "
                 "skrótu wybierasz na stronie projektu albo na liście Projekt na stronie głównej.",
                 restart=True,
+            ),
+            PoleUstawien(
+                "globalny_skrot_kombinacja",
+                "Kombinacja skrótu",
+                "Zaznacz klawisze modyfikujące i wybierz klawisz z listy. Wymagany jest co "
+                "najmniej jeden modyfikator. Sam Shift z literą albo cyfrą jest niedozwolony. "
+                "Litera albo cyfra wymaga co najmniej dwóch modyfikatorów albo klawisza "
+                "Windows. Klawisze od F1 do F24 wystarczy połączyć z jednym modyfikatorem. "
+                "Jeśli Windows odmówi, bo kombinację zajmuje inny program, poprzednia "
+                "kombinacja zostaje.",
+                Rodzaj.SKROT,
+                zmiana_od_razu=True,
             ),
         ),
     ),
@@ -669,6 +697,8 @@ def pola_bez_zakladki() -> tuple[str, ...]:
 
 def opis_zmiany(pole: PoleUstawien) -> str:
     """Zdanie o tym, od kiedy działa zmiana tego pola."""
+    if pole.zmiana_od_razu:
+        return _OD_RAZU
     return _PO_RESTARCIE if pole.restart else _NASTEPNY_PRZEBIEG
 
 
@@ -684,6 +714,8 @@ def wartosc_slowami(pole: PoleUstawien, wartosc: object) -> str:
         return pole.nazwy_opcji[pole.opcje.index(str(wartosc))]
     if pole.rodzaj is Rodzaj.FORMATY:
         return "tak" if "md" in _jako_krotka(wartosc) else "nie"
+    if pole.rodzaj is Rodzaj.SKROT:
+        return rozbierz_kombinacje(str(wartosc)).jako_slowa()
     if isinstance(wartosc, (tuple, list)):
         return ", ".join(str(element) for element in wartosc) if wartosc else "puste"
     napis = str(wartosc)
@@ -732,6 +764,8 @@ def _odczytaj_pole(pole: PoleUstawien, formularz: Mapping[str, str]) -> object:
         return pole.nazwa in formularz
     if pole.rodzaj is Rodzaj.FORMATY:
         return ("txt", "md") if pole.nazwa in formularz else ("txt",)
+    if pole.rodzaj is Rodzaj.SKROT:
+        return _odczytaj_kombinacje(pole, formularz)
     if pole.rodzaj is Rodzaj.LICZBA:
         try:
             return int(surowa.strip())
@@ -762,3 +796,30 @@ def _odczytaj_pole(pole: PoleUstawien, formularz: Mapping[str, str]) -> object:
         elementy = [czesc.strip() for czesc in surowa.split(",")]
         return [element for element in elementy if element]
     return surowa.strip()
+
+
+def nazwa_kontrolki_skrotu(pole: PoleUstawien, przyrostek: str) -> str:
+    """Nazwa jednej z pięciu kontrolek pola kombinacji, na przykład ``..._control``."""
+    return f"{pole.nazwa}_{przyrostek}"
+
+
+def _odczytaj_kombinacje(pole: PoleUstawien, formularz: Mapping[str, str]) -> str:
+    """Składa kombinację z czterech pól wyboru i listy klawisza i sprawdza jej reguły."""
+    zaznaczone = {
+        przyrostek: nazwa_kontrolki_skrotu(pole, przyrostek) in formularz
+        for przyrostek in PRZYROSTKI_MODYFIKATOROW_SKROTU
+    }
+    klawisz = formularz.get(nazwa_kontrolki_skrotu(pole, PRZYROSTEK_KLAWISZA_SKROTU), "").strip()
+    if not klawisz:
+        raise BladWartosciUstawienia(pole.nazwa, "Wybierz klawisz z listy „Klawisz”.")
+    try:
+        kombinacja = zbuduj_kombinacje(
+            control=zaznaczone["control"],
+            alt=zaznaczone["alt"],
+            shift=zaznaczone["shift"],
+            windows=zaznaczone["windows"],
+            klawisz=klawisz,
+        )
+    except BladTrwaly as blad:
+        raise BladWartosciUstawienia(pole.nazwa, blad.komunikat) from blad
+    return kombinacja.jako_napis()

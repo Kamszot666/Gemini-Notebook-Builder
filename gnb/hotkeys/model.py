@@ -97,3 +97,15 @@ class WynikKopiowania:
     rodzaj: RodzajWynikuKopiowania
     tekst: str = ""
     uwaga: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class WynikRejestracji:
+    """Wynik próby zarejestrowania kombinacji skrótu w Windows.
+
+    ``kod_bledu`` to kod z ``GetLastError`` po odmowie; ``None`` oznacza
+    sukces albo brak kodu (na przykład wątek skrótu nie działa).
+    """
+
+    udalo_sie: bool
+    kod_bledu: int | None

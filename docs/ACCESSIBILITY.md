@@ -1,4 +1,4 @@
-# Dostępność interfejsu WWW — stan po etapie piętnastym, część F i naprawie po niej
+# Dostępność interfejsu WWW — stan po etapie szesnastym
 
 Ten dokument opisuje, jak obsługiwać interfejs Gemini Notebook Builder
 z klawiatury i z czytnikiem ekranu, oraz co interfejs ogłasza i jak często.
@@ -402,7 +402,7 @@ wczytaniu strony poza odświeżaniem regionu postępu.
 
 ## Globalny skrót klawiszowy
 
-Skrót Control plus Shift plus F12 działa wyłącznie na Windows i wyłącznie, gdy
+Skrót, domyślnie Control plus Shift plus F12, działa wyłącznie na Windows i wyłącznie, gdy
 uruchomiony jest serwer interfejsu poleceniem `python -m gnb.ui.server`. Nie
 uruchamia żadnego osobnego procesu w tle i nie działa jako autostart:
 rejestracja zachodzi przy starcie serwera, wyrejestrowanie przy jego
@@ -418,6 +418,25 @@ aktywnego projektu skrótu:
 3. W Eksploratorze Windows — zaznaczone pliki.
 4. W każdym innym programie, na pulpicie albo bez zaznaczenia w Eksploratorze —
    nic. Skrót wtedy gra dźwięk porażki i zapisuje czytelny powód.
+
+### Zmiana kombinacji skrótu
+
+Kombinację wybierasz na stronie ustawień, w zakładce „Skrót klawiszowy”. Pole
+„Kombinacja skrótu” to grupa z czterema polami wyboru: „Control”, „Alt”,
+„Shift” i „Windows”, oraz lista „Klawisz” z klawiszami od F1 do F24, literami
+od A do Z i cyframi od 0 do 9. Nie ma pola, w którym trzeba nacisnąć kombinację,
+bo NVDA przechwytuje część klawiszy. Czytnik ekranu odczyta nazwę grupy, potem
+każde pole wyboru z jego stanem, potem listę.
+
+Reguły: co najmniej jeden modyfikator; sam Shift z literą albo cyfrą jest
+niedozwolony; litera albo cyfra wymaga co najmniej dwóch modyfikatorów albo
+klawisza Windows; klawisze od F1 do F24 wystarczy połączyć z jednym
+modyfikatorem. Naruszenie reguły pokazuje błąd przy polu, w liście błędów na
+górze zakładki, z odnośnikiem do pola. Po zapisie zakładki fokus trafia na
+komunikat w regionie stanu, który mówi, jaka kombinacja działa teraz. Gdy
+Windows odmówi, bo kombinację zajmuje inny program, komunikat błędu mówi to
+wprost i podaje kombinację, która nadal działa; plik konfiguracji się wtedy nie
+zmienia. Nowa kombinacja działa od razu, bez restartu serwera.
 
 ### Aktywny projekt skrótu
 
@@ -482,9 +501,10 @@ Jeżeli schowek zawiera coś, czego nie da się bezpiecznie przywrócić, skrót
 niczego nie kopiuje, zachowuje się tak, jak gdyby nic nie zaznaczono, i mówi
 o tym w komunikacie.
 
-Przed kopiowaniem skrót czeka, aż puścisz klawisze skrótu. Dzięki temu do
-przeglądarki dociera samo Control plus C, a nie Control plus Shift plus C, które
-w Chrome otwiera narzędzia deweloperskie. Trzymaj więc klawisze krótko.
+Przed kopiowaniem skrót czeka, aż puścisz klawisze wybranej kombinacji. Dzięki
+temu do przeglądarki dociera samo Control plus C, a nie na przykład Control plus
+Shift plus C, które w Chrome otwiera narzędzia deweloperskie. Trzymaj więc
+klawisze krótko.
 
 Co skrót zrobi z zaznaczeniem:
 

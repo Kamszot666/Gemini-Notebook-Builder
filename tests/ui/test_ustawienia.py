@@ -17,6 +17,7 @@ from urllib.parse import urlencode
 import pytest
 
 from gnb.core.konfiguracja import Konfiguracja, pola_konfiguracji, wczytaj_konfiguracje
+from gnb.core.skrot import KombinacjaSkrotu, WynikZmianySkrotu, rozbierz_kombinacje
 from gnb.ui import widoki_ustawien
 from gnb.ui.serwer import zbuduj_serwer
 from gnb.ui.ustawienia import (
@@ -157,6 +158,14 @@ def test_kazde_pole_ma_dokladnie_jedna_kontrolke_z_etykieta_i_opisem() -> None:
             identyfikator = f"pole-{pole.nazwa}"
             if pole.rodzaj is Rodzaj.TYLKO_ODCZYT:
                 assert f'id="{identyfikator}-opis"' in strona
+                continue
+            if pole.rodzaj is Rodzaj.SKROT:
+                # Pole kombinacji ma fieldset z opisem i pięć kontrolek z własnymi etykietami.
+                assert strona.count(f'id="{identyfikator}"') == 1, pole.nazwa
+                assert f'aria-describedby="{identyfikator}-opis"' in strona, pole.nazwa
+                for przyrostek in ("control", "alt", "shift", "windows", "klawisz"):
+                    assert strona.count(f'for="{identyfikator}-{przyrostek}"') == 1, przyrostek
+                    assert strona.count(f'id="{identyfikator}-{przyrostek}"') == 1, przyrostek
                 continue
             assert strona.count(f'for="{identyfikator}"') == 1, pole.nazwa
             assert strona.count(f'id="{identyfikator}"') == 1, pole.nazwa
@@ -349,6 +358,15 @@ def srodowisko(tmp_path: Path) -> Iterator[tuple[_Klient, Path, RejestrZadan, ob
         instancja.server_close()
 
 
+def _pola_kombinacji(napis: str) -> dict[str, str]:
+    """Pola, które przeglądarka wysłałaby dla czterech pól wyboru i listy Klawisz."""
+    *modyfikatory, klawisz = napis.split("+")
+    pola = {"globalny_skrot_kombinacja_klawisz": klawisz}
+    for modyfikator in modyfikatory:
+        pola[f"globalny_skrot_kombinacja_{modyfikator.lower()}"] = "1"
+    return pola
+
+
 def _formularz_zakladki(identyfikator: str, **nadpisania: str) -> dict[str, str]:
     """Wartości zakładki takie, jakie przeglądarka wysłałaby bez zmian, z nadpisaniami."""
     konfiguracja = wczytaj_konfiguracje(None or Path("brak.toml"), srodowisko={})
@@ -358,6 +376,9 @@ def _formularz_zakladki(identyfikator: str, **nadpisania: str) -> dict[str, str]
     for pole in zakladka.pola:
         wartosc = getattr(konfiguracja, pole.nazwa)
         if pole.rodzaj is Rodzaj.TYLKO_ODCZYT:
+            continue
+        if pole.rodzaj is Rodzaj.SKROT:
+            pola.update(_pola_kombinacji(str(wartosc)))
             continue
         if pole.rodzaj is Rodzaj.LOGICZNE:
             if wartosc:
@@ -909,3 +930,255 @@ def test_serwer_nie_wysyla_niczego_poza_czterema_plikami_kroju(
     assert not tresc.startswith("wOF2")
     assert "from __future__" not in tresc
     assert "SIL OPEN FONT LICENSE" not in tresc
+
+
+# --- kombinacja globalnego skrótu --------------------------------------------
+
+
+class _FalszywaObslugaSkrotu:
+    """Zastępuje ``ObslugaSkrotu``: Windows przyjmuje albo odrzuca zadane kombinacje."""
+
+    def __init__(self, odrzucane: frozenset[str] = frozenset()) -> None:
+        self.dziala = "Control+Shift+F12"
+        self.odrzucane = odrzucane
+        self.proby: list[str] = []
+
+    def kombinacja_dzialajaca(self) -> str | None:
+        return self.dziala
+
+    def zmien_kombinacje(self, kombinacja: KombinacjaSkrotu) -> WynikZmianySkrotu:
+        napis = kombinacja.jako_napis()
+        self.proby.append(napis)
+        if napis in self.odrzucane:
+            return WynikZmianySkrotu(
+                False,
+                f"Nie zmieniono skrótu na {kombinacja.jako_slowa()}. Kombinacja jest już zajęta "
+                "przez inny program. Nadal działa poprzednia kombinacja: "
+                f"{rozbierz_kombinacje(self.dziala).jako_slowa()}.",
+                self.dziala,
+            )
+        self.dziala = napis
+        return WynikZmianySkrotu(True, "Nowy skrót działa od razu.", napis)
+
+    def ustaw_konfiguracje(self, konfiguracja: Konfiguracja) -> None:
+        pass
+
+    def zatrzymaj(self) -> None:
+        pass
+
+
+def _formularz_skrotu(napis: str) -> dict[str, str]:
+    formularz = {"zakladka": "skrot", "globalny_skrot_wlaczony": "1"}
+    formularz.update(_pola_kombinacji(napis))
+    return formularz
+
+
+def test_odczyt_zakladki_skrotu_sklada_kombinacje_z_pol_wyboru_i_listy() -> None:
+    zakladka = zakladka_o_identyfikatorze("skrot")
+    assert zakladka is not None
+
+    wartosci, bledy = odczytaj_zakladke(zakladka, _formularz_skrotu("Alt+Control+F11"), frozenset())
+
+    assert bledy == []
+    assert wartosci["globalny_skrot_kombinacja"] == "Control+Alt+F11"
+
+
+@pytest.mark.parametrize(
+    ("napis", "fragment"),
+    [
+        ("Shift+Q", "Sam Shift"),
+        ("Control+C", "co najmniej dwóch modyfikatorów"),
+    ],
+)
+def test_odczyt_zakladki_skrotu_zglasza_niedozwolone_kombinacje(napis: str, fragment: str) -> None:
+    zakladka = zakladka_o_identyfikatorze("skrot")
+    assert zakladka is not None
+
+    _wartosci, bledy = odczytaj_zakladke(zakladka, _formularz_skrotu(napis), frozenset())
+
+    assert [blad.pole for blad in bledy] == ["globalny_skrot_kombinacja"]
+    assert fragment in bledy[0].komunikat
+
+
+def test_odczyt_zakladki_skrotu_bez_modyfikatora_i_bez_klawisza() -> None:
+    zakladka = zakladka_o_identyfikatorze("skrot")
+    assert zakladka is not None
+
+    _w, bez_modyfikatora = odczytaj_zakladke(
+        zakladka,
+        {"zakladka": "skrot", "globalny_skrot_kombinacja_klawisz": "F12"},
+        frozenset(),
+    )
+    _w, bez_klawisza = odczytaj_zakladke(
+        zakladka, {"zakladka": "skrot", "globalny_skrot_kombinacja_control": "1"}, frozenset()
+    )
+
+    assert "co najmniej jeden klawisz modyfikujący" in bez_modyfikatora[0].komunikat
+    assert "Wybierz klawisz" in bez_klawisza[0].komunikat
+
+
+def test_strona_pokazuje_biezaca_kombinacje_w_polach_wyboru_i_na_liscie() -> None:
+    strona = _strona(konfiguracja=Konfiguracja(globalny_skrot_kombinacja="Control+Alt+F11"))
+
+    prefiks = r'<input type="checkbox" id="pole-globalny_skrot_kombinacja-'
+    assert re.search(prefiks + r'control"[^>]* checked', strona)
+    assert re.search(prefiks + r'alt"[^>]* checked', strona)
+    assert not re.search(prefiks + r'shift"[^>]* checked', strona)
+    assert not re.search(prefiks + r'windows"[^>]* checked', strona)
+    assert '<option value="F11" selected>F11</option>' in strona
+    assert "Wartość domyślna: Control plus Shift plus F12." in strona
+    assert "Zmiana działa od razu po zapisie" in strona
+
+
+def test_pole_kombinacji_ze_zmiennej_srodowiskowej_jest_tylko_do_odczytu() -> None:
+    strona = _strona(
+        konfiguracja=Konfiguracja(globalny_skrot_kombinacja="Control+Alt+F11"),
+        zablokowane={
+            "globalny_skrot_kombinacja": ("GNB_GLOBALNY_SKROT_KOMBINACJA", "Control+Alt+F11")
+        },
+    )
+
+    assert 'name="globalny_skrot_kombinacja_control"' not in strona
+    assert "GNB_GLOBALNY_SKROT_KOMBINACJA" in strona
+    assert "Kombinacja skrótu: Control plus Alt plus F11" in strona
+
+
+def test_zapis_nowej_kombinacji_dziala_od_razu_i_zostaje_w_pliku(
+    srodowisko: tuple[_Klient, Path, RejestrZadan, object],
+) -> None:
+    klient, plik, _rejestr, instancja = srodowisko
+    falszywa = _FalszywaObslugaSkrotu()
+    instancja.obsluga_skrotu = falszywa  # type: ignore[attr-defined]
+
+    odpowiedz, _ = klient.post("/ustawienia/zapisz", _formularz_skrotu("Control+Alt+F11"))
+
+    assert odpowiedz.status == 303
+    assert falszywa.proby == ["Control+Alt+F11"]
+    assert 'globalny_skrot_kombinacja = "Control+Alt+F11"' in plik.read_text(encoding="utf-8")
+    zapisana = wczytaj_konfiguracje(plik, srodowisko={})
+    assert zapisana.globalny_skrot_kombinacja == "Control+Alt+F11"
+    _, strona = klient.get(odpowiedz.getheader("Location") or "")
+    assert "Działa kombinacja: Control plus Alt plus F11." in strona
+
+
+def test_odmowa_windows_zostawia_stara_kombinacje_i_nie_zapisuje_pliku(
+    srodowisko: tuple[_Klient, Path, RejestrZadan, object],
+) -> None:
+    klient, plik, _rejestr, instancja = srodowisko
+    falszywa = _FalszywaObslugaSkrotu(odrzucane=frozenset({"Control+Alt+F11"}))
+    instancja.obsluga_skrotu = falszywa  # type: ignore[attr-defined]
+    przed = plik.read_text(encoding="utf-8")
+
+    odpowiedz, strona = klient.post("/ustawienia/zapisz", _formularz_skrotu("Control+Alt+F11"))
+
+    assert odpowiedz.status == 400
+    assert plik.read_text(encoding="utf-8") == przed
+    assert "globalny_skrot_kombinacja" not in przed
+    assert "Nie zmieniono skrótu na Control plus Alt plus F11" in strona
+    assert "Nadal działa poprzednia kombinacja: Control plus Shift plus F12." in strona
+    assert 'href="#pole-globalny_skrot_kombinacja"' in strona
+    assert falszywa.dziala == "Control+Shift+F12"
+    # Strona pokazuje zapisaną kombinację, a nie odrzuconą.
+    assert re.search(r'id="pole-globalny_skrot_kombinacja-shift"[^>]* checked', strona)
+    assert '<option value="F12" selected>F12</option>' in strona
+
+
+def test_niedozwolona_kombinacja_nie_dociera_do_windows_ani_do_pliku(
+    srodowisko: tuple[_Klient, Path, RejestrZadan, object],
+) -> None:
+    klient, plik, _rejestr, instancja = srodowisko
+    falszywa = _FalszywaObslugaSkrotu()
+    instancja.obsluga_skrotu = falszywa  # type: ignore[attr-defined]
+    przed = plik.read_text(encoding="utf-8")
+
+    odpowiedz, strona = klient.post("/ustawienia/zapisz", _formularz_skrotu("Control+C"))
+
+    assert odpowiedz.status == 400
+    assert falszywa.proby == []
+    assert plik.read_text(encoding="utf-8") == przed
+    assert "co najmniej dwóch modyfikatorów" in strona
+
+
+def test_przywrocenie_domyslnej_rejestruje_domyslna_kombinacje_i_usuwa_klucz(
+    srodowisko: tuple[_Klient, Path, RejestrZadan, object],
+) -> None:
+    klient, plik, _rejestr, instancja = srodowisko
+    falszywa = _FalszywaObslugaSkrotu()
+    instancja.obsluga_skrotu = falszywa  # type: ignore[attr-defined]
+    klient.post("/ustawienia/zapisz", _formularz_skrotu("Control+Alt+F11"))
+
+    odpowiedz, _ = klient.post("/ustawienia/przywroc", {"zakladka": "skrot"})
+
+    assert odpowiedz.status == 303
+    assert falszywa.proby == ["Control+Alt+F11", "Control+Shift+F12"]
+    assert "globalny_skrot_kombinacja" not in plik.read_text(encoding="utf-8")
+
+
+def test_odmowa_przy_przywracaniu_domyslnej_zostawia_plik_i_dzialajaca_kombinacje(
+    srodowisko: tuple[_Klient, Path, RejestrZadan, object],
+) -> None:
+    klient, plik, _rejestr, instancja = srodowisko
+    falszywa = _FalszywaObslugaSkrotu()
+    instancja.obsluga_skrotu = falszywa  # type: ignore[attr-defined]
+    klient.post("/ustawienia/zapisz", _formularz_skrotu("Control+Alt+F11"))
+    falszywa.odrzucane = frozenset({"Control+Shift+F12"})
+    przed = plik.read_text(encoding="utf-8")
+
+    odpowiedz, strona = klient.post("/ustawienia/przywroc", {"zakladka": "skrot"})
+
+    assert odpowiedz.status == 400
+    assert plik.read_text(encoding="utf-8") == przed
+    assert falszywa.dziala == "Control+Alt+F11"
+    assert "Nadal działa poprzednia kombinacja: Control plus Alt plus F11." in strona
+
+
+def test_zapis_bez_zmiany_kombinacji_nie_dotyka_windows(
+    srodowisko: tuple[_Klient, Path, RejestrZadan, object],
+) -> None:
+    """Zmiana innego pola tej samej zakładki nie może zależeć od ponownej rejestracji."""
+    klient, _plik, _rejestr, instancja = srodowisko
+    falszywa = _FalszywaObslugaSkrotu(odrzucane=frozenset({"Control+Shift+F12"}))
+    instancja.obsluga_skrotu = falszywa  # type: ignore[attr-defined]
+
+    odpowiedz, _ = klient.post("/ustawienia/zapisz", _formularz_skrotu("Control+Shift+F12"))
+
+    assert odpowiedz.status == 303
+    assert falszywa.proby == []
+
+
+def test_nieudany_zapis_pliku_wraca_do_poprzedniej_kombinacji(
+    srodowisko: tuple[_Klient, Path, RejestrZadan, object],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from gnb.core.wyjatki import BladTrwaly
+    from gnb.ui import serwer
+
+    klient, plik, _rejestr, instancja = srodowisko
+    falszywa = _FalszywaObslugaSkrotu()
+    instancja.obsluga_skrotu = falszywa  # type: ignore[attr-defined]
+
+    def zepsuty_zapis(*_argumenty: object, **_nazwane: object) -> None:
+        raise BladTrwaly("Nie udało się zapisać pliku konfiguracji.")
+
+    monkeypatch.setattr(serwer, "zapisz_ustawienia", zepsuty_zapis)
+    przed = plik.read_text(encoding="utf-8")
+
+    odpowiedz, _ = klient.post("/ustawienia/zapisz", _formularz_skrotu("Control+Alt+F11"))
+
+    assert odpowiedz.status == 400
+    assert plik.read_text(encoding="utf-8") == przed
+    assert falszywa.proby == ["Control+Alt+F11", "Control+Shift+F12"]
+    assert falszywa.dziala == "Control+Shift+F12"
+
+
+def test_bez_dzialajacego_skrotu_kombinacja_trafia_do_pliku_z_wyjasnieniem(
+    srodowisko: tuple[_Klient, Path, RejestrZadan, object],
+) -> None:
+    klient, plik, _rejestr, _instancja = srodowisko
+
+    odpowiedz, _ = klient.post("/ustawienia/zapisz", _formularz_skrotu("Control+Alt+F11"))
+
+    assert odpowiedz.status == 303
+    assert 'globalny_skrot_kombinacja = "Control+Alt+F11"' in plik.read_text(encoding="utf-8")
+    _, strona = klient.get(odpowiedz.getheader("Location") or "")
+    assert "zacznie działać po włączeniu skrótu i ponownym uruchomieniu serwera" in strona

@@ -93,6 +93,57 @@ def test_globalny_skrot_wlaczony_da_sie_wylaczyc_plikiem(tmp_path: Path) -> None
     assert konfiguracja.globalny_skrot_wlaczony is False
 
 
+def test_kombinacja_skrotu_jest_domyslnie_control_shift_f12(tmp_path: Path) -> None:
+    konfiguracja = wczytaj_konfiguracje(tmp_path / "nie_ma.toml", srodowisko={})
+
+    assert konfiguracja.globalny_skrot_kombinacja == "Control+Shift+F12"
+
+
+def test_kombinacja_skrotu_z_pliku_napisanego_recznie_jest_normalizowana(tmp_path: Path) -> None:
+    """Plik jest tekstem, jaki człowiek wpisałby w Notatniku, a nie wynikiem bieżącego kodu."""
+    plik = tmp_path / "konfiguracja.toml"
+    plik.write_text('globalny_skrot_kombinacja = "alt + ctrl + f11"\n', encoding="utf-8")
+
+    konfiguracja = wczytaj_konfiguracje(plik, srodowisko={})
+
+    assert konfiguracja.globalny_skrot_kombinacja == "Control+Alt+F11"
+
+
+def test_zmienna_srodowiskowa_kombinacji_skrotu_ma_pierwszenstwo_przed_plikiem(
+    tmp_path: Path,
+) -> None:
+    plik = tmp_path / "konfiguracja.toml"
+    plik.write_text('globalny_skrot_kombinacja = "Control+Alt+F11"\n', encoding="utf-8")
+
+    konfiguracja = wczytaj_konfiguracje(
+        plik, srodowisko={"GNB_GLOBALNY_SKROT_KOMBINACJA": "Windows+F5"}
+    )
+
+    assert konfiguracja.globalny_skrot_kombinacja == "Windows+F5"
+
+
+@pytest.mark.parametrize("napis", ["F12", "Shift+Q", "Control+C", "Control+Caps Lock", "Super+F1"])
+def test_niedozwolona_kombinacja_skrotu_w_pliku_daje_blad_trwaly_po_polsku(
+    tmp_path: Path, napis: str
+) -> None:
+    plik = tmp_path / "konfiguracja.toml"
+    plik.write_text(f'globalny_skrot_kombinacja = "{napis}"\n', encoding="utf-8")
+
+    with pytest.raises(BladTrwaly) as blad:
+        wczytaj_konfiguracje(plik, srodowisko={})
+
+    assert "globalny_skrot_kombinacja" in blad.value.komunikat
+
+
+def test_niedozwolona_kombinacja_skrotu_w_zmiennej_srodowiskowej_daje_blad_trwaly(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(BladTrwaly):
+        wczytaj_konfiguracje(
+            tmp_path / "nie_ma.toml", srodowisko={"GNB_GLOBALNY_SKROT_KOMBINACJA": "Control+C"}
+        )
+
+
 def test_zmienna_srodowiskowa_globalnego_skrotu_ma_pierwszenstwo(tmp_path: Path) -> None:
     plik = tmp_path / "konfiguracja.toml"
     plik.write_text("globalny_skrot_wlaczony = true\n", encoding="utf-8")

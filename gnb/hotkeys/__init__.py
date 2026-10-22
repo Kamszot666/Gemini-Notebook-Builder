@@ -1,9 +1,12 @@
-"""Globalny skrót klawiszowy Control plus Shift plus F12. Moduł wyłącznie dla Windows.
+"""Globalny skrót klawiszowy (domyślnie Control plus Shift plus F12). Moduł wyłącznie dla Windows.
 
 Skrót działa tylko wtedy, gdy działa serwer interfejsu, uruchomiony poleceniem
 ``python -m gnb.ui.server``: rejestracja zachodzi przy starcie serwera
 i kończy się przy jego zamknięciu. Nie powstaje żaden osobny proces w tle ani
 autostart, zgodnie z decyzją pierwszą sekcji dwunastej CLAUDE.md.
+
+Kombinacja pochodzi z konfiguracji (klucz ``globalny_skrot_kombinacja``) i da się ją zmienić
+w działającym serwerze na stronie ustawień.
 
 Naciśnięcie skrótu dodaje do aktywnego projektu to, co jest otwarte w aktywnym
 oknie: zaznaczony tekst albo adres bieżącej strony w Chrome albo Firefoksie,

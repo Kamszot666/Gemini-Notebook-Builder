@@ -1,4 +1,4 @@
-# Konfiguracja — stan po etapie piętnastym, część F i naprawie po niej
+# Konfiguracja — stan po etapie szesnastym
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
 obsługuje po etapie trzynastym. Z listy w sekcji jedenastej a pliku
@@ -457,8 +457,8 @@ Interfejs uruchamiasz poleceniem `python -m gnb.ui.server`.
    pliku złożonego w całości z adresów, bo to jawna lista źródeł, a jej wielkość
    ogranicza limit liczby źródeł notatnika.
 6. `globalny_skrot_wlaczony`, zmienna `GNB_GLOBALNY_SKROT_WLACZONY`. Włączenie
-   globalnego skrótu klawiszowego Control plus Shift plus F12 z etapu
-   jedenastego, część A. Domyślnie włączony. Skrót działa wyłącznie na Windows
+   globalnego skrótu klawiszowego z etapu jedenastego, część A (domyślna kombinacja to
+   Control plus Shift plus F12, patrz punkt 6a). Domyślnie włączony. Skrót działa wyłącznie na Windows
    i wyłącznie, gdy jest uruchomiony serwer interfejsu poleceniem `python -m
    gnb.ui.server`: rejestracja zachodzi przy jego starcie, wyrejestrowanie przy
    zamknięciu. Na systemie innym niż Windows to ustawienie nie ma żadnego
@@ -467,6 +467,26 @@ Interfejs uruchamiasz poleceniem `python -m gnb.ui.server`.
    albo Firefoksie, albo zaznaczone pliki w Eksploratorze Windows; szczegóły
    opisuje `docs/ACCESSIBILITY.md`, sekcja „Globalny skrót klawiszowy”.
    Aktywny projekt skrótu nie jest polem konfiguracji. Jest zapamiętywany w osobnym pliku stanu `stan_skrotu.json` w tym samym katalogu danych aplikacji co plik konfiguracji, nigdy w katalogu repozytorium ani w katalogu projektu.
+6a. `globalny_skrot_kombinacja`, zmienna `GNB_GLOBALNY_SKROT_KOMBINACJA`.
+   Kombinacja globalnego skrótu, zapisana jako jeden napis czytelny dla człowieka,
+   na przykład `Control+Shift+F12` albo `Control+Alt+F11`. Domyślnie
+   `Control+Shift+F12`. Modyfikatory to Control, Alt, Shift i Windows (przy
+   wczytywaniu przyjmowane są też `Ctrl` i `Win`, wielkość liter nie ma
+   znaczenia), klawisz to F1 do F24, litera od A do Z albo cyfra od 0 do 9. Bez
+   Caps Lock, Insert i Num Lock. Reguły, te same w pliku, w zmiennej
+   środowiskowej i w formularzu: co najmniej jeden modyfikator; sam Shift z
+   literą albo cyfrą jest niedozwolony; litera albo cyfra wymaga co najmniej
+   dwóch modyfikatorów albo klawisza Windows; klawisze F1 do F24 wystarczy
+   połączyć z jednym modyfikatorem. Niepoprawna wartość kończy się błędem
+   trwałym z komunikatem po polsku. Na stronie ustawień, w zakładce „Skrót
+   klawiszowy”, kombinację wybiera się czterema polami wyboru i listą „Klawisz”.
+   Zmiana działa od razu po zapisie, bez restartu serwera: aplikacja rejestruje
+   nową kombinację w Windows, zanim zapisze plik, a gdy Windows odmówi, bo
+   kombinację zajmuje inny program, poprzednia zostaje, plik się nie zmienia,
+   a komunikat podaje kombinację, która nadal działa. Gdy skrót jest wyłączony
+   albo serwer działa poza Windows, kombinacja jest tylko zapisywana i zacznie
+   działać po włączeniu skrótu i ponownym uruchomieniu serwera. Pole ustawione
+   zmienną środowiskową jest tylko do odczytu.
 
 ## Pamięć podręczna pobranych stron
 

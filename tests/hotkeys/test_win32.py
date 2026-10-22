@@ -19,6 +19,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 if sys.platform == "win32":
+    from gnb.core.skrot import DOMYSLNA_KOMBINACJA, rozbierz_kombinacje
     from gnb.hotkeys import _win32
 
 
@@ -31,7 +32,7 @@ def test_watek_skrotu_rejestruje_i_wyrejestrowuje_skrot() -> None:
     tego testu.
     """
     nacisniecia: list[None] = []
-    watek = _win32.WatekSkrotu(lambda: nacisniecia.append(None))
+    watek = _win32.WatekSkrotu(lambda: nacisniecia.append(None), DOMYSLNA_KOMBINACJA)
     try:
         udalo_sie = watek.uruchom()
         if not udalo_sie:
@@ -46,7 +47,7 @@ def test_watek_skrotu_rejestruje_i_wyrejestrowuje_skrot() -> None:
 
     # Wyrejestrowanie faktycznie zaszło: druga rejestracja tej samej kombinacji
     # przez nowy wątek musi się teraz powiodać, bo pierwszy wątek już się skończył.
-    drugi_watek = _win32.WatekSkrotu(lambda: None)
+    drugi_watek = _win32.WatekSkrotu(lambda: None, DOMYSLNA_KOMBINACJA)
     try:
         assert drugi_watek.uruchom() is True
     finally:
@@ -63,3 +64,82 @@ def test_informacje_o_aktywnym_oknie_zwracaja_dodatnie_wartosci() -> None:
     assert isinstance(informacje.nazwa_klasy, str)
     assert isinstance(informacje.nazwa_procesu, str)
     assert informacje.nazwa_procesu == informacje.nazwa_procesu.lower()
+
+
+# Kombinacje z klawiszami F21 i F22 prawie nigdy nie są zajęte przez inne programy,
+# więc testy zmiany kombinacji nie zależą od tego, czy działa serwer interfejsu.
+_KOMBINACJA_A = "Control+Alt+Shift+F21"
+_KOMBINACJA_B = "Control+Alt+Shift+F22"
+
+
+def _uruchom_albo_pomin(kombinacja: str) -> _win32.WatekSkrotu:
+    watek = _win32.WatekSkrotu(lambda: None, rozbierz_kombinacje(kombinacja))
+    if not watek.uruchom():
+        watek.zatrzymaj()
+        pytest.skip(f"Kombinacja {kombinacja} jest zajęta w tym środowisku.")
+    return watek
+
+
+def test_zmiana_kombinacji_rejestruje_nowa_i_zwalnia_stara() -> None:
+    watek = _uruchom_albo_pomin(_KOMBINACJA_A)
+    try:
+        wynik = watek.zmien_kombinacje(rozbierz_kombinacje(_KOMBINACJA_B))
+
+        assert wynik.udalo_sie is True
+        assert watek.aktualna_kombinacja == rozbierz_kombinacje(_KOMBINACJA_B)
+        # Stara kombinacja jest wolna: inny wątek może ją teraz zarejestrować.
+        obcy = _uruchom_albo_pomin(_KOMBINACJA_A)
+        obcy.zatrzymaj()
+    finally:
+        watek.zatrzymaj()
+
+
+def test_odmowa_przy_zmianie_kombinacji_zostawia_poprzednia_zarejestrowana() -> None:
+    zajmujacy = _uruchom_albo_pomin(_KOMBINACJA_B)
+    watek = _uruchom_albo_pomin(_KOMBINACJA_A)
+    try:
+        wynik = watek.zmien_kombinacje(rozbierz_kombinacje(_KOMBINACJA_B))
+
+        assert wynik.udalo_sie is False
+        assert wynik.kod_bledu == _win32.ERROR_HOTKEY_ALREADY_REGISTERED
+        assert watek.aktualna_kombinacja == rozbierz_kombinacje(_KOMBINACJA_A)
+        # Poprzednia kombinacja nadal jest zajęta przez ten wątek: ktoś inny jej nie dostanie.
+        proba = _win32.WatekSkrotu(lambda: None, rozbierz_kombinacje(_KOMBINACJA_A))
+        try:
+            assert proba.uruchom() is False
+        finally:
+            proba.zatrzymaj()
+    finally:
+        watek.zatrzymaj()
+        zajmujacy.zatrzymaj()
+
+
+def test_watek_z_nieudana_pierwsza_rejestracja_przyjmuje_inna_kombinacje() -> None:
+    zajmujacy = _uruchom_albo_pomin(_KOMBINACJA_B)
+    watek = _win32.WatekSkrotu(lambda: None, rozbierz_kombinacje(_KOMBINACJA_B))
+    try:
+        assert watek.uruchom() is False
+        assert watek.aktualna_kombinacja is None
+
+        wynik = watek.zmien_kombinacje(rozbierz_kombinacje(_KOMBINACJA_A))
+
+        assert wynik.udalo_sie is True
+        assert watek.zarejestrowano is True
+    finally:
+        watek.zatrzymaj()
+        zajmujacy.zatrzymaj()
+
+
+def test_zmiana_na_ta_sama_kombinacje_jest_sukcesem_bez_ponownej_rejestracji() -> None:
+    watek = _uruchom_albo_pomin(_KOMBINACJA_A)
+    try:
+        assert watek.zmien_kombinacje(rozbierz_kombinacje(_KOMBINACJA_A)).udalo_sie is True
+    finally:
+        watek.zatrzymaj()
+
+
+def test_zmiana_kombinacji_po_zatrzymaniu_watku_zwraca_porazke() -> None:
+    watek = _uruchom_albo_pomin(_KOMBINACJA_A)
+    watek.zatrzymaj()
+
+    assert watek.zmien_kombinacje(rozbierz_kombinacje(_KOMBINACJA_B)).udalo_sie is False

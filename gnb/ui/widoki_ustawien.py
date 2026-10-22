@@ -17,12 +17,15 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from gnb.core.konfiguracja import SCHEMAT_KOLOROW_WLASNY, Konfiguracja
+from gnb.core.skrot import KLAWISZE_SKROTU, rozbierz_kombinacje
 from gnb.ui.html import escapuj
 from gnb.ui.ustawienia import (
+    PRZYROSTEK_KLAWISZA_SKROTU,
     ZAKLADKI,
     PoleUstawien,
     Rodzaj,
     Zakladka,
+    nazwa_kontrolki_skrotu,
     opis_zmiany,
     wartosc_do_pola_formularza,
     wartosc_domyslna_slowami,
@@ -61,6 +64,8 @@ _STYL_USTAWIEN = """
 .pole-wyboru input { width: 1.5rem; height: 1.5rem; margin-top: 0.3rem; flex: none; }
 .pole-wyboru label { margin-top: 0; }
 input[type="number"], select { max-width: 20rem; }
+fieldset { margin: 1.25rem 0 0; padding: 0.75rem 1rem; border: 2px solid var(--ramka); }
+legend { font-weight: 600; padding: 0 0.5rem; }
 .przyciski-zakladki { display: flex; flex-wrap: wrap; gap: 0.75rem; }
 .wartosc-stala { margin: 1.25rem 0 0; font-weight: 600; }
 """.strip()
@@ -311,6 +316,9 @@ def _pole(
     opisany = f' aria-describedby="{escapuj(" ".join(opisy))}"{atrybut_bledu}'
     opis = f'<p class="pomoc" id="{opis_id}">{escapuj(_opis(pole, zablokowane=False))}</p>'
 
+    if pole.rodzaj is Rodzaj.SKROT:
+        return _pole_skrotu(pole, aktualna, wpisane, opisany, opis, komunikat_bledu)
+
     if pole.rodzaj in (Rodzaj.LOGICZNE, Rodzaj.FORMATY):
         if wpisane:
             zaznaczone = pole.nazwa in wpisane
@@ -351,3 +359,67 @@ def _pole(
             f'value="{escapuj(wartosc)}"{opisany}>'
         )
     return f"{etykieta}\n{kontrolka}\n{opis}{komunikat_bledu}"
+
+
+_ETYKIETY_MODYFIKATOROW_SKROTU = (
+    ("control", "Control"),
+    ("alt", "Alt"),
+    ("shift", "Shift"),
+    ("windows", "Windows"),
+)
+
+
+def _pole_skrotu(
+    pole: PoleUstawien,
+    aktualna: str,
+    wpisane: Mapping[str, str],
+    opisany: str,
+    opis: str,
+    komunikat_bledu: str,
+) -> str:
+    """Pole kombinacji skrótu: cztery pola wyboru modyfikatorów i lista „Klawisz”.
+
+    Brak pola przechwytującego naciśnięcie, bo NVDA przechwytuje część
+    klawiszy. Każda kontrolka ma zwykłą etykietę ``label for``. Całość leży
+    w ``fieldset`` z ``legend``, a opis pola jest przypięty do ``fieldset``.
+    """
+    identyfikator = f"pole-{escapuj(pole.nazwa)}"
+    kombinacja = rozbierz_kombinacje(aktualna)
+    wybrane = {
+        "control": kombinacja.control,
+        "alt": kombinacja.alt,
+        "shift": kombinacja.shift,
+        "windows": kombinacja.windows,
+    }
+    klawisz = kombinacja.klawisz
+    if wpisane:
+        wybrane = {
+            przyrostek: nazwa_kontrolki_skrotu(pole, przyrostek) in wpisane
+            for przyrostek in wybrane
+        }
+        klawisz = wpisane.get(nazwa_kontrolki_skrotu(pole, PRZYROSTEK_KLAWISZA_SKROTU), "")
+    pola_wyboru = "\n".join(
+        f'<div class="pole-wyboru"><input type="checkbox" '
+        f'id="{identyfikator}-{przyrostek}" '
+        f'name="{escapuj(nazwa_kontrolki_skrotu(pole, przyrostek))}" value="1"'
+        f"{' checked' if wybrane[przyrostek] else ''}>"
+        f'<label for="{identyfikator}-{przyrostek}">{etykieta}</label></div>'
+        for przyrostek, etykieta in _ETYKIETY_MODYFIKATOROW_SKROTU
+    )
+    identyfikator_klawisza = f"{identyfikator}-{PRZYROSTEK_KLAWISZA_SKROTU}"
+    pozycje = "\n".join(
+        f'<option value="{escapuj(nazwa)}"{" selected" if nazwa == klawisz else ""}>'
+        f"{escapuj(nazwa)}</option>"
+        for nazwa in KLAWISZE_SKROTU
+    )
+    nazwa_listy = escapuj(nazwa_kontrolki_skrotu(pole, PRZYROSTEK_KLAWISZA_SKROTU))
+    lista = (
+        f'<label for="{identyfikator_klawisza}">Klawisz</label>\n'
+        f'<select id="{identyfikator_klawisza}" name="{nazwa_listy}">\n'
+        f"{pozycje}\n</select>"
+    )
+    return (
+        f'<fieldset id="{identyfikator}" tabindex="-1"{opisany}>\n'
+        f"<legend>{escapuj(pole.etykieta)}</legend>\n{pola_wyboru}\n{lista}\n</fieldset>\n"
+        f"{opis}{komunikat_bledu}"
+    )

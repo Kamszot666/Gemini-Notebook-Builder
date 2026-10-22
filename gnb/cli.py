@@ -36,6 +36,7 @@ from pathlib import Path
 
 from gnb.core.konfiguracja import Konfiguracja, wczytaj_konfiguracje
 from gnb.core.postep import FazaPotoku, WywolanieZwrotnePostepu, ZdarzeniePostepu
+from gnb.core.skrot import rozbierz_kombinacje
 from gnb.core.wyjatki import BladGnb
 from gnb.ingestion.adresy_z_plikow import dolacz_adresy_znalezione, przyjmij_plik_z_adresami
 from gnb.ingestion.lista_url import (
@@ -377,8 +378,9 @@ def _wiersz_globalnego_skrotu() -> str:
             "Globalny skrót klawiszowy: włączony w konfiguracji, ale brakuje biblioteki "
             'comtypes. Zainstaluj zależności ponownie: pip install -e ".[dev]".'
         )
+    kombinacja = rozbierz_kombinacje(konfiguracja.globalny_skrot_kombinacja).jako_slowa()
     return (
-        "Globalny skrót klawiszowy: włączony (Control plus Shift plus F12). Rzeczywista "
+        f"Globalny skrót klawiszowy: włączony ({kombinacja}). Rzeczywista "
         "rejestracja zachodzi dopiero przy starcie serwera interfejsu poleceniem "
         "„python -m gnb.ui.server”, nie w tej diagnostyce."
     )

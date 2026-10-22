@@ -23,8 +23,14 @@ if sys.platform == "win32":
     from datetime import UTC, datetime
 
     from gnb.core.konfiguracja import Konfiguracja
+    from gnb.core.skrot import rozbierz_kombinacje
     from gnb.hotkeys import obsluga
-    from gnb.hotkeys.model import InformacjeOOknie, RodzajWynikuKopiowania, WynikKopiowania
+    from gnb.hotkeys.model import (
+        InformacjeOOknie,
+        RodzajWynikuKopiowania,
+        WynikKopiowania,
+        WynikRejestracji,
+    )
     from gnb.hotkeys.obsluga import ObslugaSkrotu
     from gnb.ingestion.wejscie import przyjmij_tekst
     from gnb.persistence.projekt import ustal_uklad
@@ -124,7 +130,7 @@ def _obsluga(
     )
     nic_nie_zaznaczono = WynikKopiowania(RodzajWynikuKopiowania.NIC_NIE_ZAZNACZONO)
 
-    def falszywe_kopiowanie() -> WynikKopiowania:
+    def falszywe_kopiowanie(_kombinacja: object) -> WynikKopiowania:
         if wywolania_schowka is not None:
             wywolania_schowka.append("kopiowanie")
         return wynik_kopiowania or nic_nie_zaznaczono
@@ -458,7 +464,9 @@ def test_kolejne_zaznaczenia_sa_dopisywane_na_koncu_szkicu(
     )
     aktywny.ustaw("Projekt A")
     instancja._obsluz_nacisniecie()
-    monkeypatch.setattr(obsluga._schowek, "skopiuj_zaznaczenie", lambda: _zaznaczono("Drugi."))
+    monkeypatch.setattr(
+        obsluga._schowek, "skopiuj_zaznaczenie", lambda _kombinacja: _zaznaczono("Drugi.")
+    )
 
     instancja._obsluz_nacisniecie()
 
@@ -578,3 +586,81 @@ def test_zbyt_dlugi_tekst_gra_porazke_i_nie_zmienia_szkicu(
 
     assert dzwieki == ["porazka"]
     assert instancja._szkic_tekstu.pobierz("Projekt A").tekst == ""
+
+
+class _FalszywyWatekSkrotu:
+    """Zastępuje wątek Win32: pamięta zarejestrowaną kombinację i odmawia wskazanych."""
+
+    def __init__(self, aktualna: str | None, odmawia: dict[str, int | None]) -> None:
+        self.aktualna_kombinacja = rozbierz_kombinacje(aktualna) if aktualna else None
+        self.odmawia = odmawia
+
+    def zmien_kombinacje(self, kombinacja: object) -> WynikRejestracji:
+        napis = kombinacja.jako_napis()  # type: ignore[attr-defined]
+        if napis in self.odmawia:
+            return WynikRejestracji(False, self.odmawia[napis])
+        self.aktualna_kombinacja = kombinacja  # type: ignore[assignment]
+        return WynikRejestracji(True, None)
+
+
+def test_zmiana_kombinacji_przyjeta_przez_windows_zwraca_sukces_i_nowa_kombinacje(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    instancja, *_ = _obsluga(monkeypatch, okno=None)
+    instancja._watek = _FalszywyWatekSkrotu("Control+Shift+F12", {})  # type: ignore[assignment]
+
+    wynik = instancja.zmien_kombinacje(rozbierz_kombinacje("Control+Alt+F11"))
+
+    assert wynik.udalo_sie is True
+    assert wynik.dziala_teraz == "Control+Alt+F11"
+    assert "Control plus Alt plus F11" in wynik.komunikat
+
+
+def test_odmowa_zajetej_kombinacji_podaje_powod_i_kombinacje_ktora_nadal_dziala(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    instancja, *_ = _obsluga(monkeypatch, okno=None)
+    instancja._watek = _FalszywyWatekSkrotu(  # type: ignore[assignment]
+        "Control+Shift+F12", {"Control+Alt+F11": obsluga._win32.ERROR_HOTKEY_ALREADY_REGISTERED}
+    )
+
+    wynik = instancja.zmien_kombinacje(rozbierz_kombinacje("Control+Alt+F11"))
+
+    assert wynik.udalo_sie is False
+    assert wynik.dziala_teraz == "Control+Shift+F12"
+    assert "zajęta przez inny program" in wynik.komunikat
+    assert "Nadal działa poprzednia kombinacja: Control plus Shift plus F12." in wynik.komunikat
+
+
+def test_odmowa_gdy_zadna_kombinacja_nie_jest_zarejestrowana_mowi_o_tym(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    instancja, *_ = _obsluga(monkeypatch, okno=None)
+    instancja._watek = _FalszywyWatekSkrotu(None, {"Control+Alt+F11": 5})  # type: ignore[assignment]
+
+    wynik = instancja.zmien_kombinacje(rozbierz_kombinacje("Control+Alt+F11"))
+
+    assert wynik.udalo_sie is False
+    assert wynik.dziala_teraz is None
+    assert "kod błędu 5" in wynik.komunikat
+    assert "żadna kombinacja nie jest zarejestrowana" in wynik.komunikat
+
+
+def test_kopiowanie_zaznaczenia_czeka_na_klawisze_biezacej_kombinacji(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    okno = _okno(nazwa_procesu="chrome", tytul="Strona")
+    instancja, _dzwieki, _komunikat, _rejestr, aktywny = _obsluga(monkeypatch, okno=okno)
+    aktywny.ustaw("Projekt A")
+    instancja._watek = _FalszywyWatekSkrotu("Control+Alt+F11", {})  # type: ignore[assignment]
+    przekazane: list[object] = []
+
+    def zapamietaj(kombinacja: object) -> WynikKopiowania:
+        przekazane.append(kombinacja)
+        return WynikKopiowania(RodzajWynikuKopiowania.NIC_NIE_ZAZNACZONO)
+
+    monkeypatch.setattr(obsluga._schowek, "skopiuj_zaznaczenie", zapamietaj)
+
+    instancja._obsluz_nacisniecie()
+
+    assert przekazane == [rozbierz_kombinacje("Control+Alt+F11")]

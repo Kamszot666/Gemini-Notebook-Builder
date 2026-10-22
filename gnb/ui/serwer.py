@@ -34,6 +34,12 @@ from gnb.core.konfiguracja import (
 )
 from gnb.core.nazwy import sanityzuj_nazwe_projektu
 from gnb.core.postep import WywolanieZwrotnePostepu
+from gnb.core.skrot import (
+    DOMYSLNA_KOMBINACJA_SKROTU,
+    KombinacjaSkrotu,
+    WynikZmianySkrotu,
+    rozbierz_kombinacje,
+)
 from gnb.core.wyjatki import BladGnb, BladTrwaly
 from gnb.core.zapis_konfiguracji import zapisz_ustawienia
 from gnb.ingestion.adresy_z_plikow import dolacz_adresy_znalezione, przyjmij_plik_z_adresami
@@ -252,6 +258,10 @@ class _ObslugaSkrotuLike(Protocol):
     def zatrzymaj(self) -> None: ...
 
     def ustaw_konfiguracje(self, konfiguracja: Konfiguracja) -> None: ...
+
+    def kombinacja_dzialajaca(self) -> str | None: ...
+
+    def zmien_kombinacje(self, kombinacja: KombinacjaSkrotu) -> WynikZmianySkrotu: ...
 
 
 def _uruchom_globalny_skrot(serwer: _Serwer) -> _ObslugaSkrotuLike | None:
@@ -943,6 +953,12 @@ class _Handler(BaseHTTPRequestHandler):
             komunikat = f"Przywrócono ustawienia domyślne zakładki {zakladka.tytul}."
         elif zakladka is not None and wynik == "schemat":
             komunikat = "Przywrócono schemat domyślny."
+        if (
+            komunikat
+            and zakladka is not None
+            and zakladka.identyfikator == IDENTYFIKATOR_ZAKLADKI_SKROTU
+        ):
+            komunikat = f"{komunikat} {self._opis_stanu_skrotu()}"
         sciezka = self._serwer.sciezka_konfiguracji
         ostrzezenie = ""
         try:
@@ -971,6 +987,45 @@ class _Handler(BaseHTTPRequestHandler):
             zakladka_z_bledami=zakladka_z_bledami,
         )
         self._wyslij_html(kod, html, token=token)
+
+    def _opis_stanu_skrotu(self) -> str:
+        """Zdanie o tym, jaka kombinacja skrótu działa w tej chwili w serwerze."""
+        obsluga = self._serwer.obsluga_skrotu
+        if obsluga is None:
+            return (
+                "Skrót nie jest teraz zarejestrowany, więc zapisana kombinacja zacznie działać "
+                "po włączeniu skrótu i ponownym uruchomieniu serwera."
+            )
+        dziala = obsluga.kombinacja_dzialajaca()
+        if dziala is None:
+            return "Obecnie żadna kombinacja skrótu nie jest zarejestrowana."
+        return f"Działa kombinacja: {rozbierz_kombinacje(dziala).jako_slowa()}."
+
+    def _nowa_kombinacja_skrotu(
+        self,
+        zakladka: Zakladka,
+        zmiany: dict[str, object],
+        zablokowane: frozenset[str],
+        *,
+        przywroc: bool,
+    ) -> KombinacjaSkrotu | None:
+        """Kombinacja, którą trzeba zarejestrować od razu, albo nic, gdy nie ma co zmieniać.
+
+        Zwraca nic, gdy zapis dotyczy innej zakładki, gdy kombinację blokuje
+        zmienna środowiskowa, gdy skrót nie działa w tym serwerze albo gdy
+        kombinacja jest taka sama jak ta, z którą serwer wystartował.
+        """
+        if (
+            zakladka.identyfikator != IDENTYFIKATOR_ZAKLADKI_SKROTU
+            or NAZWA_POLA_KOMBINACJI in zablokowane
+            or self._serwer.obsluga_skrotu is None
+        ):
+            return None
+        napis = DOMYSLNA_KOMBINACJA_SKROTU if przywroc else str(zmiany[NAZWA_POLA_KOMBINACJI])
+        nowa = rozbierz_kombinacje(napis)
+        if nowa.jako_napis() == self._konfiguracja.globalny_skrot_kombinacja:
+            return None
+        return nowa
 
     def _zapisz_ustawienia_zakladki(self, *, przywroc: bool) -> None:
         """Zapisuje pola jednej zakładki albo przywraca ich wartości domyślne.
@@ -1005,9 +1060,15 @@ class _Handler(BaseHTTPRequestHandler):
                     zakladka_z_bledami=zakladka.identyfikator,
                 )
                 return
+        nowa_kombinacja = self._nowa_kombinacja_skrotu(
+            zakladka, zmiany, zablokowane, przywroc=przywroc
+        )
+        odmowa: WynikZmianySkrotu | None = None
         try:
             with self._serwer.rejestr.wylacznie():
-                zapisz_ustawienia(self._serwer.sciezka_konfiguracji, zmiany, usuwane)
+                odmowa = self._zmien_kombinacje_przed_zapisem(nowa_kombinacja)
+                if odmowa is None:
+                    self._zapisz_z_wycofaniem_skrotu(zmiany, usuwane, nowa_kombinacja)
         except ZadanieJuzTrwa as blad:
             self._blad(409, "Inne przetwarzanie w toku", str(blad))
             return
@@ -1019,12 +1080,52 @@ class _Handler(BaseHTTPRequestHandler):
                 zakladka_z_bledami=zakladka.identyfikator,
             )
             return
+        if odmowa is not None:
+            # Windows odmówił, więc nic nie trafiło do pliku. Strona pokazuje
+            # zapisane wartości, bo wpisana kombinacja nie została przyjęta.
+            self._pokaz_ustawienia(
+                kod=400,
+                bledy=[BladPola(NAZWA_POLA_KOMBINACJI, odmowa.komunikat)],
+                zakladka_z_bledami=zakladka.identyfikator,
+            )
+            return
         self._zastosuj_ustawienia()
         wynik = "przywrocono" if przywroc else "zapisano"
         self._przekieruj(
             f"{widoki_ustawien.SCIEZKA_USTAWIEN}?zakladka={zakladka.identyfikator}"
             f"&wynik={wynik}#naglowek-{zakladka.identyfikator}"
         )
+
+    def _zmien_kombinacje_przed_zapisem(
+        self, nowa: KombinacjaSkrotu | None
+    ) -> WynikZmianySkrotu | None:
+        """Rejestruje nową kombinację, zanim cokolwiek trafi do pliku.
+
+        Zwraca wynik tylko przy odmowie Windows, a wtedy poprzednia kombinacja
+        nadal działa i plik zostaje nietknięty.
+        """
+        obsluga = self._serwer.obsluga_skrotu
+        if nowa is None or obsluga is None:
+            return None
+        wynik = obsluga.zmien_kombinacje(nowa)
+        return None if wynik.udalo_sie else wynik
+
+    def _zapisz_z_wycofaniem_skrotu(
+        self,
+        zmiany: dict[str, object],
+        usuwane: list[str],
+        nowa: KombinacjaSkrotu | None,
+    ) -> None:
+        """Zapisuje plik; gdy zapis się nie uda, wraca do poprzedniej kombinacji skrótu."""
+        try:
+            zapisz_ustawienia(self._serwer.sciezka_konfiguracji, zmiany, usuwane)
+        except BladTrwaly:
+            obsluga = self._serwer.obsluga_skrotu
+            if nowa is not None and obsluga is not None:
+                obsluga.zmien_kombinacje(
+                    rozbierz_kombinacje(self._konfiguracja.globalny_skrot_kombinacja)
+                )
+            raise
 
     def _przywroc_schemat_domyslny(self) -> None:
         """Usuwa z pliku wybór schematu kolorów, więc obowiązuje schemat domyślny.
@@ -1437,6 +1538,10 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(cialo)
+
+
+IDENTYFIKATOR_ZAKLADKI_SKROTU = "skrot"
+NAZWA_POLA_KOMBINACJI = "globalny_skrot_kombinacja"
 
 
 def _pola_do_zapisu(zakladka: Zakladka, zablokowane: frozenset[str]) -> list[str]:

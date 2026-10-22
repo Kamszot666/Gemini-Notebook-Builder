@@ -274,7 +274,7 @@ Te dwa pola są od siebie całkowicie niezależne i nie wpływają na przetwarza
 
 ## 12. Globalny skrót — ważna pułapka
 
-Domyślny skrót to Control plus Shift plus F12, rejestrowany przez `RegisterHotKey`. Kombinacja z Caps Lock wymaga niskopoziomowego haka klawiatury i jest tylko opcją, bo NVDA może przechwycić Caps Lock. Moduł `gnb/hotkeys/` jest opcjonalny i wyłącznie dla Windows. Nieudana rejestracja nigdy nie zatrzymuje aplikacji, a na serwerze modułu nie ma. Pełne uzasadnienie i wszystkie decyzje o zachowaniu skrótu są w `gnb/hotkeys/CLAUDE.md`. Przeczytaj go przed zmianą czegokolwiek związanego ze skrótem.
+Domyślny skrót to Control plus Shift plus F12, rejestrowany przez `RegisterHotKey`; kombinację wybiera użytkownik w ustawieniach (klucz `globalny_skrot_kombinacja`, reguły w `gnb/core/skrot.py`). Kombinacja z Caps Lock wymaga niskopoziomowego haka klawiatury i jest tylko opcją, bo NVDA może przechwycić Caps Lock. Moduł `gnb/hotkeys/` jest opcjonalny i wyłącznie dla Windows. Nieudana rejestracja nigdy nie zatrzymuje aplikacji, a na serwerze modułu nie ma. Pełne uzasadnienie i wszystkie decyzje o zachowaniu skrótu są w `gnb/hotkeys/CLAUDE.md`. Przeczytaj go przed zmianą czegokolwiek związanego ze skrótem.
 
 ## 13. Katalogi projektów wynikowych
 
@@ -407,7 +407,7 @@ Pełny zapis każdej pozycji, z objawem, przyczyną i propozycją, jest w `docs/
 9. Zamknięte, naprawa `naprawa-brak-danych-jezyka-ocr`: brak danych językowych Tesseracta daje status `pominiete` z komunikatem, którego języka brakuje.
 10. Jednoczesny przebieg z wiersza poleceń i z interfejsu na tym samym projekcie może nadpisać checkpoint. Decyzja użytkownika: blokada per projekt, w katalogu projektu, zakładana przez interfejs i wiersz poleceń; osobny, mały etap po części F etapu piętnastego, nie wcześniej.
 11. Skrót dopisuje `https://` do adresu bez schematu, co psuje stronę działającą wyłącznie po http. Decyzja użytkownika: pobieranie próbuje https, a po błędzie połączenia http; osobna, mała naprawa po części F etapu piętnastego, obok blokady z punktu 10, nie wcześniej.
-12. Skrót klawiszowy wybierany w ustawieniach (cztery pola wyboru Control, Alt, Shift, Windows i lista „Klawisz”, bez pola przechwytującego; nowy skrót działa od razu, a gdy Windows odmówi, zostaje poprzedni; co najmniej jeden modyfikator, bez Caps Lock i Insert; domyślnie nadal Control plus Shift plus F12). Decyzja użytkownika: osobny, mały etap po części F etapu piętnastego, nie wcześniej.
+12. Zamknięte, etap szesnasty: skrót klawiszowy wybierany w ustawieniach (cztery pola wyboru Control, Alt, Shift, Windows i lista „Klawisz”, bez pola przechwytującego; nowy skrót działa od razu, a gdy Windows odmówi, zostaje poprzedni; co najmniej jeden modyfikator, bez Caps Lock, Insert i Num Lock; domyślnie nadal Control plus Shift plus F12). Opis w `gnb/hotkeys/CLAUDE.md`, punkt 16.
 13. Reklamy, napisy „REKLAMA” i bloki „Czytaj także” przechodzą przez trafilaturę do tekstu wynikowego i wykazu odnośników. Kierunek: deterministyczny filtr po trafilaturze z zapisem usuniętych fragmentów w wynikach pośrednich. Decyzja użytkownika: odłożone na przyszłość; najpierw recenzent zbierze prawdziwe przykłady stron. Nic nie implementuj.
 
 ## 19. Kryterium ukończenia funkcji

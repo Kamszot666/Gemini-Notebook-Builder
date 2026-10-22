@@ -50,6 +50,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
+from gnb.core.skrot import DOMYSLNA_KOMBINACJA_SKROTU, rozbierz_kombinacje
 from gnb.core.wyjatki import BladTrwaly
 
 DOMYSLNY_LIMIT_ZRODEL = 100
@@ -134,6 +135,10 @@ DOMYSLNA_SCIEZKA_TESSDATA = ""
 # pozostałych systemach, więc tam ustawienie jest bez znaczenia, a diagnostyka
 # mówi to wprost.
 DOMYSLNY_GLOBALNY_SKROT_WLACZONY = True
+
+# Kombinacja globalnego skrótu zapisana tak, jak widzi ją człowiek edytujący
+# plik w Notatniku. Reguły kombinacji i jej rozbiór leżą w ``gnb.core.skrot``.
+DOMYSLNA_GLOBALNY_SKROT_KOMBINACJA = DOMYSLNA_KOMBINACJA_SKROTU
 
 # Wygląd interfejsu. Identyfikatory schematów i krojów są zamkniętym zbiorem,
 # a nazwy dla użytkownika i same kolory schematów leżą w ``gnb.ui.wyglad``.
@@ -336,6 +341,7 @@ _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
     PREFIKS_ZMIENNYCH + "LIMIT_ZNAKOW_INSTRUKCJI_SYSTEMOWEJ": "limit_znakow_instrukcji_systemowej",
     PREFIKS_ZMIENNYCH + "MAKSYMALNY_ROZMIAR_WYSYLKI_MB": "maksymalny_rozmiar_wysylki_mb",
     PREFIKS_ZMIENNYCH + "GLOBALNY_SKROT_WLACZONY": "globalny_skrot_wlaczony",
+    PREFIKS_ZMIENNYCH + "GLOBALNY_SKROT_KOMBINACJA": "globalny_skrot_kombinacja",
     PREFIKS_ZMIENNYCH + "WYGLAD_SCHEMAT": "wyglad_schemat",
     PREFIKS_ZMIENNYCH + "WYGLAD_ROZMIAR_CZCIONKI": "wyglad_rozmiar_czcionki",
     PREFIKS_ZMIENNYCH + "WYGLAD_KROJ_PISMA": "wyglad_kroj_pisma",
@@ -474,6 +480,7 @@ class Konfiguracja:
     limit_znakow_instrukcji_systemowej: int = DOMYSLNY_LIMIT_ZNAKOW_INSTRUKCJI_SYSTEMOWEJ
     maksymalny_rozmiar_wysylki_mb: int = DOMYSLNY_MAKSYMALNY_ROZMIAR_WYSYLKI_MB
     globalny_skrot_wlaczony: bool = DOMYSLNY_GLOBALNY_SKROT_WLACZONY
+    globalny_skrot_kombinacja: str = DOMYSLNA_GLOBALNY_SKROT_KOMBINACJA
     wyglad_schemat: str = DOMYSLNY_WYGLAD_SCHEMAT
     wyglad_rozmiar_czcionki: int = DOMYSLNY_WYGLAD_ROZMIAR_CZCIONKI
     wyglad_kroj_pisma: str = DOMYSLNY_WYGLAD_KROJ_PISMA
@@ -701,6 +708,9 @@ def wczytaj_konfiguracje(
         ),
         globalny_skrot_wlaczony=_jako_prawda_falsz(
             scalone, "globalny_skrot_wlaczony", domyslna.globalny_skrot_wlaczony
+        ),
+        globalny_skrot_kombinacja=_jako_kombinacje_skrotu(
+            scalone, "globalny_skrot_kombinacja", domyslna.globalny_skrot_kombinacja
         ),
         wyglad_schemat=_jako_jeden_z(
             scalone, "wyglad_schemat", domyslna.wyglad_schemat, SCHEMATY_KOLOROW
@@ -1107,6 +1117,20 @@ def _jako_lista_napisow(
     else:
         elementy = [czesc.strip() for czesc in str(surowa).split(",")]
     return tuple(dict.fromkeys(element for element in elementy if element))
+
+
+def _jako_kombinacje_skrotu(scalone: Mapping[str, object], pole: str, domyslna: str) -> str:
+    """Zwraca kombinację skrótu w postaci kanonicznej albo zgłasza błąd trwały.
+
+    Napis z pliku i ze zmiennej środowiskowej przechodzi te same reguły co
+    wybór w formularzu ustawień (``gnb.core.skrot``).
+    """
+    if pole not in scalone:
+        return domyslna
+    try:
+        return rozbierz_kombinacje(str(scalone[pole])).jako_napis()
+    except BladTrwaly as blad:
+        raise BladTrwaly(f"Ustawienie „{pole}”: {blad.komunikat}") from blad
 
 
 def _jako_prawda_falsz(scalone: Mapping[str, object], pole: str, domyslna: bool) -> bool:

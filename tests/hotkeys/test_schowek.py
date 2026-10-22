@@ -24,6 +24,7 @@ if sys.platform == "win32":
     import ctypes
     import ctypes.wintypes as wintypes
 
+    from gnb.core.skrot import DOMYSLNA_KOMBINACJA, rozbierz_kombinacje
     from gnb.hotkeys import _schowek
     from gnb.hotkeys.model import RodzajWynikuKopiowania
 
@@ -59,6 +60,17 @@ def _wstaw(format_schowka: int, bajty: bytes) -> None:
     assert _user32.SetClipboardData(format_schowka, uchwyt)
 
 
+if sys.platform == "win32":
+    # Prawdziwa funkcja czekania, zapamiętana przed podmianą przez fixture.
+    _PRAWDZIWE_CZEKANIE = _schowek.poczekaj_na_puszczenie_klawiszy
+
+_VK_CONTROL = 0x11
+_VK_ALT = 0x12
+_VK_SHIFT = 0x10
+_VK_F11 = 0x7A
+_VK_F12 = 0x7B
+
+
 def _bajty_w_schowku(format_schowka: int) -> bytes | None:
     with _schowek._otwarty_schowek():
         return _schowek._bajty_formatu(format_schowka)
@@ -73,7 +85,9 @@ def _formaty_w_schowku() -> list[int]:
 def chroniony_schowek(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Zapamiętuje schowek użytkownika przed testem i przywraca go po teście."""
     migawka = _schowek.zrob_migawke()
-    monkeypatch.setattr(_schowek, "poczekaj_na_puszczenie_klawiszy", lambda _limit: True)
+    monkeypatch.setattr(
+        _schowek, "poczekaj_na_puszczenie_klawiszy", lambda _kombinacja, _limit: True
+    )
     try:
         yield
     finally:
@@ -140,7 +154,7 @@ def test_skopiowane_zaznaczenie_jest_zwrocone_a_schowek_przywrocony(
 
     monkeypatch.setattr(_schowek, "wyslij_control_c", udawane_kopiowanie)
 
-    wynik = _schowek.skopiuj_zaznaczenie()
+    wynik = _schowek.skopiuj_zaznaczenie(DOMYSLNA_KOMBINACJA)
 
     assert wynik.rodzaj is RodzajWynikuKopiowania.ZAZNACZONO
     assert wynik.tekst == "Zaznaczony fragment strony"
@@ -158,7 +172,7 @@ def test_ten_sam_tekst_skopiowany_ponownie_jest_zmiana_schowka(
         _schowek, "wyslij_control_c", lambda: _ustaw_schowek(tekst="Ten sam tekst") or True
     )
 
-    wynik = _schowek.skopiuj_zaznaczenie()
+    wynik = _schowek.skopiuj_zaznaczenie(DOMYSLNA_KOMBINACJA)
 
     assert wynik.rodzaj is RodzajWynikuKopiowania.ZAZNACZONO
     assert wynik.tekst == "Ten sam tekst"
@@ -170,7 +184,7 @@ def test_gdy_schowek_sie_nie_zmienil_nic_nie_jest_zaznaczone(
     _ustaw_schowek(tekst="Stara zawartość")
     monkeypatch.setattr(_schowek, "wyslij_control_c", lambda: True)
 
-    wynik = _schowek.skopiuj_zaznaczenie(limit_zmiany_schowka_s=0.1)
+    wynik = _schowek.skopiuj_zaznaczenie(DOMYSLNA_KOMBINACJA, limit_zmiany_schowka_s=0.1)
 
     assert wynik.rodzaj is RodzajWynikuKopiowania.NIC_NIE_ZAZNACZONO
     assert _schowek.odczytaj_tekst_schowka() == "Stara zawartość"
@@ -184,7 +198,7 @@ def test_skopiowany_tekst_z_samych_bialych_znakow_to_brak_zaznaczenia(
         _schowek, "wyslij_control_c", lambda: _ustaw_schowek(tekst="  \r\n  ") or True
     )
 
-    wynik = _schowek.skopiuj_zaznaczenie()
+    wynik = _schowek.skopiuj_zaznaczenie(DOMYSLNA_KOMBINACJA)
 
     assert wynik.rodzaj is RodzajWynikuKopiowania.NIC_NIE_ZAZNACZONO
     assert _schowek.odczytaj_tekst_schowka() == "Stara zawartość"
@@ -200,7 +214,7 @@ def test_zmiana_schowka_bez_tekstu_to_brak_zaznaczenia_i_schowek_wraca(
         lambda: _ustaw_schowek(tekst=None, bajty_testowe=b"obraz") or True,
     )
 
-    wynik = _schowek.skopiuj_zaznaczenie()
+    wynik = _schowek.skopiuj_zaznaczenie(DOMYSLNA_KOMBINACJA)
 
     assert wynik.rodzaj is RodzajWynikuKopiowania.NIC_NIE_ZAZNACZONO
     assert _schowek.odczytaj_tekst_schowka() == "Stara zawartość"
@@ -213,7 +227,7 @@ def test_schowek_nie_do_przywrocenia_nie_wysyla_kopiowania(
     monkeypatch.setattr(_schowek, "zrob_migawke", lambda: None)
     monkeypatch.setattr(_schowek, "wyslij_control_c", lambda: wyslane.append("c") or True)
 
-    wynik = _schowek.skopiuj_zaznaczenie()
+    wynik = _schowek.skopiuj_zaznaczenie(DOMYSLNA_KOMBINACJA)
 
     assert wynik.rodzaj is RodzajWynikuKopiowania.SCHOWEK_NIE_DO_PRZYWROCENIA
     assert "nie da się bezpiecznie przywrócić" in wynik.uwaga
@@ -225,10 +239,12 @@ def test_nieupuszczone_klawisze_skrotu_nie_wysylaja_kopiowania(
 ) -> None:
     """Kopiowanie przy wciśniętych Control i Shift otworzyłoby narzędzia deweloperskie."""
     wyslane: list[str] = []
-    monkeypatch.setattr(_schowek, "poczekaj_na_puszczenie_klawiszy", lambda _limit: False)
+    monkeypatch.setattr(
+        _schowek, "poczekaj_na_puszczenie_klawiszy", lambda _kombinacja, _limit: False
+    )
     monkeypatch.setattr(_schowek, "wyslij_control_c", lambda: wyslane.append("c") or True)
 
-    wynik = _schowek.skopiuj_zaznaczenie()
+    wynik = _schowek.skopiuj_zaznaczenie(DOMYSLNA_KOMBINACJA)
 
     assert wynik.rodzaj is RodzajWynikuKopiowania.BLAD
     assert "klawiszy skrótu" in wynik.uwaga
@@ -242,10 +258,38 @@ def test_kopiowanie_jest_wysylane_dopiero_po_puszczeniu_klawiszy(
     monkeypatch.setattr(
         _schowek,
         "poczekaj_na_puszczenie_klawiszy",
-        lambda _limit: kolejnosc.append("puszczone") or True,
+        lambda _kombinacja, _limit: kolejnosc.append("puszczone") or True,
     )
     monkeypatch.setattr(_schowek, "wyslij_control_c", lambda: kolejnosc.append("control_c") or True)
 
-    _schowek.skopiuj_zaznaczenie(limit_zmiany_schowka_s=0.05)
+    _schowek.skopiuj_zaznaczenie(DOMYSLNA_KOMBINACJA, limit_zmiany_schowka_s=0.05)
 
     assert kolejnosc == ["puszczone", "control_c"]
+
+
+def test_czekanie_obejmuje_modyfikatory_i_klawisz_wybranej_kombinacji() -> None:
+    kombinacja = rozbierz_kombinacje("Control+Alt+F11")
+
+    assert set(_schowek.klawisze_kombinacji(kombinacja)) == {_VK_CONTROL, _VK_ALT, _VK_F11}
+    windows = rozbierz_kombinacje("Windows+F5")
+    assert set(_schowek.klawisze_kombinacji(windows)) == {0x5B, 0x5C, 0x74}
+
+
+def test_czekanie_ignoruje_klawisze_spoza_kombinacji_i_czeka_na_jej_klawisze(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Przytrzymany F12 nie blokuje kombinacji z F11, a przytrzymany F11 ją blokuje."""
+    kombinacja = rozbierz_kombinacje("Control+Alt+F11")
+    wcisniete: set[int] = {_VK_F12, _VK_SHIFT}
+
+    def falszywy_stan_klawisza(klawisz: int) -> int:
+        return 0x8000 if klawisz in wcisniete else 0
+
+    monkeypatch.setattr(_schowek._user32, "GetAsyncKeyState", falszywy_stan_klawisza)
+
+    assert _PRAWDZIWE_CZEKANIE(kombinacja, 0.05) is True
+    wcisniete.add(_VK_F11)
+    assert _PRAWDZIWE_CZEKANIE(kombinacja, 0.05) is False
+    wcisniete.discard(_VK_F11)
+    wcisniete.add(_VK_ALT)
+    assert _PRAWDZIWE_CZEKANIE(kombinacja, 0.05) is False

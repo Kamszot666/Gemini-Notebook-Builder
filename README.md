@@ -170,7 +170,7 @@ Najczęściej zmieniane rzeczy:
 5. `zachowuj_oryginaly`: czy trzymać kopie oryginałów. Domyślnie tak.
 6. `respektuj_robots` i `wyjatek_robots_dla_zrodel_jawnych`: jak program traktuje robots.txt.
 7. Progi usuwania powtórek, ustawienia OCR i zamiany mowy na tekst, ścieżki do narzędzi i limity dla archiwów ZIP.
-8. `globalny_skrot_wlaczony`: włącza albo wyłącza skrót klawiszowy.
+8. `globalny_skrot_wlaczony`: włącza albo wyłącza skrót klawiszowy. Klucz `globalny_skrot_kombinacja` ustawia kombinację, na przykład `Control+Alt+F11`.
 
 Przykład dla jednej sesji PowerShella:
 
@@ -217,7 +217,7 @@ Plik TXT, MD albo DOCX złożony z samych adresów wysłany w formularzu jest li
 
 ### Sposób drugi: skrót klawiszowy
 
-Control plus Shift plus F12 działa w dowolnym programie, kiedy serwer jest uruchomiony. Możesz dodawać strony jedna po drugiej, nie wchodząc do samego programu.
+Skrót klawiszowy, domyślnie Control plus Shift plus F12, działa w dowolnym programie, kiedy serwer jest uruchomiony. Kombinację zmienisz na stronie ustawień, w zakładce „Skrót klawiszowy”: cztery pola wyboru (Control, Alt, Shift, Windows) i lista „Klawisz”. Nowa kombinacja działa od razu, a gdy Windows ją odrzuci, zostaje poprzednia. Możesz dodawać strony jedna po drugiej, nie wchodząc do samego programu.
 
 1. W Chrome albo Firefoksie dodaje adres strony, na której jesteś. Jeśli coś zaznaczysz: same adresy http i https stają się źródłami, a zwykły tekst trafia do pola „Tu wklej tekst” (na stronie głównej, gdy wybrano ten projekt, i w formularzu dosyłania na stronie projektu). Skrót kopiuje zaznaczenie przez schowek i przywraca jego poprzednią zawartość.
 2. W Eksploratorze Windows dodaje zaznaczone pliki.
@@ -225,7 +225,7 @@ Control plus Shift plus F12 działa w dowolnym programie, kiedy serwer jest uruc
 
 Materiał trafia do aktywnego projektu skrótu, który wybierasz przyciskiem „Ustaw jako aktywny projekt skrótu” na stronie projektu albo listą „Projekt” na stronie głównej. Wybór jest pamiętany po restarcie serwera i komputera. Bez aktywnego projektu skrót niczego nie zapisuje i gra dźwięk porażki. Dwa krótkie rosnące tony to sukces, jeden niski dłuższy to porażka. Ostatni wynik jest też napisany na stronie głównej i na stronie projektu. Jeśli akurat trwa przetwarzanie, materiał czeka w kolejce i zostanie przetworzony zaraz po nim.
 
-Gdyby NVDA przechwytywało tę kombinację, zmień jej przypisanie w Preferencje, Gesty wejściowe. Skrót wyłączysz kluczem `globalny_skrot_wlaczony`.
+Gdyby NVDA przechwytywało tę kombinację, wybierz inną w ustawieniach albo zmień jej przypisanie w Preferencje, Gesty wejściowe. Skrót wyłączysz kluczem `globalny_skrot_wlaczony`.
 
 ### Sposób trzeci: terminal
 

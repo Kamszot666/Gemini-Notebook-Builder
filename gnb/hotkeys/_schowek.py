@@ -39,6 +39,7 @@ if sys.platform == "win32":
     from collections.abc import Iterator
     from dataclasses import dataclass
 
+    from gnb.core.skrot import KombinacjaSkrotu
     from gnb.hotkeys.model import RodzajWynikuKopiowania, WynikKopiowania
 
     _LOG = logging.getLogger("gnb.hotkeys")
@@ -104,9 +105,9 @@ if sys.platform == "win32":
     _VK_SHIFT = 0x10
     _VK_CONTROL = 0x11
     _VK_ALT = 0x12
+    _VK_LEWY_WINDOWS = 0x5B
+    _VK_PRAWY_WINDOWS = 0x5C
     _VK_C = 0x43
-    _VK_F12 = 0x7B
-    _KLAWISZE_SKROTU = (_VK_CONTROL, _VK_SHIFT, _VK_ALT, _VK_F12)
 
     _INPUT_KEYBOARD = 1
     _KEYEVENTF_KEYUP = 0x0002
@@ -281,11 +282,30 @@ if sys.platform == "win32":
             finally:
                 _kernel32.GlobalUnlock(uchwyt)
 
-    def poczekaj_na_puszczenie_klawiszy(limit_s: float) -> bool:
-        """Czeka, aż Control, Shift, Alt i F12 zostaną puszczone. Zwraca fałsz po limicie."""
+    def klawisze_kombinacji(kombinacja: KombinacjaSkrotu) -> tuple[int, ...]:
+        """Kody klawiszy wirtualnych, które trzeba puścić po naciśnięciu tej kombinacji."""
+        klawisze: list[int] = []
+        if kombinacja.control:
+            klawisze.append(_VK_CONTROL)
+        if kombinacja.alt:
+            klawisze.append(_VK_ALT)
+        if kombinacja.shift:
+            klawisze.append(_VK_SHIFT)
+        if kombinacja.windows:
+            klawisze.extend((_VK_LEWY_WINDOWS, _VK_PRAWY_WINDOWS))
+        klawisze.append(kombinacja.kod_klawisza_win32())
+        return tuple(klawisze)
+
+    def poczekaj_na_puszczenie_klawiszy(kombinacja: KombinacjaSkrotu, limit_s: float) -> bool:
+        """Czeka, aż modyfikatory i klawisz tej kombinacji zostaną puszczone.
+
+        Zwraca fałsz po limicie. Sprawdzane są wyłącznie klawisze wybranej
+        kombinacji, a nie stałe Control, Shift i F12.
+        """
+        klawisze = klawisze_kombinacji(kombinacja)
         koniec = time.monotonic() + limit_s
         while time.monotonic() < koniec:
-            if not any(_user32.GetAsyncKeyState(klawisz) & 0x8000 for klawisz in _KLAWISZE_SKROTU):
+            if not any(_user32.GetAsyncKeyState(klawisz) & 0x8000 for klawisz in klawisze):
                 return True
             time.sleep(_ODSTEP_SPRAWDZANIA_S)
         return False
@@ -307,7 +327,9 @@ if sys.platform == "win32":
         return int(_user32.SendInput(4, zdarzenia, ctypes.sizeof(_INPUT))) == 4
 
     def skopiuj_zaznaczenie(
-        limit_puszczenia_klawiszy_s: float = 2.0, limit_zmiany_schowka_s: float = 1.0
+        kombinacja: KombinacjaSkrotu,
+        limit_puszczenia_klawiszy_s: float = 2.0,
+        limit_zmiany_schowka_s: float = 1.0,
     ) -> WynikKopiowania:
         """Kopiuje zaznaczenie aktywnej przeglądarki przez schowek i przywraca schowek.
 
@@ -327,7 +349,7 @@ if sys.platform == "win32":
                     "więc nie sprawdzono zaznaczonego tekstu."
                 ),
             )
-        if not poczekaj_na_puszczenie_klawiszy(limit_puszczenia_klawiszy_s):
+        if not poczekaj_na_puszczenie_klawiszy(kombinacja, limit_puszczenia_klawiszy_s):
             return WynikKopiowania(
                 RodzajWynikuKopiowania.BLAD,
                 uwaga="Nie puszczono klawiszy skrótu, więc nie sprawdzono zaznaczonego tekstu.",

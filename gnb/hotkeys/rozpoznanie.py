@@ -186,7 +186,8 @@ def czy_adres_interfejsu(adres: str, adres_nasluchu: str, port_nasluchu: int | N
     """Prawda, gdy adres wskazuje na interfejs aplikacji, a nie na zewnętrzną stronę.
 
     Interfejsem jest każdy adres pętli zwrotnej (``127.0.0.1``, ``localhost``,
-    ``::1``), niezależnie od portu, oraz adres i port nasłuchu z konfiguracji.
+    ``localhost.``, ``::1``, ``::ffff:127.0.0.1``) oraz adres nieokreślony
+    (``0.0.0.0``), niezależnie od portu, oraz adres i port nasłuchu z konfiguracji.
     Schemat nie ma znaczenia: ``https://127.0.0.1:8765/`` to ta sama strona
     co ``http://127.0.0.1:8765/``.
     """
@@ -198,13 +199,22 @@ def czy_adres_interfejsu(adres: str, adres_nasluchu: str, port_nasluchu: int | N
         return False
     if not host:
         return False
+    # Nazwa z kropką na końcu (``localhost.``) to ta sama nazwa w pełnej postaci.
+    host = host.rstrip(".")
     if host == "localhost":
         return True
     try:
-        if ipaddress.ip_address(host).is_loopback:
-            return True
+        adres_ip = ipaddress.ip_address(host)
     except ValueError:
         pass
+    else:
+        # Adres IPv4 zapisany jako IPv6 (``::ffff:127.0.0.1``) ma w Pythonie 3.12
+        # ``is_loopback`` równe fałszowi, więc sprawdzamy jego postać IPv4.
+        if isinstance(adres_ip, ipaddress.IPv6Address) and adres_ip.ipv4_mapped is not None:
+            adres_ip = adres_ip.ipv4_mapped
+        # Adres nieokreślony (0.0.0.0, ::) część systemów kieruje do własnego komputera.
+        if adres_ip.is_loopback or adres_ip.is_unspecified:
+            return True
     if port_nasluchu is None:
         return False
     domyslny_port = 443 if czesci.scheme.lower() == "https" else 80

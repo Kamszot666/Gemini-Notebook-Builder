@@ -406,6 +406,7 @@ Pełny zapis każdej pozycji, z objawem, przyczyną i propozycją, jest w `docs/
 
 9. Zamknięte, naprawa `naprawa-brak-danych-jezyka-ocr`: brak danych językowych Tesseracta daje status `pominiete` z komunikatem, którego języka brakuje.
 10. Jednoczesny przebieg z wiersza poleceń i z interfejsu na tym samym projekcie może nadpisać checkpoint. Decyzja użytkownika: blokada per projekt, w katalogu projektu, zakładana przez interfejs i wiersz poleceń; osobny, mały etap po części F etapu piętnastego, nie wcześniej.
+11. Skrót dopisuje `https://` do adresu bez schematu, co psuje stronę działającą wyłącznie po http. Decyzja użytkownika: pobieranie próbuje https, a po błędzie połączenia http; osobna, mała naprawa po części F etapu piętnastego, obok blokady z punktu 10, nie wcześniej.
 
 ## 19. Kryterium ukończenia funkcji
 

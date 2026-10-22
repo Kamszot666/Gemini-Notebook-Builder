@@ -170,6 +170,14 @@ if sys.platform == "win32":
                     "skrótu na stronie projektu."
                 )
                 return
+            powod_znikniecia = self._aktywny_projekt.sprawdz_istnienie(
+                self._konfiguracja.katalog_wynikow
+            )
+            if powod_znikniecia is not None:
+                # Katalog projektu zniknął po wyborze (usunięty ręcznie). Nic nie
+                # jest zapisywane ani tworzone od nowa, priorytet poprawności danych.
+                self._zglos_porazke(powod_znikniecia)
+                return
 
             okno = _win32.informacje_o_aktywnym_oknie()
             if okno is None:

@@ -245,6 +245,10 @@ def test_zaznaczenie_nie_dotyczy_eksploratora() -> None:
         "http://[::1]:8765/",
         "http://127.0.0.2:9000/",
         "http://127.0.0.1:1/",
+        "http://localhost./",
+        "http://[::ffff:127.0.0.1]/",
+        "http://0.0.0.0:8765/",
+        "http://[::ffff:0.0.0.0]:8765/",
     ],
 )
 def test_adresy_petli_zwrotnej_sa_adresami_interfejsu(adres: str) -> None:

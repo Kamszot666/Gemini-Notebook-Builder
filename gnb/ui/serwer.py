@@ -26,6 +26,7 @@ from typing import Protocol, cast
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from gnb.core.konfiguracja import (
+    SCHEMAT_KOLOROW_WLASNY,
     Konfiguracja,
     pola_ustawione_w_srodowisku,
     sciezka_pliku_konfiguracji,
@@ -63,7 +64,7 @@ from gnb.potok import (
     pozycja_z_wejscia,
     przetworz_projekt,
 )
-from gnb.ui import csrf, formularze, widoki, widoki_ustawien
+from gnb.ui import csrf, formularze, widoki, widoki_ustawien, wyglad
 from gnb.ui.blokada import BlokadaInstancji
 from gnb.ui.projekty import opisz_projekt, znajdz_projekty
 from gnb.ui.stan_skrotu import (
@@ -346,6 +347,8 @@ class _Handler(BaseHTTPRequestHandler):
             self._zapisz_ustawienia_zakladki(przywroc=False)
         elif sciezka == widoki_ustawien.SCIEZKA_PRZYWRACANIA_USTAWIEN:
             self._zapisz_ustawienia_zakladki(przywroc=True)
+        elif sciezka == widoki_ustawien.SCIEZKA_PRZYWRACANIA_SCHEMATU:
+            self._przywroc_schemat_domyslny()
         elif (adres_zrodla := self._rozbij_adres_zrodla(sciezka)) is not None:
             self._obsluz_dzialanie_na_zrodle(*adres_zrodla)
         elif sciezka.startswith("/projekt/") and sciezka.endswith("/wznow"):
@@ -935,6 +938,8 @@ class _Handler(BaseHTTPRequestHandler):
             komunikat = f"Zapisano ustawienia zakładki {zakladka.tytul}."
         elif zakladka is not None and wynik == "przywrocono":
             komunikat = f"Przywrócono ustawienia domyślne zakładki {zakladka.tytul}."
+        elif zakladka is not None and wynik == "schemat":
+            komunikat = "Przywrócono schemat domyślny."
         sciezka = self._serwer.sciezka_konfiguracji
         ostrzezenie = ""
         try:
@@ -945,6 +950,10 @@ class _Handler(BaseHTTPRequestHandler):
                 f"Nie udało się wczytać pliku konfiguracji: {blad.komunikat} "
                 "Pokazane są ustawienia z chwili uruchomienia serwera."
             )
+        if komunikat and konfiguracja.wyglad_schemat == SCHEMAT_KOLOROW_WLASNY:
+            uwagi = wyglad.ostrzezenia_kontrastu(wyglad.kolory_wlasne(konfiguracja))
+            if uwagi:
+                komunikat = " ".join([komunikat, "Uwaga:", *uwagi])
         token = self._token_sesji()
         html = widoki_ustawien.strona_ustawien(
             konfiguracja=konfiguracja,
@@ -1012,6 +1021,48 @@ class _Handler(BaseHTTPRequestHandler):
         self._przekieruj(
             f"{widoki_ustawien.SCIEZKA_USTAWIEN}?zakladka={zakladka.identyfikator}"
             f"&wynik={wynik}#naglowek-{zakladka.identyfikator}"
+        )
+
+    def _przywroc_schemat_domyslny(self) -> None:
+        """Usuwa z pliku wybór schematu kolorów, więc obowiązuje schemat domyślny.
+
+        Zapisane kolory własne zostają w pliku. Przycisk jest dostępny także
+        wtedy, gdy kolory własne zrobiły stronę nieczytelną, dlatego formularz
+        ma własne, stałe kolory.
+        """
+        wynik_formularza = self._parsuj_formularz()
+        if wynik_formularza is None:
+            return
+        if not self._csrf_ok(wynik_formularza.pole(csrf.NAZWA_POLA_FORMULARZA)):
+            return
+        zmienna = pola_ustawione_w_srodowisku().get("wyglad_schemat")
+        if zmienna is not None:
+            self._pokaz_ustawienia(
+                kod=400,
+                bledy=[
+                    BladPola(
+                        "wyglad_schemat",
+                        f"Schemat kolorów jest ustawiony zmienną środowiskową {zmienna[0]}, "
+                        "która ma pierwszeństwo przed plikiem. Zmień ją poza aplikacją.",
+                    )
+                ],
+                zakladka_z_bledami=widoki_ustawien.IDENTYFIKATOR_ZAKLADKI_WYGLADU,
+            )
+            return
+        try:
+            with self._serwer.rejestr.wylacznie():
+                zapisz_ustawienia(self._serwer.sciezka_konfiguracji, {}, ["wyglad_schemat"])
+        except ZadanieJuzTrwa as blad:
+            self._blad(409, "Inne przetwarzanie w toku", str(blad))
+            return
+        except BladTrwaly as blad:
+            self._blad(500, "Nie udało się zapisać ustawień", blad.komunikat)
+            return
+        self._zastosuj_ustawienia()
+        self._przekieruj(
+            f"{widoki_ustawien.SCIEZKA_USTAWIEN}"
+            f"?zakladka={widoki_ustawien.IDENTYFIKATOR_ZAKLADKI_WYGLADU}&wynik=schemat"
+            f"#naglowek-{widoki_ustawien.IDENTYFIKATOR_ZAKLADKI_WYGLADU}"
         )
 
     def _zastosuj_ustawienia(self) -> None:
@@ -1345,6 +1396,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _wyslij_html(self, kod: int, html: str, *, token: str | None = None) -> None:
         dodatkowe = [("Set-Cookie", csrf.naglowek_ustawienia_ciasteczka(token))] if token else None
+        html = html.replace(widoki.ZNACZNIK_WYGLADU, wyglad.css_wygladu(self._konfiguracja), 1)
         self._wyslij(kod, html.encode("utf-8"), _TYP_HTML, dodatkowe)
 
     def _przekieruj(self, lokalizacja: str) -> None:

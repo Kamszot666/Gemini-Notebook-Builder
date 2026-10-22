@@ -16,7 +16,13 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 
-from gnb.core.konfiguracja import Konfiguracja, pola_konfiguracji
+from gnb.core.konfiguracja import (
+    KROJE_PISMA,
+    STOPNIE_CZCIONKI,
+    Konfiguracja,
+    pola_konfiguracji,
+)
+from gnb.ui.wyglad import NAZWY_KROJOW, nazwy_schematow
 
 
 class Rodzaj(StrEnum):
@@ -26,6 +32,7 @@ class Rodzaj(StrEnum):
     LICZBA = "liczba"
     LICZBA_RZECZYWISTA = "liczba_rzeczywista"
     WYBOR = "wybor"
+    WYBOR_LICZBY = "wybor_liczby"
     TEKST = "tekst"
     LISTA = "lista"
     FORMATY = "formaty"
@@ -44,6 +51,8 @@ class PoleUstawien:
     maksimum: float | None = None
     opcje: tuple[str, ...] = ()
     restart: bool = False
+    # Nazwy opcji pokazywane użytkownikowi, gdy różnią się od wartości zapisywanych w pliku.
+    nazwy_opcji: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,7 +129,65 @@ def _wybor(nazwa: str, etykieta: str, opis: str, opcje: tuple[str, ...]) -> Pole
     return PoleUstawien(nazwa, etykieta, opis, Rodzaj.WYBOR, opcje=opcje)
 
 
+def _kolor(nazwa: str, etykieta: str, rola: str) -> PoleUstawien:
+    return PoleUstawien(
+        nazwa,
+        etykieta,
+        f"Kolor {rola} przy schemacie Kolory własne. Wpisz kod w postaci #RRGGBB, na przykład "
+        "#1a2b3c. Przy innym schemacie to pole nie ma skutku.",
+        Rodzaj.TEKST,
+    )
+
+
+_NAZWY_SCHEMATOW = nazwy_schematow()
+
+
 ZAKLADKI: tuple[Zakladka, ...] = (
+    Zakladka(
+        "wyglad",
+        "Wygląd",
+        "Schemat kolorów, rozmiar i krój pisma oraz własne kolory interfejsu. Zmiany działają "
+        "na wszystkich stronach od następnego otwarcia strony.",
+        (
+            PoleUstawien(
+                "wyglad_schemat",
+                "Schemat kolorów",
+                "Gotowy zestaw kolorów albo Kolory własne, ustawiane niżej. Każdy gotowy schemat "
+                "ma kontrast tekstu co najmniej 7 do 1.",
+                Rodzaj.WYBOR,
+                opcje=tuple(_NAZWY_SCHEMATOW),
+                nazwy_opcji=tuple(_NAZWY_SCHEMATOW.values()),
+            ),
+            PoleUstawien(
+                "wyglad_rozmiar_czcionki",
+                "Rozmiar czcionki",
+                "Procent rozmiaru domyślnego. Rozmiar domyślny to 20 pikseli przy zwykłym "
+                "ustawieniu przeglądarki; powiększenie strony w przeglądarce działa dodatkowo.",
+                Rodzaj.WYBOR_LICZBY,
+                opcje=tuple(str(stopien) for stopien in STOPNIE_CZCIONKI),
+                nazwy_opcji=tuple(f"{stopien} procent" for stopien in STOPNIE_CZCIONKI),
+            ),
+            PoleUstawien(
+                "wyglad_kroj_pisma",
+                "Krój pisma",
+                "Krój bez szeryfów. Jeśli wybranego kroju nie ma w systemie, strona użyje "
+                "kroju systemowego.",
+                Rodzaj.WYBOR,
+                opcje=KROJE_PISMA,
+                nazwy_opcji=tuple(NAZWY_KROJOW[kroj] for kroj in KROJE_PISMA),
+            ),
+            _kolor("wyglad_kolor_tla", "Kolor tła", "tła strony"),
+            _kolor("wyglad_kolor_tekstu", "Kolor tekstu", "tekstu"),
+            _kolor("wyglad_kolor_odnosnikow", "Kolor odnośników", "odnośników"),
+            _kolor("wyglad_kolor_przycisku_tla", "Kolor tła przycisków", "tła przycisków"),
+            _kolor(
+                "wyglad_kolor_przycisku_tekstu", "Kolor tekstu przycisków", "tekstu na przyciskach"
+            ),
+            _kolor("wyglad_kolor_obramowania", "Kolor obramowań", "obramowań pól i przycisków"),
+            _kolor("wyglad_kolor_fokusu", "Kolor wskaźnika fokusu", "wskaźnika fokusu"),
+            _kolor("wyglad_kolor_bledu", "Kolor komunikatów o błędach", "komunikatów o błędach"),
+        ),
+    ),
     Zakladka(
         "limity",
         "Limity notatnika",
@@ -506,8 +573,10 @@ ZAKLADKI: tuple[Zakladka, ...] = (
             ),
             _logiczne(
                 "zachowuj_odnosniki",
-                "Zachowuj odnośniki w tekście",
-                "Zachowuje adresy odnośników z pobieranych stron w tekście wynikowym.",
+                "Dołącz na końcu tekstu wykaz odnośników",
+                "Gdy włączone, na końcu tekstu pobranej strony powstaje sekcja z wykazem "
+                "odnośników znalezionych w artykule, razem z ich adresami. Adresy w samej "
+                "treści artykułu nie zależą od tego ustawienia.",
             ),
             _liczba(
                 "jakosc_grafik",
@@ -611,6 +680,8 @@ def wartosc_domyslna_slowami(pole: PoleUstawien) -> str:
 def wartosc_slowami(pole: PoleUstawien, wartosc: object) -> str:
     if isinstance(wartosc, bool):
         return "tak" if wartosc else "nie"
+    if pole.nazwy_opcji and str(wartosc) in pole.opcje:
+        return pole.nazwy_opcji[pole.opcje.index(str(wartosc))]
     if pole.rodzaj is Rodzaj.FORMATY:
         return "tak" if "md" in _jako_krotka(wartosc) else "nie"
     if isinstance(wartosc, (tuple, list)):
@@ -675,10 +746,17 @@ def _odczytaj_pole(pole: PoleUstawien, formularz: Mapping[str, str]) -> object:
             raise BladWartosciUstawienia(
                 pole.nazwa, f"Pole „{pole.etykieta}” musi być liczbą."
             ) from blad
-    if pole.rodzaj is Rodzaj.WYBOR:
+    if pole.rodzaj in (Rodzaj.WYBOR, Rodzaj.WYBOR_LICZBY):
         wybrana = surowa.strip()
-        if wybrana not in pole.opcje and not wybrana:
+        if not wybrana:
             raise BladWartosciUstawienia(pole.nazwa, f"Wybierz wartość w polu „{pole.etykieta}”.")
+        if pole.rodzaj is Rodzaj.WYBOR_LICZBY:
+            try:
+                return int(wybrana)
+            except ValueError as blad:
+                raise BladWartosciUstawienia(
+                    pole.nazwa, f"Wybierz wartość z listy w polu „{pole.etykieta}”."
+                ) from blad
         return wybrana
     if pole.rodzaj is Rodzaj.LISTA:
         elementy = [czesc.strip() for czesc in surowa.split(",")]

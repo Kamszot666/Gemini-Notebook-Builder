@@ -1,4 +1,4 @@
-# Architektura — stan po etapie piętnastym, część E
+# Architektura — stan po etapie piętnastym, część F
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
 zakończeniu etapu czternastego. Pełny docelowy podział na pakiety opisuje
@@ -450,6 +450,10 @@ istniejący potok z żądaniem HTTP przez semantyczny, dostępny HTML.
   `widoki.py`, a nie odwrotnie: gotowy fragment jest przekazywany do strony
   projektu jako napis. Sekcja brakujących plików tylko pokazuje rozbieżność.
 - `gnb/ui/ustawienia.py`, `gnb/ui/widoki_ustawien.py` — strona `/ustawienia`.
+- `gnb/ui/wyglad.py` — schematy kolorów, kroje pisma, rozmiar czcionki, wzór
+  kontrastu WCAG i arkusz zmiennych CSS. Serwer wstawia ten arkusz w miejsce
+  znacznika `<!--gnb-wyglad-->` w każdej stronie HTML (`_wyslij_html`), więc
+  wygląd obejmuje wszystkie strony, także strony błędów.
   Pierwszy moduł jest tablicą pól konfiguracji: zakładka, etykieta, opis, rodzaj
   kontrolki, informacja o restarcie, oraz odczyt wartości z formularza. Drugi
   buduje HTML z zakładkami. Każde pole `Konfiguracja` ma leżeć w dokładnie

@@ -159,7 +159,7 @@ Nie musisz niczego ustawiać, bo są sensowne wartości domyślne. Jeśli chcesz
 
 Plik nazywa się `konfiguracja.toml` i leży poza repozytorium, zwykle w `C:\Users\TWOJA_NAZWA\AppData\Roaming\Gemini Notebook Builder`. Jego brak nie jest błędem.
 
-Większość ustawień zmienisz bez edytowania pliku: w interfejsie wybierz odnośnik Ustawienia na stronie głównej albo na stronie projektu. Strona dzieli ustawienia na zakładki tematyczne, a każda ma przyciski Zapisz ustawienia i Przywróć ustawienia domyślne tej zakładki. Pole ustawione zmienną środowiskową jest tylko do odczytu. Adresu nasłuchu nie da się zmienić.
+Większość ustawień zmienisz bez edytowania pliku: w interfejsie wybierz odnośnik Ustawienia na stronie głównej albo na stronie projektu. Strona dzieli ustawienia na zakładki tematyczne, a każda ma przyciski Zapisz ustawienia i Przywróć ustawienia domyślne tej zakładki. Pole ustawione zmienną środowiskową jest tylko do odczytu. Adresu nasłuchu nie da się zmienić. Zakładka Wygląd pozwala wybrać schemat kolorów (w tym wysoki kontrast i schemat bezpieczny przy zaburzeniach widzenia barw), rozmiar i krój pisma oraz własne kolory; przycisk Przywróć schemat domyślny wraca do wyglądu początkowego.
 
 Najczęściej zmieniane rzeczy:
 

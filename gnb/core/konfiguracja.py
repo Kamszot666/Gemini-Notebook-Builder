@@ -43,7 +43,9 @@ zastąpieniem wartością domyślną.
 from __future__ import annotations
 
 import os
+import re
 import tomllib
+import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from pathlib import Path
@@ -132,6 +134,37 @@ DOMYSLNA_SCIEZKA_TESSDATA = ""
 # pozostałych systemach, więc tam ustawienie jest bez znaczenia, a diagnostyka
 # mówi to wprost.
 DOMYSLNY_GLOBALNY_SKROT_WLACZONY = True
+
+# Wygląd interfejsu. Identyfikatory schematów i krojów są zamkniętym zbiorem,
+# a nazwy dla użytkownika i same kolory schematów leżą w ``gnb.ui.wyglad``.
+SCHEMAT_KOLOROW_WLASNY = "wlasny"
+SCHEMATY_KOLOROW: tuple[str, ...] = (
+    "ciemny",
+    "zolty_na_czarnym",
+    "bialy_na_czarnym",
+    "czarny_na_bialym",
+    "ciemny_na_kremowym",
+    "bezpieczny_dla_barw",
+    "zblizony_do_gemini",
+    SCHEMAT_KOLOROW_WLASNY,
+)
+DOMYSLNY_WYGLAD_SCHEMAT = "ciemny"
+# Rozmiar czcionki jako procent wartości domyślnej (1,25 rem, czyli 20 pikseli).
+STOPNIE_CZCIONKI: tuple[int, ...] = (100, 125, 150, 175, 200)
+DOMYSLNY_WYGLAD_ROZMIAR_CZCIONKI = 100
+KROJE_PISMA: tuple[str, ...] = ("systemowy", "verdana", "tahoma", "arial", "calibri")
+DOMYSLNY_WYGLAD_KROJ_PISMA = "systemowy"
+# Kolory własne zaczynają od kolorów schematu domyślnego, żeby pierwsza zmiana
+# jednej roli nie dawała strony w przypadkowych barwach.
+DOMYSLNY_KOLOR_TLA = "#10131a"
+DOMYSLNY_KOLOR_TEKSTU = "#f2f4f8"
+DOMYSLNY_KOLOR_ODNOSNIKOW = "#9ecbff"
+DOMYSLNY_KOLOR_PRZYCISKU_TLA = "#1d4f91"
+DOMYSLNY_KOLOR_PRZYCISKU_TEKSTU = "#ffffff"
+DOMYSLNY_KOLOR_OBRAMOWANIA = "#7f8fb3"
+DOMYSLNY_KOLOR_FOKUSU = "#ffd54a"
+DOMYSLNY_KOLOR_BLEDU = "#ffb4ab"
+WZORZEC_KOLORU = re.compile(r"#[0-9a-fA-F]{6}")
 
 # Ścieżka pliku wykonywalnego MuseScore. Wartość pusta oznacza automatyczne
 # odnalezienie w zmiennej PATH i w znanych miejscach instalacji. MuseScore jest
@@ -296,6 +329,17 @@ _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
     PREFIKS_ZMIENNYCH + "LIMIT_ZNAKOW_INSTRUKCJI_SYSTEMOWEJ": "limit_znakow_instrukcji_systemowej",
     PREFIKS_ZMIENNYCH + "MAKSYMALNY_ROZMIAR_WYSYLKI_MB": "maksymalny_rozmiar_wysylki_mb",
     PREFIKS_ZMIENNYCH + "GLOBALNY_SKROT_WLACZONY": "globalny_skrot_wlaczony",
+    PREFIKS_ZMIENNYCH + "WYGLAD_SCHEMAT": "wyglad_schemat",
+    PREFIKS_ZMIENNYCH + "WYGLAD_ROZMIAR_CZCIONKI": "wyglad_rozmiar_czcionki",
+    PREFIKS_ZMIENNYCH + "WYGLAD_KROJ_PISMA": "wyglad_kroj_pisma",
+    PREFIKS_ZMIENNYCH + "WYGLAD_KOLOR_TLA": "wyglad_kolor_tla",
+    PREFIKS_ZMIENNYCH + "WYGLAD_KOLOR_TEKSTU": "wyglad_kolor_tekstu",
+    PREFIKS_ZMIENNYCH + "WYGLAD_KOLOR_ODNOSNIKOW": "wyglad_kolor_odnosnikow",
+    PREFIKS_ZMIENNYCH + "WYGLAD_KOLOR_PRZYCISKU_TLA": "wyglad_kolor_przycisku_tla",
+    PREFIKS_ZMIENNYCH + "WYGLAD_KOLOR_PRZYCISKU_TEKSTU": "wyglad_kolor_przycisku_tekstu",
+    PREFIKS_ZMIENNYCH + "WYGLAD_KOLOR_OBRAMOWANIA": "wyglad_kolor_obramowania",
+    PREFIKS_ZMIENNYCH + "WYGLAD_KOLOR_FOKUSU": "wyglad_kolor_fokusu",
+    PREFIKS_ZMIENNYCH + "WYGLAD_KOLOR_BLEDU": "wyglad_kolor_bledu",
 }
 _ZNANE_POLA = frozenset(_ZMIENNE_SRODOWISKOWE.values())
 
@@ -423,6 +467,17 @@ class Konfiguracja:
     limit_znakow_instrukcji_systemowej: int = DOMYSLNY_LIMIT_ZNAKOW_INSTRUKCJI_SYSTEMOWEJ
     maksymalny_rozmiar_wysylki_mb: int = DOMYSLNY_MAKSYMALNY_ROZMIAR_WYSYLKI_MB
     globalny_skrot_wlaczony: bool = DOMYSLNY_GLOBALNY_SKROT_WLACZONY
+    wyglad_schemat: str = DOMYSLNY_WYGLAD_SCHEMAT
+    wyglad_rozmiar_czcionki: int = DOMYSLNY_WYGLAD_ROZMIAR_CZCIONKI
+    wyglad_kroj_pisma: str = DOMYSLNY_WYGLAD_KROJ_PISMA
+    wyglad_kolor_tla: str = DOMYSLNY_KOLOR_TLA
+    wyglad_kolor_tekstu: str = DOMYSLNY_KOLOR_TEKSTU
+    wyglad_kolor_odnosnikow: str = DOMYSLNY_KOLOR_ODNOSNIKOW
+    wyglad_kolor_przycisku_tla: str = DOMYSLNY_KOLOR_PRZYCISKU_TLA
+    wyglad_kolor_przycisku_tekstu: str = DOMYSLNY_KOLOR_PRZYCISKU_TEKSTU
+    wyglad_kolor_obramowania: str = DOMYSLNY_KOLOR_OBRAMOWANIA
+    wyglad_kolor_fokusu: str = DOMYSLNY_KOLOR_FOKUSU
+    wyglad_kolor_bledu: str = DOMYSLNY_KOLOR_BLEDU
 
 
 def sciezka_pliku_konfiguracji(srodowisko: Mapping[str, str] | None = None) -> Path:
@@ -458,6 +513,7 @@ def wczytaj_konfiguracje(
     z_pliku = _wartosci_z_pliku(sciezka)
     ze_srodowiska = _wartosci_ze_srodowiska(srodowisko)
     scalone: dict[str, object] = {**z_pliku, **ze_srodowiska}
+    _odrzuc_znaki_sterujace(scalone)
 
     domyslna = Konfiguracja()
     konfiguracja = Konfiguracja(
@@ -639,6 +695,38 @@ def wczytaj_konfiguracje(
         globalny_skrot_wlaczony=_jako_prawda_falsz(
             scalone, "globalny_skrot_wlaczony", domyslna.globalny_skrot_wlaczony
         ),
+        wyglad_schemat=_jako_jeden_z(
+            scalone, "wyglad_schemat", domyslna.wyglad_schemat, SCHEMATY_KOLOROW
+        ),
+        wyglad_rozmiar_czcionki=_jako_stopien(
+            scalone,
+            "wyglad_rozmiar_czcionki",
+            domyslna.wyglad_rozmiar_czcionki,
+            STOPNIE_CZCIONKI,
+        ),
+        wyglad_kroj_pisma=_jako_jeden_z(
+            scalone, "wyglad_kroj_pisma", domyslna.wyglad_kroj_pisma, KROJE_PISMA
+        ),
+        wyglad_kolor_tla=_jako_kolor(scalone, "wyglad_kolor_tla", domyslna.wyglad_kolor_tla),
+        wyglad_kolor_tekstu=_jako_kolor(
+            scalone, "wyglad_kolor_tekstu", domyslna.wyglad_kolor_tekstu
+        ),
+        wyglad_kolor_odnosnikow=_jako_kolor(
+            scalone, "wyglad_kolor_odnosnikow", domyslna.wyglad_kolor_odnosnikow
+        ),
+        wyglad_kolor_przycisku_tla=_jako_kolor(
+            scalone, "wyglad_kolor_przycisku_tla", domyslna.wyglad_kolor_przycisku_tla
+        ),
+        wyglad_kolor_przycisku_tekstu=_jako_kolor(
+            scalone, "wyglad_kolor_przycisku_tekstu", domyslna.wyglad_kolor_przycisku_tekstu
+        ),
+        wyglad_kolor_obramowania=_jako_kolor(
+            scalone, "wyglad_kolor_obramowania", domyslna.wyglad_kolor_obramowania
+        ),
+        wyglad_kolor_fokusu=_jako_kolor(
+            scalone, "wyglad_kolor_fokusu", domyslna.wyglad_kolor_fokusu
+        ),
+        wyglad_kolor_bledu=_jako_kolor(scalone, "wyglad_kolor_bledu", domyslna.wyglad_kolor_bledu),
     )
     if konfiguracja.deduplikacja_prog_do_przegladu > konfiguracja.deduplikacja_prog_duplikatu:
         raise BladTrwaly(
@@ -670,6 +758,86 @@ def _wartosci_ze_srodowiska(srodowisko: Mapping[str, str]) -> dict[str, object]:
         if wartosc:
             wynik[pole] = wartosc
     return wynik
+
+
+def _zawiera_znak_sterujacy(napis: str) -> bool:
+    return any(unicodedata.category(znak) == "Cc" for znak in napis)
+
+
+def _odrzuc_znaki_sterujace(scalone: Mapping[str, object]) -> None:
+    """Odrzuca napisy ze znakami sterującymi (kategoria Unicode Cc).
+
+    Dotyczy każdego napisu z pliku i ze zmiennych środowiskowych, także
+    elementów list. Powód: wartości pól tekstowych trafiają do nagłówków HTTP,
+    na przykład nazwa klienta do User-Agent, a znak powrotu karetki albo nowego
+    wiersza w nagłówku psuje każde następne połączenie. Reguła obowiązuje przy
+    wczytywaniu pliku i przy zapisie z interfejsu, bo zapis sprawdza nową treść
+    tą samą funkcją wczytującą.
+    """
+    for pole, wartosc in scalone.items():
+        napisy = [wartosc] if isinstance(wartosc, str) else []
+        if isinstance(wartosc, (list, tuple)):
+            napisy = [element for element in wartosc if isinstance(element, str)]
+        if any(_zawiera_znak_sterujacy(napis) for napis in napisy):
+            raise BladTrwaly(
+                f"Ustawienie „{pole}” zawiera znak sterujący, na przykład koniec wiersza "
+                "albo tabulację. Usuń go z wartości; w tym polu wystarczy zwykły tekst "
+                "w jednym wierszu."
+            )
+
+
+def _jako_jeden_z(
+    scalone: Mapping[str, object], pole: str, domyslna: str, dozwolone: tuple[str, ...]
+) -> str:
+    """Zwraca wartość pola, o ile należy do zamkniętego zbioru; wielkość liter bez znaczenia."""
+    if pole not in scalone:
+        return domyslna
+    napis = str(scalone[pole]).strip().lower()
+    if napis not in dozwolone:
+        raise BladTrwaly(
+            f"Ustawienie „{pole}” musi mieć jedną z wartości: {', '.join(dozwolone)}, "
+            f"a jest „{napis}”."
+        )
+    return napis
+
+
+def _jako_stopien(
+    scalone: Mapping[str, object], pole: str, domyslna: int, dozwolone: tuple[int, ...]
+) -> int:
+    """Zwraca liczbę całkowitą z zamkniętego zbioru stopni."""
+    if pole not in scalone:
+        return domyslna
+    surowa = scalone[pole]
+    if isinstance(surowa, bool) or not isinstance(surowa, (int, str)):
+        raise BladTrwaly(f"Ustawienie „{pole}” musi być liczbą całkowitą.")
+    try:
+        liczba = int(str(surowa).strip())
+    except ValueError as blad:
+        raise BladTrwaly(
+            f"Ustawienie „{pole}” musi być liczbą całkowitą, a jest „{surowa}”."
+        ) from blad
+    if liczba not in dozwolone:
+        wypisane = ", ".join(str(stopien) for stopien in dozwolone)
+        raise BladTrwaly(f"Ustawienie „{pole}” musi mieć jedną z wartości: {wypisane}.")
+    return liczba
+
+
+def _jako_kolor(scalone: Mapping[str, object], pole: str, domyslna: str) -> str:
+    """Zwraca kolor w postaci ``#rrggbb`` albo zgłasza błąd.
+
+    Walidacja jest ścisła: dokładnie znak ``#`` i sześć cyfr szesnastkowych,
+    bez żadnych dodatków. Dzięki temu wartość można bezpiecznie wstawić do
+    arkusza stylów strony i nie da się przez nią wstrzyknąć kodu CSS.
+    """
+    if pole not in scalone:
+        return domyslna
+    napis = str(scalone[pole]).strip()
+    if not WZORZEC_KOLORU.fullmatch(napis):
+        raise BladTrwaly(
+            f"Ustawienie „{pole}” musi być kolorem w postaci #RRGGBB, na przykład #1a2b3c, "
+            f"a jest „{napis}”."
+        )
+    return napis.lower()
 
 
 def _jako_liczba(scalone: Mapping[str, object], pole: str, domyslna: int) -> int:

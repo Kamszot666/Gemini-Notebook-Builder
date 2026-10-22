@@ -32,6 +32,37 @@ if sys.platform == "win32":
     from gnb.ui.zadania import ZadanieJuzTrwa
 
 
+_KATALOG_WYNIKOW_TESTU: list[Path] = []
+
+
+@pytest.fixture(autouse=True)
+def _katalog_wynikow_testu(tmp_path: Path) -> object:
+    """Katalog wyników na czas testu; skrót sprawdza przy naciśnięciu, czy projekt istnieje."""
+    _KATALOG_WYNIKOW_TESTU[:] = [tmp_path / "wyniki"]
+    yield tmp_path / "wyniki"
+    _KATALOG_WYNIKOW_TESTU.clear()
+
+
+def _utworz_checkpoint(katalog_wynikow: Path, nazwa: str) -> Path:
+    katalog = ustal_uklad(katalog_wynikow, nazwa).katalog_projektu
+    katalog.mkdir(parents=True, exist_ok=True)
+    plik = katalog / "checkpoint.json"
+    plik.write_text("{}", encoding="utf-8")
+    return plik
+
+
+class _AktywnyZProjektemNaDysku(AktywnyProjektSkrotu if sys.platform == "win32" else object):  # type: ignore[misc]
+    """Wybór projektu, który od razu tworzy checkpoint, jak projekt wybrany w interfejsie."""
+
+    def __init__(self, katalog_wynikow: Path) -> None:
+        super().__init__()
+        self._katalog_testu = katalog_wynikow
+
+    def ustaw(self, nazwa: str) -> None:
+        _utworz_checkpoint(self._katalog_testu, nazwa)
+        super().ustaw(nazwa)
+
+
 class _FalszywyRejestr:
     """Podstawa `RejestrZadan`: zapamiętuje żądania uruchomienia, nic nie wykonuje.
 
@@ -103,12 +134,11 @@ def _obsluga(
     monkeypatch.setattr(obsluga._dzwieki, "zagraj_sukces", lambda: dzwieki.append("sukces"))
     monkeypatch.setattr(obsluga._dzwieki, "zagraj_porazke", lambda: dzwieki.append("porazka"))
 
-    aktywny_projekt = AktywnyProjektSkrotu()
+    konfiguracja = konfiguracja or Konfiguracja(katalog_wynikow=_KATALOG_WYNIKOW_TESTU[0])
+    aktywny_projekt = _AktywnyZProjektemNaDysku(konfiguracja.katalog_wynikow)
     ostatni_komunikat = OstatniKomunikatSkrotu()
     fikcyjny_rejestr = rejestr if rejestr is not None else _FalszywyRejestr()
-    instancja = ObslugaSkrotu(
-        konfiguracja or Konfiguracja(), aktywny_projekt, fikcyjny_rejestr, ostatni_komunikat
-    )  # type: ignore[arg-type]
+    instancja = ObslugaSkrotu(konfiguracja, aktywny_projekt, fikcyjny_rejestr, ostatni_komunikat)  # type: ignore[arg-type]
     return instancja, dzwieki, ostatni_komunikat, fikcyjny_rejestr, aktywny_projekt
 
 
@@ -133,6 +163,38 @@ def test_brak_aktywnego_projektu_gra_porazke_i_nic_nie_zapisuje(
     assert komunikat is not None
     assert komunikat.sukces is False
     assert "Ustaw aktywny projekt skrótu na stronie projektu" in komunikat.tekst
+
+
+def test_usuniety_katalog_aktywnego_projektu_gra_porazke_czysci_wybor_i_nie_tworzy_katalogu(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    okno = _okno(nazwa_procesu="chrome", tytul="Przykładowa strona")
+    wywolania: list[str] = []
+    plik_stanu = tmp_path / "stan.json"
+    instancja, dzwieki, ostatni_komunikat, rejestr, aktywny = _obsluga(
+        monkeypatch, okno=okno, adres_paska="przyklad.pl/artykul", wywolania_schowka=wywolania
+    )
+    aktywny._plik_stanu = plik_stanu
+    aktywny.ustaw("Projekt A")
+    assert plik_stanu.is_file()
+    katalog = ustal_uklad(_KATALOG_WYNIKOW_TESTU[0], "Projekt A").katalog_projektu
+    (katalog / "checkpoint.json").unlink()
+
+    instancja._obsluz_nacisniecie()
+
+    assert dzwieki == ["porazka"]
+    assert aktywny.aktualny() is None
+    assert not plik_stanu.exists()
+    assert rejestr.uruchomienia == []
+    assert instancja._kolejka.liczba_oczekujacych() == 0
+    assert wywolania == []
+    assert not (katalog / "checkpoint.json").exists()
+    assert not (katalog / "materialy_zrodlowe").exists()
+    komunikat = ostatni_komunikat.aktualny()
+    assert komunikat is not None
+    assert komunikat.sukces is False
+    assert "Projekt A" in komunikat.tekst
+    assert "już nie ma na dysku" in komunikat.tekst
 
 
 def test_adres_z_przegladarki_trafia_do_kolejki_i_gra_sukces(
@@ -469,7 +531,7 @@ def test_schowek_nie_do_przywrocenia_zachowuje_sie_jak_brak_zaznaczenia_i_mowi_o
 
 def test_adres_interfejsu_w_pasku_adresu_gra_porazke(monkeypatch: pytest.MonkeyPatch) -> None:
     okno = _okno(nazwa_procesu="chrome", tytul="Gemini Notebook Builder")
-    konfiguracja = Konfiguracja(port_nasluchu=8765)
+    konfiguracja = Konfiguracja(port_nasluchu=8765, katalog_wynikow=_KATALOG_WYNIKOW_TESTU[0])
     instancja, dzwieki, ostatni_komunikat, rejestr, aktywny = _obsluga(
         monkeypatch, okno=okno, adres_paska="127.0.0.1:8765", konfiguracja=konfiguracja
     )

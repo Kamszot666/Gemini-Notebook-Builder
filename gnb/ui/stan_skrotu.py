@@ -105,6 +105,27 @@ class AktywnyProjektSkrotu:
             "aktywnego projektu. Ustaw nowy aktywny projekt skrótu na stronie projektu."
         )
 
+    def sprawdz_istnienie(self, katalog_wynikow: Path) -> str | None:
+        """Sprawdza przy naciśnięciu skrótu, czy aktywny projekt nadal ma checkpoint.
+
+        Zwraca ``None``, gdy nie ma aktywnego projektu albo projekt istnieje.
+        Gdy katalog projektu zniknął od czasu wyboru, czyści wybór w pamięci
+        i zapamiętany plik stanu i zwraca zdanie dla użytkownika. Niczego nie
+        tworzy: skrót nie może odtworzyć katalogu usuniętego projektu.
+        """
+        with self._zamek:
+            nazwa = self._nazwa
+        if nazwa is None or self._projekt_istnieje(katalog_wynikow, nazwa):
+            return None
+        with self._zamek:
+            if self._nazwa == nazwa:
+                self._nazwa = None
+        self._usun_plik_stanu()
+        return (
+            f"Aktywnego projektu skrótu „{nazwa}” już nie ma na dysku. Nic nie dodano, więc "
+            "nie ma aktywnego projektu. Ustaw nowy aktywny projekt skrótu na stronie projektu."
+        )
+
     @staticmethod
     def _projekt_istnieje(katalog_wynikow: Path, nazwa: str) -> bool:
         try:

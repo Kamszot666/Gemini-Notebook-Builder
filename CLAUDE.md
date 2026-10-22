@@ -261,7 +261,7 @@ Wymagania bezpieczeństwa interfejsu, ściśle powiązane z zasadą „treść t
 
 ## 11a. Konfiguracja i dwa pola tekstowe interfejsu
 
-Trwały plik konfiguracji w formacie TOML, przechowywany poza repozytorium. Wartość ze zmiennej środowiskowej ma pierwszeństwo przed wartością z pliku.
+Trwały plik konfiguracji w formacie TOML, przechowywany poza repozytorium. Wartość ze zmiennej środowiskowej ma pierwszeństwo przed wartością z pliku. Strona `/ustawienia` zmienia ten plik z interfejsu (opis w `docs/CONFIGURATION.md`); aktywny projekt skrótu nie jest polem konfiguracji i zostaje w pliku `stan_skrotu.json`.
 
 Konfigurowalne muszą być co najmniej: limit źródeł wraz z profilami planów, bezpieczny limit słów, bezpieczny limit megabajtów, katalog nadrzędny wyników, katalog konkretnego projektu, formaty wynikowe, włączenie i próg każdego etapu deduplikacji, embeddingi lokalne, OCR, transkrypcja, model Whisper, język, wybór procesora lub karty graficznej, globalny skrót, ustawienia generowania PDF, jakość grafik, maksymalny rozmiar PDF, zachowywanie oryginałów, tryb pakowania, treść instrukcji systemowej notatnika oraz treść promptu wyszukiwania.
 

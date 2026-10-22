@@ -1,4 +1,4 @@
-# Dostępność interfejsu WWW — stan po etapie piętnastym, część D
+# Dostępność interfejsu WWW — stan po etapie piętnastym, część E
 
 Ten dokument opisuje, jak obsługiwać interfejs Gemini Notebook Builder
 z klawiatury i z czytnikiem ekranu, oraz co interfejs ogłasza i jak często.
@@ -271,6 +271,36 @@ projektu pokazuje sekcję „Pliki wynikowe brakujące na dysku” z nazwą plik
 i źródłami, których dotyczy. Sekcja tylko pokazuje rozbieżność. Samo
 wyświetlenie strony niczego nie zmienia w projekcie: status źródeł zmienia
 dopiero początek następnego przebiegu przetwarzania, opisany w `FORMATS.md`.
+
+## Strona ustawień
+
+Strona `/ustawienia` jest dostępna odnośnikiem „Ustawienia” (element `a`) na
+stronie głównej i na stronie każdego projektu.
+
+1. Zakładki według wzorca WAI-ARIA Authoring Practices „Tabs”: lista zakładek
+   z rolą `tablist` i nazwą „Zakładki ustawień”, każda zakładka to przycisk
+   z rolą `tab` i atrybutem `aria-selected`, każdy panel ma rolę `tabpanel`
+   i nagłówek. Sprawdzone w Chrome: strzałka w prawo i w lewo przesuwa fokus
+   i wybór między zakładkami (z zawinięciem), Home i End skaczą do pierwszej
+   i ostatniej zakładki, klawisz Tab z zakładki prowadzi do pierwszego pola
+   panelu. Tylko wybrana zakładka ma `tabindex="0"`.
+2. Bez JavaScriptu lista zakładek jest ukryta, a wszystkie panele są widoczne
+   jeden pod drugim, każdy z nagłówkiem drugiego poziomu i własnym formularzem.
+3. Pola tekstowe mają widoczną etykietę `label for`, bez `placeholder` i bez
+   `aria-label`. Pola liczbowe, listy i pola wyboru też mają etykietę
+   `label for`. Opis każdego pola jest przypięty przez `aria-describedby` i
+   zawiera wartość domyślną oraz informację, od kiedy działa zmiana. Pola
+   tylko do odczytu, w tym pola ustawione zmienną środowiskowej, są zwykłym
+   tekstem z nazwą pola.
+4. Błędy: po odrzuconym zapisie strona pokazuje listę błędów z odnośnikami do
+   pól, a pole z błędem ma `aria-invalid` i opis błędu w `aria-describedby`.
+   Fokus przechodzi na listę błędów, jak w pozostałych formularzach.
+5. Potwierdzenie zapisu: po udanym zapisie strona ładuje się od nowa i fokus
+   trafia na komunikat „Zapisano ustawienia zakładki …” (region `role="status"`).
+   To odstępstwo od zasady „nie przenoś fokusu” jest świadome: nowo wczytana
+   strona zaczynałaby od początku dokumentu, a użytkownik czytnika ekranu nie
+   usłyszałby, że zapis się udał. Czy takie rozwiązanie odczytuje NVDA zrozumiale,
+   sprawdza użytkownik; to nie jest jeszcze sprawdzone.
 
 ## Motyw i ruch
 

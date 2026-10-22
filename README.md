@@ -159,6 +159,8 @@ Nie musisz niczego ustawiać, bo są sensowne wartości domyślne. Jeśli chcesz
 
 Plik nazywa się `konfiguracja.toml` i leży poza repozytorium, zwykle w `C:\Users\TWOJA_NAZWA\AppData\Roaming\Gemini Notebook Builder`. Jego brak nie jest błędem.
 
+Większość ustawień zmienisz bez edytowania pliku: w interfejsie wybierz odnośnik Ustawienia na stronie głównej albo na stronie projektu. Strona dzieli ustawienia na zakładki tematyczne, a każda ma przyciski Zapisz ustawienia i Przywróć ustawienia domyślne tej zakładki. Pole ustawione zmienną środowiskową jest tylko do odczytu. Adresu nasłuchu nie da się zmienić.
+
 Najczęściej zmieniane rzeczy:
 
 1. `katalog_wynikow`: gdzie mają lądować projekty. Domyślnie podkatalog `Gemini Notebook Builder` w Dokumentach.

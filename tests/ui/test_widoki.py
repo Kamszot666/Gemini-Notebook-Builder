@@ -127,7 +127,7 @@ def test_strona_projektu_w_trakcie_ma_region_status_i_skrypt_postepu() -> None:
     assert 'aria-live="polite"' in html
     assert 'data-koniec="nie"' in html
     assert "Przetworzono 3 z 10 źródeł" in html
-    assert "setInterval" in html
+    assert "setInterval(odswiez, 4000)" in html
     assert 'id="licznik-instrukcji"' in html
 
 
@@ -156,7 +156,7 @@ def test_strona_projektu_po_zakonczeniu_pokazuje_raport_bez_skryptu_postepu() ->
     )
 
     assert 'data-koniec="tak"' in html
-    assert "setInterval" not in html
+    assert "setInterval(odswiez, 4000)" not in html
     assert "Raport końcowy projektu: Projekt" in html
     assert "Źródła przetworzone: 5" in html
 

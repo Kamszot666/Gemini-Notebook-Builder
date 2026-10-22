@@ -1,8 +1,9 @@
 """Spina rejestrację skrótu, rozpoznanie źródła, kolejkę i przetwarzanie w potoku.
 
 Ten moduł jest jedynym miejscem w pakiecie ``gnb.hotkeys``, które łączy warstwę
-Win32 (``_win32.py``), UI Automation (``_automatyzacja.py``), Eksplorator
-(``_eksplorator.py``) i dźwięki (``_dzwieki.py``) z resztą aplikacji: kolejką
+Win32 (``_win32.py``), UI Automation (``_automatyzacja.py``), schowek
+(``_schowek.py``), Eksplorator (``_eksplorator.py``) i dźwięki (``_dzwieki.py``)
+z resztą aplikacji: kolejką
 (``kolejka.py``), rozpoznaniem (``rozpoznanie.py``) oraz stanem skrótu i
 rejestrem zadań interfejsu z ``gnb.ui``.
 
@@ -24,11 +25,10 @@ if sys.platform == "win32":
 
     from gnb.core.konfiguracja import Konfiguracja
     from gnb.core.postep import WywolanieZwrotnePostepu
-    from gnb.hotkeys import _automatyzacja, _dzwieki, _eksplorator, _win32
+    from gnb.hotkeys import _automatyzacja, _dzwieki, _eksplorator, _schowek, _win32
     from gnb.hotkeys.kolejka import KolejkaSkrotu
-    from gnb.hotkeys.model import InformacjeOOknie, TypDodania
+    from gnb.hotkeys.model import InformacjeOOknie, RodzajWynikuKopiowania, TypDodania
     from gnb.hotkeys.rozpoznanie import PorazkaRozpoznania, rozpoznaj
-    from gnb.hotkeys.stale import NAZWA_DOMYSLNEGO_PROJEKTU_SKROTU
     from gnb.ingestion.wejscie import przyjmij_plik, przyjmij_url
     from gnb.logging_pl.dziennik import (
         NAZWA_LOGU_SZCZEGOLOWEGO,
@@ -39,7 +39,11 @@ if sys.platform == "win32":
     )
     from gnb.persistence.projekt import ustal_uklad
     from gnb.potok import WynikPrzetwarzania, przetworz_projekt
-    from gnb.ui.stan_skrotu import AktywnyProjektSkrotu, OstatniKomunikatSkrotu
+    from gnb.ui.stan_skrotu import (
+        AktywnyProjektSkrotu,
+        OstatniKomunikatSkrotu,
+        SzkicTekstuSkrotu,
+    )
     from gnb.ui.zadania import RejestrZadan, ZadanieJuzTrwa
 
     _LOG = logging.getLogger("gnb.hotkeys")
@@ -60,11 +64,13 @@ if sys.platform == "win32":
             aktywny_projekt: AktywnyProjektSkrotu,
             rejestr: RejestrZadan,
             ostatni_komunikat: OstatniKomunikatSkrotu,
+            szkic_tekstu: SzkicTekstuSkrotu | None = None,
         ) -> None:
             self._konfiguracja = konfiguracja
             self._aktywny_projekt = aktywny_projekt
             self._rejestr = rejestr
             self._ostatni_komunikat = ostatni_komunikat
+            self._szkic_tekstu = szkic_tekstu if szkic_tekstu is not None else SzkicTekstuSkrotu()
             self._kolejka = KolejkaSkrotu()
             self._watek = _win32.WatekSkrotu(self._obsluz_nacisniecie)
             rejestr.dodaj_nasluch_zakonczenia(self._sprobuj_oproznic_kolejke)
@@ -155,22 +161,42 @@ if sys.platform == "win32":
         def _obsluz_nacisniecie(self) -> None:
             nazwa_projektu = self._aktywny_projekt.aktualny()
             if nazwa_projektu is None:
-                # Jawny wybór projektu nadal ma pierwszeństwo. Bez niego źródła
-                # trafiają do jednego, wyraźnie nazwanego projektu, żeby skrót
-                # działał także zaraz po starcie serwera.
-                nazwa_projektu = NAZWA_DOMYSLNEGO_PROJEKTU_SKROTU
-                self._aktywny_projekt.ustaw(nazwa_projektu)
+                # Decyzja użytkownika z etapu piętnastego, część D: bez projektu
+                # zapasowego. Skrót nic nie zapisuje, dopóki użytkownik nie
+                # wskaże projektu, bo źródło w przypadkowym projekcie jest błędem
+                # poprawności danych.
+                self._zglos_porazke(
+                    "Brak aktywnego projektu skrótu. Nic nie dodano. Ustaw aktywny projekt "
+                    "skrótu na stronie projektu."
+                )
+                return
 
             okno = _win32.informacje_o_aktywnym_oknie()
             if okno is None:
                 self._zglos_porazke("Nie udało się ustalić aktywnego okna. Nic nie dodano.")
                 return
 
-            adres_paska, pliki_zaznaczone = self._odczytaj_stan_okna(okno)
+            uwagi: list[str] = []
+            zaznaczony_tekst: str | None = None
+            if okno.nazwa_procesu in _PRZEGLADARKI:
+                zaznaczony_tekst = self._odczytaj_zaznaczenie_przegladarki(uwagi)
+            adres_paska: str | None
+            pliki_zaznaczone: tuple[Path, ...]
+            if zaznaczony_tekst is not None and zaznaczony_tekst.strip():
+                adres_paska, pliki_zaznaczone = None, ()
+            else:
+                adres_paska, pliki_zaznaczone = self._odczytaj_stan_okna(okno)
 
-            wynik = rozpoznaj(okno, adres_paska, pliki_zaznaczone)
+            wynik = rozpoznaj(
+                okno,
+                adres_paska,
+                pliki_zaznaczone,
+                zaznaczony_tekst=zaznaczony_tekst,
+                adres_nasluchu=self._konfiguracja.adres_nasluchu,
+                port_nasluchu=self._konfiguracja.port_nasluchu,
+            )
             if isinstance(wynik, PorazkaRozpoznania):
-                self._zglos_porazke(wynik.powod)
+                self._zglos_porazke(" ".join([wynik.powod, *uwagi]))
                 return
 
             moment = datetime.now(UTC)
@@ -181,15 +207,60 @@ if sys.platform == "win32":
                 )
                 komunikat = f"Dodano adres strony: {wynik.opis}"
                 self._kolejka.dodaj(nazwa_projektu, pozycja)
+            elif wynik.typ is TypDodania.ADRESY_Z_ZAZNACZENIA:
+                for adres in wynik.adresy:
+                    self._kolejka.dodaj(
+                        nazwa_projektu,
+                        przyjmij_url(
+                            adres, moment, self._konfiguracja.dodatkowe_parametry_sledzace
+                        ),
+                    )
+                komunikat = (
+                    f"Dodano adres z zaznaczenia: {wynik.opis}"
+                    if len(wynik.adresy) == 1
+                    else f"Dodano adresy z zaznaczenia: {len(wynik.adresy)}"
+                )
+                if wynik.liczba_pominietych_adresow_interfejsu:
+                    komunikat += (
+                        f". Pominięto adresy interfejsu Gemini Notebook Builder: "
+                        f"{wynik.liczba_pominietych_adresow_interfejsu}"
+                    )
+            elif wynik.typ is TypDodania.TEKST:
+                if not self._szkic_tekstu.dopisz(nazwa_projektu, wynik.tekst):
+                    self._zglos_porazke(
+                        "Zaznaczony tekst jest za długi: szkic tekstu tego projektu przekroczyłby "
+                        "limit. Nic nie dodano. Wyślij formularz dosyłania, żeby opróżnić szkic."
+                    )
+                    return
+                komunikat = (
+                    f"Dopisano {len(wynik.tekst)} znaków zaznaczonego tekstu do pola "
+                    f"Tu wklej tekst projektu „{nazwa_projektu}”"
+                )
             else:
                 for sciezka in wynik.pliki:
                     self._kolejka.dodaj(nazwa_projektu, przyjmij_plik(sciezka, moment))
                 komunikat = f"Dodano plik: {wynik.opis}"
 
+            if uwagi:
+                komunikat = f"{komunikat}. {' '.join(uwagi)}"
             _dzwieki.zagraj_sukces()
             self._ostatni_komunikat.ustaw(komunikat, sukces=True)
             _LOG.info("%s (projekt „%s”).", komunikat, nazwa_projektu)
             self._sprobuj_oproznic_kolejke()
+
+        def _odczytaj_zaznaczenie_przegladarki(self, uwagi: list[str]) -> str | None:
+            """Kopiuje zaznaczenie przeglądarki przez schowek; zwraca tekst albo ``None``.
+
+            ``None`` znaczy, że nic nie zaznaczono albo że zaznaczenia nie dało
+            się sprawdzić, i wtedy skrót działa jak dotąd, czyli bierze adres
+            strony z paska adresu. Powód niepowodzenia trafia do ``uwagi``.
+            """
+            wynik = _schowek.skopiuj_zaznaczenie()
+            if wynik.uwaga:
+                uwagi.append(wynik.uwaga)
+            if wynik.rodzaj is RodzajWynikuKopiowania.ZAZNACZONO:
+                return wynik.tekst
+            return None
 
         def _odczytaj_stan_okna(
             self, okno: InformacjeOOknie

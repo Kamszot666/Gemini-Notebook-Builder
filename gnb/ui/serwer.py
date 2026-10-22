@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Protocol, cast
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from gnb.core.konfiguracja import Konfiguracja
+from gnb.core.konfiguracja import Konfiguracja, sciezka_pliku_konfiguracji
 from gnb.core.nazwy import sanityzuj_nazwe_projektu
 from gnb.core.postep import WywolanieZwrotnePostepu
 from gnb.core.wyjatki import BladGnb
@@ -59,7 +59,12 @@ from gnb.potok import (
 from gnb.ui import csrf, formularze, widoki
 from gnb.ui.blokada import BlokadaInstancji
 from gnb.ui.projekty import opisz_projekt, znajdz_projekty
-from gnb.ui.stan_skrotu import AktywnyProjektSkrotu, OstatniKomunikatSkrotu
+from gnb.ui.stan_skrotu import (
+    NAZWA_PLIKU_STANU_SKROTU,
+    AktywnyProjektSkrotu,
+    OstatniKomunikatSkrotu,
+    SzkicTekstuSkrotu,
+)
 from gnb.ui.widoki import BladPola, DaneFormularzaProjektu, PodsumowanieWyniku, sciezka_projektu
 from gnb.ui.widoki_zrodel import (
     BrakujacyPlikDoWidoku,
@@ -93,6 +98,7 @@ class _Serwer(ThreadingHTTPServer):
         rejestr: RejestrZadan,
         aktywny_projekt_skrotu: AktywnyProjektSkrotu,
         ostatni_komunikat_skrotu: OstatniKomunikatSkrotu,
+        szkic_tekstu_skrotu: SzkicTekstuSkrotu,
     ) -> None:
         if ":" in adres[0]:
             self.address_family = socket.AF_INET6
@@ -101,6 +107,7 @@ class _Serwer(ThreadingHTTPServer):
         self.rejestr = rejestr
         self.aktywny_projekt_skrotu = aktywny_projekt_skrotu
         self.ostatni_komunikat_skrotu = ostatni_komunikat_skrotu
+        self.szkic_tekstu_skrotu = szkic_tekstu_skrotu
 
     def server_bind(self) -> None:
         """Wiąże gniazdo; na Windows wyłącznie, bez współdzielenia portu z innym procesem."""
@@ -115,6 +122,7 @@ def zbuduj_serwer(
     *,
     aktywny_projekt_skrotu: AktywnyProjektSkrotu | None = None,
     ostatni_komunikat_skrotu: OstatniKomunikatSkrotu | None = None,
+    szkic_tekstu_skrotu: SzkicTekstuSkrotu | None = None,
 ) -> ThreadingHTTPServer:
     """Buduje serwer bez uruchamiania go. Wydzielone z ``uruchom_serwer`` na potrzeby testów."""
     return _Serwer(
@@ -123,7 +131,28 @@ def zbuduj_serwer(
         rejestr or RejestrZadan(),
         aktywny_projekt_skrotu or AktywnyProjektSkrotu(),
         ostatni_komunikat_skrotu or OstatniKomunikatSkrotu(),
+        szkic_tekstu_skrotu or SzkicTekstuSkrotu(),
     )
+
+
+def przygotuj_stan_skrotu(
+    katalog_danych: Path, katalog_wynikow: Path
+) -> tuple[AktywnyProjektSkrotu, OstatniKomunikatSkrotu]:
+    """Buduje stan skrótu i przywraca zapamiętany aktywny projekt.
+
+    Plik stanu leży w katalogu danych aplikacji, obok pliku konfiguracji.
+    Gdy zapamiętanego projektu już nie ma, plik jest uszkodzony albo pochodzi
+    z nowszej wersji, żaden projekt nie jest aktywny, a powód trafia do
+    komunikatu w interfejsie i do logu. Start serwera nigdy się przez to nie
+    przerywa.
+    """
+    aktywny_projekt = AktywnyProjektSkrotu(katalog_danych / NAZWA_PLIKU_STANU_SKROTU)
+    ostatni_komunikat = OstatniKomunikatSkrotu()
+    powod_braku = aktywny_projekt.przywroc(katalog_wynikow)
+    if powod_braku is not None:
+        ostatni_komunikat.ustaw(powod_braku, sukces=False)
+        _LOG.warning(powod_braku)
+    return aktywny_projekt, ostatni_komunikat
 
 
 def uruchom_serwer(
@@ -131,6 +160,7 @@ def uruchom_serwer(
     *,
     rejestr: RejestrZadan | None = None,
     blokada: BlokadaInstancji | None = None,
+    katalog_danych: Path | None = None,
 ) -> None:
     """Uruchamia serwer i blokuje do przerwania klawiszem.
 
@@ -148,8 +178,24 @@ def uruchom_serwer(
     ścieżki uruchomienia. Dzieje się to wyłącznie na Windows i wyłącznie, gdy
     ustawienie ``globalny_skrot_wlaczony`` jest włączone; nieudana rejestracja
     jest tylko logowana i nie przerywa startu serwera.
+
+    Aktywny projekt skrótu jest zapamiętywany w pliku stanu w katalogu danych
+    aplikacji, obok pliku konfiguracji, i przywracany tutaj, przed rejestracją
+    skrótu. Zapamiętany projekt, którego już nie ma, nie jest aktywny, a powód
+    trafia do komunikatu w interfejsie i do logu.
     """
-    serwer = cast("_Serwer", zbuduj_serwer(konfiguracja, rejestr))
+    aktywny_projekt, ostatni_komunikat = przygotuj_stan_skrotu(
+        katalog_danych or sciezka_pliku_konfiguracji().parent, konfiguracja.katalog_wynikow
+    )
+    serwer = cast(
+        "_Serwer",
+        zbuduj_serwer(
+            konfiguracja,
+            rejestr,
+            aktywny_projekt_skrotu=aktywny_projekt,
+            ostatni_komunikat_skrotu=ostatni_komunikat,
+        ),
+    )
     adres = f"http://{konfiguracja.adres_nasluchu}:{serwer.server_address[1]}/"
     if blokada is not None:
         blokada.zapisz_adres(adres)
@@ -198,6 +244,7 @@ def _uruchom_globalny_skrot(serwer: _Serwer) -> _ObslugaSkrotuLike | None:
             serwer.aktywny_projekt_skrotu,
             serwer.rejestr,
             serwer.ostatni_komunikat_skrotu,
+            serwer.szkic_tekstu_skrotu,
         )
         obsluga.uruchom()
         return obsluga
@@ -255,6 +302,8 @@ class _Handler(BaseHTTPRequestHandler):
             self._pokaz_grupy_projektu(
                 self._nazwa_z_url(sciezka[len("/projekt/") : -len("/grupy")])
             )
+        elif sciezka.startswith("/projekt/") and sciezka.endswith("/szkic"):
+            self._pokaz_szkic_tekstu(self._nazwa_z_url(sciezka[len("/projekt/") : -len("/szkic")]))
         elif sciezka.startswith("/projekt/") and sciezka.endswith("/prompt"):
             self._pokaz_prompt(self._nazwa_z_url(sciezka[len("/projekt/") : -len("/prompt")]))
         elif sciezka.startswith("/projekt/"):
@@ -312,6 +361,7 @@ class _Handler(BaseHTTPRequestHandler):
             ostatni_komunikat_skrotu=self._serwer.ostatni_komunikat_skrotu.aktualny(),
             grupy_projektu=self._grupy_wybranego_projektu(wybrany),
             wybrany_projekt=wybrany,
+            szkic_tekstu=self._serwer.szkic_tekstu_skrotu.pobierz(wybrany) if wybrany else None,
         )
         self._wyslij_html(kod, html, token=token)
 
@@ -338,6 +388,21 @@ class _Handler(BaseHTTPRequestHandler):
             return
         grupy = self._grupy_projektu(uklad)
         dane = {"grupy": grupy, "domyslna": grupy[-1] if grupy else ""}
+        self._wyslij(200, json.dumps(dane, ensure_ascii=False).encode("utf-8"), _TYP_JSON)
+
+    def _pokaz_szkic_tekstu(self, nazwa: str) -> None:
+        """Zwraca szkic tekstu ze skrótu jako JSON, odpytywany przez skrypt strony.
+
+        Odpowiedź niesie tekst i numer wersji. Strona dopisuje do pola tylko to,
+        co nowe, i nie przenosi fokusu. Nazwa przechodzi tę samą sanityzację co
+        w pozostałych trasach, a nieistniejący projekt daje 404.
+        """
+        uklad = self._znajdz_istniejacy_projekt(nazwa)
+        if uklad is None:
+            self._blad(404, "Nie znaleziono projektu", f"Nie ma projektu o nazwie „{nazwa}”.")
+            return
+        stan = self._serwer.szkic_tekstu_skrotu.pobierz(uklad.nazwa_projektu)
+        dane = {"tekst": stan.tekst, "wersja": stan.wersja}
         self._wyslij(200, json.dumps(dane, ensure_ascii=False).encode("utf-8"), _TYP_JSON)
 
     def _znajdz_istniejacy_projekt(self, nazwa: str) -> UkladProjektu | None:
@@ -457,6 +522,7 @@ class _Handler(BaseHTTPRequestHandler):
             bledy_dosylania=bledy_dosylania,
             zrodla_html=self._zrodla_html(uklad, token),
             opis_projektu=opisz_projekt(uklad.katalog_projektu),
+            szkic_tekstu=self._serwer.szkic_tekstu_skrotu.pobierz(uklad.nazwa_projektu),
         )
         self._wyslij_html(kod, html, token=token)
 
@@ -578,6 +644,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
         if istniejacy:
             self._serwer.aktywny_projekt_skrotu.ustaw(nazwa_bezpieczna)
+            self._serwer.szkic_tekstu_skrotu.wyczysc(nazwa_bezpieczna)
         self._przekieruj(sciezka_projektu(nazwa_bezpieczna))
 
     def _sprawdz_istniejacy_projekt(
@@ -715,6 +782,7 @@ class _Handler(BaseHTTPRequestHandler):
                 bledy_dosylania=[BladPola("dosylanie-adresy", blad.komunikat)],
             )
             return
+        self._serwer.szkic_tekstu_skrotu.wyczysc(uklad.nazwa_projektu)
         self._przekieruj(sciezka_projektu(uklad.nazwa_projektu))
 
     def _wznow_projekt(self, nazwa: str) -> None:

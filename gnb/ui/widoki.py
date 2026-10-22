@@ -23,7 +23,7 @@ from gnb.persistence.pola_notatnika import PolaNotatnika
 from gnb.ui.csrf import NAZWA_POLA_FORMULARZA
 from gnb.ui.html import escapuj, tekst_z_odnosnikami
 from gnb.ui.projekty import ProjektNaLiscie
-from gnb.ui.stan_skrotu import KomunikatSkrotu
+from gnb.ui.stan_skrotu import KomunikatSkrotu, StanSzkicu
 from gnb.ui.zadania import InformacjaOZadaniu, StanZadania
 
 SCIEZKA_POSTEPU = "/postep"
@@ -232,13 +232,21 @@ def strona_glowna(
     ostatni_komunikat_skrotu: KomunikatSkrotu | None = None,
     grupy_projektu: list[str] | None = None,
     wybrany_projekt: str = "",
+    szkic_tekstu: StanSzkicu | None = None,
 ) -> str:
     """Strona główna: jeden formularz dodawania materiałów do nowego albo istniejącego projektu.
 
     Argument `wybrany_projekt` to nazwa projektu zaznaczonego na liście „Projekt”
     przy wczytaniu strony, a `grupy_projektu` to grupy tego projektu. Po błędzie
     walidacji zaznaczenie wraca do tego, co użytkownik wybrał w wysłanym formularzu.
+
+    Argument `szkic_tekstu` to tekst zaznaczony w przeglądarce globalnym skrótem
+    dla wybranego projektu. Wypełnia pole „Tu wklej tekst” bez JavaScriptu, ale
+    tylko przy zwykłym wczytaniu strony: po błędzie walidacji pole zachowuje to,
+    co użytkownik wysłał.
     """
+    szkic = szkic_tekstu or StanSzkicu("", 0)
+    tekst_pola = dane.tekst if dane is not None else szkic.tekst
     dane = dane or DaneFormularzaProjektu()
     bledy = bledy or []
     grupy = grupy_projektu or []
@@ -293,7 +301,9 @@ wybrano Nowa grupa.</p>
 {blad_nazwa_grupy}</div>
 <p id="komunikat-formularza" role="status" aria-live="polite"></p>
 <label for="tekst">{NAZWA_POLA_TEKSTU}</label>
-<textarea id="tekst" name="tekst"{atrybuty_tekst}>{escapuj(dane.tekst)}</textarea>
+<textarea id="tekst" name="tekst" data-wersja-szkicu="{szkic.wersja}"
+  {atrybuty_tekst}>{escapuj(tekst_pola)}</textarea>
+<p id="komunikat-szkicu" role="status" aria-live="polite"></p>
 {blad_tekst}
 <label for="adresy">{NAZWA_POLA_ADRESOW}</label>
 <textarea id="adresy" name="adresy"{atrybuty_adresy}>{escapuj(dane.adresy)}</textarea>
@@ -308,6 +318,7 @@ wybrano Nowa grupa.</p>
     skrypt = skrypt.replace("WYBOR_BEZ_GRUPY", WYBOR_BEZ_GRUPY)
     skrypt = skrypt.replace("WYBOR_NOWA_GRUPA", WYBOR_NOWA_GRUPA)
     skrypt = skrypt.replace("PREFIKS_GRUPY", PREFIKS_GRUPY)
+    skrypt += "\n" + _skrypt_szkicu("tekst", "komunikat-szkicu", lista_projektow="projekt")
     if bledy:
         skrypt += "\n" + _SKRYPT_FOKUS_BLEDOW
     return _dokument("Gemini Notebook Builder", tresc, skrypt=skrypt)
@@ -378,6 +389,7 @@ def strona_projektu(
     bledy_dosylania: list[BladPola] | None = None,
     zrodla_html: str = "",
     opis_projektu: ProjektNaLiscie | None = None,
+    szkic_tekstu: StanSzkicu | None = None,
 ) -> str:
     """Strona projektu: region postępu, dwa pola tekstowe oraz raport po zakończeniu.
 
@@ -403,6 +415,8 @@ def strona_projektu(
         dane_dosylania,
         bledy_dosylania,
         zrodla_html,
+        nazwa,
+        szkic_tekstu or StanSzkicu("", 0),
     )
     czesci.append(f'<div id="wynik-po-zakonczeniu">{fragment_wyniku}</div>')
 
@@ -415,7 +429,10 @@ def strona_projektu(
     czesci.append(f'<p><a href="{escapuj(sciezka)}">Odśwież stan</a></p>')
     czesci.append('<p><a href="/">Wróć do strony głównej</a></p>')
 
-    fragmenty_skryptu = [_SKRYPT_LICZNIKA]
+    fragmenty_skryptu = [
+        _SKRYPT_LICZNIKA,
+        _skrypt_szkicu("dosylanie-tekst", "komunikat-szkicu-dosylania"),
+    ]
     if trwa:
         fragmenty_skryptu.append(
             _SKRYPT_POSTEPU.replace("SCIEZKA_POSTEPU", escapuj(SCIEZKA_POSTEPU))
@@ -434,6 +451,8 @@ def _fragment_wyniku(
     dane_dosylania: DaneFormularzaProjektu | None,
     bledy_dosylania: list[BladPola] | None,
     zrodla_html: str = "",
+    nazwa: str = "",
+    szkic: StanSzkicu | None = None,
 ) -> str:
     """Buduje blok pokazywany po zakończeniu przebiegu: podsumowanie, raport, źródła i dosyłanie.
 
@@ -455,7 +474,7 @@ def _fragment_wyniku(
     if raport is not None:
         czesci.append(
             _formularz_dosylania(
-                sciezka, grupy_projektu, token_csrf, dane_dosylania, bledy_dosylania
+                sciezka, grupy_projektu, token_csrf, dane_dosylania, bledy_dosylania, nazwa, szkic
             )
         )
     return "\n".join(czesci)
@@ -475,6 +494,8 @@ def _formularz_dosylania(
     token_csrf: str,
     dane: DaneFormularzaProjektu | None,
     bledy: list[BladPola] | None,
+    nazwa: str = "",
+    szkic: StanSzkicu | None = None,
 ) -> str:
     """Formularz dosyłania kolejnych źródeł do już przetworzonego projektu.
 
@@ -482,7 +503,13 @@ def _formularz_dosylania(
     bez podpowiedzi wewnątrz pola i bez `aria-label`. Nazwa grupy jest wymagana
     i ma listę podpowiedzi z grupami, które projekt już zna, więc kolejne źródło
     trafia do istniejącego pliku grupy bez przepisywania jej nazwy.
+
+    Pole „Tu wklej tekst” jest wypełnione szkicem tekstu zaznaczonego w przeglądarce
+    globalnym skrótem, bez JavaScriptu. Po błędzie walidacji zachowuje to, co
+    użytkownik wysłał.
     """
+    szkic = szkic or StanSzkicu("", 0)
+    tekst_pola = dane.tekst if dane is not None else szkic.tekst
     dane = dane or DaneFormularzaProjektu(grupa=grupy_projektu[-1] if grupy_projektu else "")
     bledy = bledy or []
     atrybuty_tekst, blad_tekst = _opis_bledu_pola(bledy, "dosylanie-tekst")
@@ -495,7 +522,9 @@ def _formularz_dosylania(
 {_lista_bledow(bledy)}
 <h2>Dodaj kolejne źródła</h2>
 <label for="dosylanie-tekst">{NAZWA_POLA_TEKSTU}</label>
-<textarea id="dosylanie-tekst" name="tekst"{atrybuty_tekst}>{escapuj(dane.tekst)}</textarea>
+<textarea id="dosylanie-tekst" name="tekst" data-projekt="{escapuj(nazwa)}"
+  data-wersja-szkicu="{szkic.wersja}"{atrybuty_tekst}>{escapuj(tekst_pola)}</textarea>
+<p id="komunikat-szkicu-dosylania" role="status" aria-live="polite"></p>
 {blad_tekst}
 <label for="dosylanie-adresy">{NAZWA_POLA_ADRESOW}</label>
 <textarea id="dosylanie-adresy" name="adresy"{atrybuty_adresy}>{escapuj(dane.adresy)}</textarea>
@@ -799,6 +828,115 @@ _SKRYPT_FORMULARZA_GLOWNEGO = """
   odswiezWidocznosc();
 })();
 """.strip()
+
+_SKRYPT_SZKICU = """
+(function () {
+  var pole = document.getElementById('POLE_ID');
+  var region = document.getElementById('REGION_ID');
+  var lista = LISTA_PROJEKTOW;
+  if (!pole || !region) { return; }
+  function biezacyProjekt() {
+    return lista ? lista.value : (pole.getAttribute('data-projekt') || '');
+  }
+  var projekt = biezacyProjekt();
+  var znany = null;
+  var wersja = null;
+  var naKoniec = false;
+  var ostatnieOgloszenie = 0;
+  var ogloszenieOczekuje = false;
+  function ustawNaKoncu() {
+    var n = pole.value.length;
+    pole.setSelectionRange(n, n);
+  }
+  function ogloszenie() {
+    if (ogloszenieOczekuje) { return; }
+    ogloszenieOczekuje = true;
+    var opoznienie = Math.max(0, 4000 - (Date.now() - ostatnieOgloszenie));
+    setTimeout(function () {
+      region.textContent = '';
+      setTimeout(function () {
+        region.textContent = 'Dodano zaznaczony tekst do pola Tu wklej tekst.';
+      }, 50);
+      ostatnieOgloszenie = Date.now();
+      ogloszenieOczekuje = false;
+    }, opoznienie);
+  }
+  function dopisz(tekst) {
+    var koniec = pole.value.length;
+    if (koniec > 0 && pole.value.charAt(koniec - 1) !== '\\n') { tekst = '\\n' + tekst; }
+    if (document.activeElement === pole) {
+      pole.setRangeText(tekst, koniec, koniec, 'preserve');
+    } else {
+      pole.setRangeText(tekst, koniec, koniec, 'end');
+      naKoniec = true;
+    }
+  }
+  pole.addEventListener('focus', function () {
+    if (naKoniec) { ustawNaKoncu(); naKoniec = false; }
+  });
+  if (pole.value !== '') {
+    if (document.activeElement !== pole) { ustawNaKoncu(); }
+    naKoniec = true;
+  }
+  function zastosuj(stan, zmianaProjektu) {
+    if (zmianaProjektu) {
+      if (znany !== null && pole.value === znany) { pole.value = ''; }
+      if (pole.value === '' && stan.tekst !== '') {
+        pole.value = stan.tekst;
+        naKoniec = true;
+      }
+      znany = stan.tekst;
+      wersja = stan.wersja;
+      return;
+    }
+    if (znany === null) {
+      znany = stan.tekst;
+      wersja = stan.wersja;
+      return;
+    }
+    if (stan.wersja === wersja) { return; }
+    var nowy = stan.tekst.indexOf(znany) === 0 ? stan.tekst.slice(znany.length) : '';
+    znany = stan.tekst;
+    wersja = stan.wersja;
+    if (nowy !== '') {
+      dopisz(nowy);
+      ogloszenie();
+    }
+  }
+  function odswiez() {
+    var nazwa = biezacyProjekt();
+    if (nazwa === '') { projekt = ''; return; }
+    var zmiana = nazwa !== projekt;
+    projekt = nazwa;
+    fetch('/projekt/' + encodeURIComponent(nazwa) + '/szkic', {
+      headers: { 'Accept': 'application/json' }
+    })
+      .then(function (o) { return o.ok ? o.json() : null; })
+      .then(function (stan) {
+        if (!stan || nazwa !== biezacyProjekt()) { return; }
+        zastosuj(stan, zmiana);
+      })
+      .catch(function () {});
+  }
+  odswiez();
+  setInterval(odswiez, 3000);
+})();
+""".strip()
+
+
+def _skrypt_szkicu(pole_id: str, region_id: str, *, lista_projektow: str = "") -> str:
+    """Skrypt odpytujący serwer o szkic tekstu ze skrótu i dopisujący go do pola.
+
+    Nie przenosi fokusu, nie przestawia kursora piszącego użytkownika i łączy
+    kilka dopisań w jeden komunikat, nie częściej niż co cztery sekundy.
+    """
+    lista = f"document.getElementById('{lista_projektow}')" if lista_projektow else "null"
+    return (
+        _SKRYPT_SZKICU.replace("POLE_ID", pole_id)
+        .replace("REGION_ID", region_id)
+        .replace("LISTA_PROJEKTOW", lista)
+    )
+
 
 _SKRYPT_FOKUS_BLEDOW = """
 (function () {

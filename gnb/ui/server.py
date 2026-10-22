@@ -85,7 +85,7 @@ def main(otworz_przegladarke: Callable[[str], object] = webbrowser.open) -> int:
         return _obsluz_druga_kopie(konfiguracja, katalog_danych, otworz_przegladarke)
 
     try:
-        uruchom_serwer(konfiguracja, blokada=blokada)
+        uruchom_serwer(konfiguracja, blokada=blokada, katalog_danych=katalog_danych)
     except OSError as blad:
         print(
             f"Nie udało się uruchomić serwera na {konfiguracja.adres_nasluchu}:"

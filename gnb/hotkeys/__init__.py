@@ -6,10 +6,11 @@ i kończy się przy jego zamknięciu. Nie powstaje żaden osobny proces w tle an
 autostart, zgodnie z decyzją pierwszą sekcji dwunastej CLAUDE.md.
 
 Naciśnięcie skrótu dodaje do aktywnego projektu to, co jest otwarte w aktywnym
-oknie: adres bieżącej strony w Chrome albo Firefoksie, albo zaznaczone pliki
-w Eksploratorze Windows. Wynik jest zgłaszany dźwiękiem i komunikatem
-tekstowym w interfejsie, bez przenoszenia fokusu i bez użycia schowka
-w jakiejkolwiek roli.
+oknie: zaznaczony tekst albo adres bieżącej strony w Chrome albo Firefoksie,
+albo zaznaczone pliki w Eksploratorze Windows. Zaznaczony tekst jest czytany
+przez schowek, który zaraz potem odzyskuje poprzednią zawartość. Wynik jest
+zgłaszany dźwiękiem i komunikatem tekstowym w interfejsie, bez przenoszenia
+fokusu.
 
 Reszta pakietu ``gnb`` nie importuje niczego z tego modułu ani nie zakłada
 jego obecności. Brak działania tego modułu na systemie innym niż Windows jest

@@ -73,6 +73,7 @@ from gnb.potok import (
 from gnb.ui import csrf, formularze, widoki, widoki_ustawien, wyglad
 from gnb.ui.blokada import BlokadaInstancji
 from gnb.ui.otwieranie import otworz_plik
+from gnb.ui.podglad_markdown import NAGLOWEK_POLITYKI_PODGLADU, zamien_markdown_na_html
 from gnb.ui.projekty import opisz_projekt, znajdz_projekty
 from gnb.ui.stan_skrotu import (
     NAZWA_PLIKU_STANU_SKROTU,
@@ -100,6 +101,9 @@ _TYP_HTML = "text/html; charset=utf-8"
 _TYP_JSON = "application/json; charset=utf-8"
 ROZSZERZENIA_PLIKOW_WYNIKOWYCH = (".md", ".txt", ".pdf")
 ROZSZERZENIA_PODGLADU = (".md", ".txt")
+SEGMENT_PODGLADU_STRONY = "strona"
+# Większy plik MD nie jest zamieniany na stronę, żeby nie zająć pamięci serwera.
+MAKSYMALNY_ROZMIAR_PODGLADU_STRONY = 10 * 1024 * 1024
 _KATALOG_CZCIONEK = Path(__file__).parent / "czcionki"
 _KATALOG_PLIKOW_ZASTEPCZYCH = "zastepcze"
 _NADWYZKA_LIMITU_BAJTOW = 1_048_576
@@ -342,6 +346,8 @@ class _Handler(BaseHTTPRequestHandler):
             self._wyslij_czcionke(sciezka[len(wyglad.SCIEZKA_CZCIONEK) :])
         elif (adres_pliku := _rozbij_adres_pliku(sciezka)) is not None:
             self._pokaz_podglad_pliku(*adres_pliku)
+        elif (adres_strony := _rozbij_adres_pliku(sciezka, SEGMENT_PODGLADU_STRONY)) is not None:
+            self._pokaz_podglad_pliku_jako_strone(*adres_strony)
         elif sciezka.startswith("/projekt/") and sciezka.endswith("/grupy"):
             self._pokaz_grupy_projektu(
                 self._nazwa_z_url(sciezka[len("/projekt/") : -len("/grupy")])
@@ -511,7 +517,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._pokaz_strone_glowna(
                 kod=400,
                 dane=dane,
-                bledy=[BladPola("projekt", "Wybierz istniejący projekt, żeby do niego przejść.")],
+                bledy=[BladPola("projekt", widoki.KOMUNIKAT_WYBIERZ_PROJEKT)],
             )
             return
         uklad = self._znajdz_istniejacy_projekt(nazwa)
@@ -615,6 +621,49 @@ class _Handler(BaseHTTPRequestHandler):
             self._blad(404, "Nie znaleziono pliku", "Nie udało się odczytać pliku wynikowego.")
             return
         self._wyslij(200, tresc, "text/plain; charset=utf-8")
+
+    def _pokaz_podglad_pliku_jako_strone(self, nazwa: str, nazwa_pliku: str) -> None:
+        """Pokazuje plik MD jako stronę, po której czytnik ekranu przechodzi po nagłówkach.
+
+        To wąski wyjątek od zasady, że treść ze źródeł nie trafia do przeglądarki
+        jako HTML (sekcja 11 CLAUDE.md, zatwierdzony przez użytkownika). Znaczniki
+        buduje wyłącznie ``podglad_markdown`` z escapowaniem całego tekstu, bez
+        surowego HTML, obrazów i odnośników innych niż http i https, a nagłówek
+        ``Content-Security-Policy`` blokuje skrypty i zasoby zewnętrzne. Trasa
+        przyjmuje wyłącznie nazwę z wykazu plików wynikowych projektu, jak podgląd
+        tekstowy, i tylko dla plików MD.
+        """
+        uklad = self._znajdz_istniejacy_projekt(nazwa)
+        sciezka = self._plik_wynikowy_z_wykazu(uklad, nazwa_pliku) if uklad is not None else None
+        if uklad is None or sciezka is None or not sciezka.name.lower().endswith(".md"):
+            self._blad(404, "Nie znaleziono pliku", "Nie ma takiego pliku MD do podglądu.")
+            return
+        try:
+            if sciezka.stat().st_size > MAKSYMALNY_ROZMIAR_PODGLADU_STRONY:
+                self._blad(
+                    413,
+                    "Plik za duży do podglądu jako strona",
+                    "Użyj podglądu jako tekst albo otwórz plik w aplikacji domyślnej.",
+                )
+                return
+            tekst = sciezka.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            self._blad(404, "Nie znaleziono pliku", "Nie udało się odczytać pliku wynikowego.")
+            return
+        html = widoki.strona_podgladu_markdown(
+            nazwa_projektu=uklad.nazwa_projektu,
+            nazwa_pliku=sciezka.name,
+            tresc_html=zamien_markdown_na_html(tekst),
+        )
+        self._wyslij_html(
+            200,
+            html,
+            dodatkowe_naglowki=[
+                ("Content-Security-Policy", NAGLOWEK_POLITYKI_PODGLADU),
+                ("Referrer-Policy", "no-referrer"),
+                ("X-Frame-Options", "DENY"),
+            ],
+        )
 
     def _pokaz_projekt(
         self,
@@ -1027,11 +1076,7 @@ class _Handler(BaseHTTPRequestHandler):
                 self._pokaz_strone_glowna(
                     kod=400,
                     dane=_dane_formularza_glownego(wynik_formularza),
-                    bledy=[
-                        BladPola(
-                            "projekt", "Wybierz istniejący projekt, żeby ustawić go jako aktywny."
-                        )
-                    ],
+                    bledy=[BladPola("projekt", widoki.KOMUNIKAT_WYBIERZ_PROJEKT)],
                 )
                 return
 
@@ -1657,10 +1702,19 @@ class _Handler(BaseHTTPRequestHandler):
             return
         self._wyslij(200, tresc, "font/woff2", [("Cache-Control", "public, max-age=86400")])
 
-    def _wyslij_html(self, kod: int, html: str, *, token: str | None = None) -> None:
-        dodatkowe = [("Set-Cookie", csrf.naglowek_ustawienia_ciasteczka(token))] if token else None
+    def _wyslij_html(
+        self,
+        kod: int,
+        html: str,
+        *,
+        token: str | None = None,
+        dodatkowe_naglowki: list[tuple[str, str]] | None = None,
+    ) -> None:
+        dodatkowe = list(dodatkowe_naglowki or [])
+        if token:
+            dodatkowe.append(("Set-Cookie", csrf.naglowek_ustawienia_ciasteczka(token)))
         html = html.replace(widoki.ZNACZNIK_WYGLADU, wyglad.css_wygladu(self._konfiguracja), 1)
-        self._wyslij(kod, html.encode("utf-8"), _TYP_HTML, dodatkowe)
+        self._wyslij(kod, html.encode("utf-8"), _TYP_HTML, dodatkowe or None)
 
     def _przekieruj(self, lokalizacja: str) -> None:
         self.send_response(303)
@@ -1700,14 +1754,16 @@ def _dane_formularza_glownego(
     )
 
 
-def _rozbij_adres_pliku(sciezka: str) -> tuple[str, str] | None:
-    """Rozbija ``/projekt/NAZWA/plik/PLIK`` na nazwę projektu i nazwę pliku albo zwraca nic.
+def _rozbij_adres_pliku(sciezka: str, segment: str = "plik") -> tuple[str, str] | None:
+    """Rozbija ``/projekt/NAZWA/SEGMENT/PLIK`` na nazwę projektu i nazwę pliku albo zwraca nic.
+
+    Segment ``plik`` dotyczy podglądu tekstowego, a ``strona`` podglądu jako strona.
 
     Obie części są rozkodowane z adresu. Ukośnik w nazwie pliku musiałby przyjść jako
     ``%2F``, a po rozkodowaniu taka nazwa nie pasuje do żadnej nazwy z wykazu.
     """
     czesci = sciezka.split("/")
-    if len(czesci) == 5 and czesci[1] == "projekt" and czesci[3] == "plik":
+    if len(czesci) == 5 and czesci[1] == "projekt" and czesci[3] == segment:
         nazwa_projektu = unquote(czesci[2]).strip().strip("/")
         nazwa_pliku = unquote(czesci[4])
         if nazwa_projektu and nazwa_pliku:

@@ -459,6 +459,7 @@ istniejący potok z żądaniem HTTP przez semantyczny, dostępny HTML.
   `widoki.py`, a nie odwrotnie: gotowy fragment jest przekazywany do strony
   projektu jako napis. Sekcja brakujących plików tylko pokazuje rozbieżność.
 - `gnb/ui/otwieranie.py` — otwarcie pliku wynikowego w aplikacji domyślnej systemu (`os.startfile` na Windows, wewnątrz sprawdzenia `sys.platform`; na innym systemie czytelny komunikat). Wywołuje je trasa `POST /projekt/NAZWA/otworz-plik`, która przyjmuje wyłącznie nazwę pliku z wykazu plików wynikowych projektu; obok trasa `GET /projekt/NAZWA/plik/PLIK` z podglądem MD i TXT jako zwykły tekst.
+- `gnb/ui/podglad_markdown.py` — zamiana pliku MD na bezpieczny HTML (`markdown-it-py` z wyłączonym surowym HTML i obrazami, odnośniki tylko http i https z `rel="noopener noreferrer"`) oraz nagłówek `Content-Security-Policy` strony podglądu. Używa go trasa `GET /projekt/NAZWA/strona/PLIK`, która przyjmuje wyłącznie nazwę pliku MD z wykazu plików wynikowych. To jedyny wyjątek od zasady, że treść ze źródeł nie trafia do przeglądarki jako HTML (sekcja 11 CLAUDE.md).
 - `gnb/ui/ustawienia.py`, `gnb/ui/widoki_ustawien.py` — strona `/ustawienia`.
 - `gnb/ui/wyglad.py` — schematy kolorów, kroje pisma, rozmiar czcionki, wzór
   kontrastu WCAG i arkusz zmiennych CSS. Serwer wstawia ten arkusz w miejsce

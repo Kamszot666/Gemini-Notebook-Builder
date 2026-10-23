@@ -526,7 +526,7 @@ def test_strona_projektu_bez_aktywnego_skrotu_ma_przycisk_ustawienia() -> None:
     assert "Brak aktywnego projektu skrótu." in html
 
 
-def test_strona_projektu_juz_aktywnego_nie_ma_przycisku_ustawienia() -> None:
+def test_strona_projektu_juz_aktywnego_nadal_ma_przycisk_ustawienia() -> None:
     html = strona_projektu(
         nazwa="Projekt",
         informacja=None,
@@ -535,7 +535,7 @@ def test_strona_projektu_juz_aktywnego_nie_ma_przycisku_ustawienia() -> None:
         token_csrf="t",
         aktywny_projekt_skrotu="Projekt",
     )
-    assert "Ustaw jako aktywny projekt skrótu" not in html
+    assert "Ustaw jako aktywny projekt skrótu" in html
     assert "Ten projekt jest teraz aktywnym projektem globalnego skrótu." in html
 
 
@@ -728,11 +728,13 @@ def test_strona_glowna_ma_przycisk_aktywnego_projektu_zaraz_za_przejdz_do_projek
     assert html.index('name="token_csrf"') < ustaw < html.index("</form>")
 
 
-def test_skrypt_strony_glownej_chowa_przycisk_aktywnego_projektu_przy_nowym_projekcie() -> None:
+def test_skrypt_strony_glownej_nie_chowa_przyciskow_a_przy_nowym_projekcie_oglasza_powod() -> None:
     html = strona_glowna(projekty=[], token_csrf="t")
 
     assert "var ustaw = document.getElementById('ustaw-aktywny-projekt');" in html
-    assert "ustaw.hidden = nowy;" in html
+    assert "ustaw.hidden" not in html
+    assert "przejdz.hidden" not in html
+    assert "ogloszenie(['Najpierw wybierz istniejący projekt z listy Projekt.'])" in html
     # Przy zmianie projektu adres przycisku wskazuje projekt wybrany na liście.
     assert "'/aktywny-skrot');" in html
     assert "ogloszenie([zdanie]);" in html
@@ -885,3 +887,16 @@ def test_pierwsza_sekcja_wynikow_jest_celem_przejscia_z_fokusem() -> None:
     assert z_podsumowaniem.count('id="naglowek-wynikow"') == 1
     assert '<h2 id="naglowek-wynikow" tabindex="-1">Raport końcowy</h2>' in sam_raport
     assert sam_raport.count('id="naglowek-wynikow"') == 1
+
+
+def test_przyciski_projektu_na_stronie_glownej_sa_zawsze_i_w_tej_samej_kolejnosci() -> None:
+    """Przyciski nie mają atrybutu `hidden` i stoją w stałej kolejności, niezależnie od wyboru."""
+    for projekty, wybrany in (([], ""), ([_wpis_listy_c("Projekt A")], "Projekt A")):
+        html = strona_glowna(projekty=projekty, token_csrf="t", wybrany_projekt=wybrany)
+
+        przejdz = html.index('id="przejdz-do-projektu"')
+        ustaw = html.index('id="ustaw-aktywny-projekt"')
+        assert przejdz < ustaw
+        assert "hidden" not in html[przejdz : html.index("</button>", ustaw)]
+        assert "Przejdź do projektu</button>" in html
+        assert "Ustaw jako aktywny projekt skrótu</button>" in html

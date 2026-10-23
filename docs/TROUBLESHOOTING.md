@@ -1,4 +1,4 @@
-# Rozwiązywanie problemów — stan po etapie piętnastym, część F
+# Rozwiązywanie problemów — stan po etapie siedemnastym, część D
 
 Ten dokument opisuje problemy, które wystąpiły w rzeczywistej pracy z aplikacją,
 oraz te, które wynikają wprost z jej budowy. Każdy przypadek ma tę samą budowę:
@@ -50,6 +50,7 @@ ozdobników, a polecenia do wpisania są w osobnych blokach.
 34. Pliki z archiwum ZIP zajęły wiele slotów notatnika.
 35. Uruchomienie interfejsu kończy się zdaniem, że interfejs już działa.
 36. Strona stała się nieczytelna po zmianie kolorów albo rozmiaru czcionki.
+37. Skrót Control plus Alt plus F11 w Chrome pokazał źródło strony, bez dźwięku.
 
 ## 1. Windows blokuje plik wykonywalny narzędzia deweloperskiego
 
@@ -813,3 +814,22 @@ Co zrobić, od najprostszego sposobu.
    poleceniem `Remove-Item Env:GNB_WYGLAD_SCHEMAT`.
 4. Jeżeli plik jest uszkodzony, aplikacja nie wczyta go i powie, co jest nie tak.
    Poprzednia wersja pliku leży obok jako `konfiguracja.toml.bak`.
+
+## 37. Skrót Control plus Alt plus F11 w Chrome pokazał źródło strony, bez dźwięku
+
+Znany problem, bez naprawy. Zgłoszony w teście użytkownika z 23 października 2026.
+
+Objaw. Przy kombinacji Control plus Alt plus F11, wybranej w ustawieniach, Chrome
+pokazał źródło strony, a skrót nie zagrał żadnego dźwięku. Brak dźwięku znaczy, że
+aplikacja nie przechwyciła kombinacji, więc ani sukces, ani porażka skrótu się nie
+wykonały.
+
+Co wiadomo. Dotyczy Chrome. Pozostałe kombinacje, w tym domyślna Control plus Shift
+plus F12, działały w teście poprawnie. Przyczyna nie została ustalona. Nie wiadomo, czy
+to ta sama sprawa co przypadek prawego Alt plus F11 z `PYTANIA.md`, który nie został
+odtworzony.
+
+Co zrobić. Wybierz inną kombinację, na przykład domyślną Control plus Shift plus F12:
+Ustawienia, zakładka „Skrót klawiszowy”, przycisk „Przywróć ustawienia domyślne tej
+zakładki”. Użytkownik nie korzysta z tej kombinacji, więc nie jest planowany osobny
+etap. Opis techniczny jest w `gnb/hotkeys/CLAUDE.md`, punkt 18.

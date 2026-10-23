@@ -1,4 +1,4 @@
-# Konfiguracja — stan po etapie szesnastym
+# Konfiguracja — stan po etapie siedemnastym, część A
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
 obsługuje po etapie trzynastym. Z listy w sekcji jedenastej a pliku
@@ -474,16 +474,29 @@ Interfejs uruchamiasz poleceniem `python -m gnb.ui.server`.
    wczytywaniu przyjmowane są też `Ctrl` i `Win`, wielkość liter nie ma
    znaczenia), klawisz to F1 do F24, litera od A do Z albo cyfra od 0 do 9. Bez
    Caps Lock, Insert i Num Lock. Reguły, te same w pliku, w zmiennej
-   środowiskowej i w formularzu: co najmniej jeden modyfikator; sam Shift z
-   literą albo cyfrą jest niedozwolony; litera albo cyfra wymaga co najmniej
-   dwóch modyfikatorów albo klawisza Windows; klawisze F1 do F24 wystarczy
-   połączyć z jednym modyfikatorem. Niepoprawna wartość kończy się błędem
+   środowiskowej i w formularzu (zmienione w etapie siedemnastym, część A):
+   co najmniej jeden modyfikator; każdy klawisz, także F1 do F24, wymaga co
+   najmniej dwóch modyfikatorów albo klawisza Windows, więc na przykład Alt
+   plus F4, Shift plus F10 i Control plus F4 są niedozwolone; Control plus Alt
+   z literą albo cyfrą, z Shiftem albo bez, jest niedozwolone, bo prawy Alt
+   (AltGr) na polskiej klawiaturze to dla Windows Control plus Alt i taki skrót
+   zabrałby polskie litery. Control plus Shift plus litera jest dozwolone, ale
+   to często skrót przeglądarki albo innego programu (Control plus Shift plus T
+   przywraca kartę), więc opis pola ostrzega, że taki skrót zabierze im tę
+   kombinację. Klawisz Windows z literą albo cyfrą jest dozwolony: Windows
+   przyjmuje tylko część takich kombinacji, a przy odmowie strona ustawień to
+   mówi. Plik z kombinacją niedozwoloną według tych reguł kończy się błędem
+   trwałym, tak jak każda inna błędna wartość; zapis `Control+Alt+F11` jest nadal
+   poprawny. Niepoprawna wartość kończy się błędem
    trwałym z komunikatem po polsku. Na stronie ustawień, w zakładce „Skrót
    klawiszowy”, kombinację wybiera się czterema polami wyboru i listą „Klawisz”.
    Zmiana działa od razu po zapisie, bez restartu serwera: aplikacja rejestruje
    nową kombinację w Windows, zanim zapisze plik, a gdy Windows odmówi, bo
    kombinację zajmuje inny program, poprzednia zostaje, plik się nie zmienia,
-   a komunikat podaje kombinację, która nadal działa. Gdy skrót jest wyłączony
+   a komunikat zaczyna się od zdania „Nie zapisano kombinacji.”, podaje powód i
+   kończy zdaniem „Nadal działa kombinacja: …” z kombinacją naprawdę zarejestrowaną.
+   To samo zdanie pojawia się po odrzuceniu kombinacji przez reguły, bo strona
+   pokazuje wtedy wpisane wartości, żeby dało się je poprawić. Gdy skrót jest wyłączony
    albo serwer działa poza Windows, kombinacja jest tylko zapisywana i zacznie
    działać po włączeniu skrótu i ponownym uruchomieniu serwera. Pole ustawione
    zmienną środowiskową jest tylko do odczytu.

@@ -1,4 +1,4 @@
-# Dostępność interfejsu WWW — stan po etapie szesnastym
+# Dostępność interfejsu WWW — stan po etapie siedemnastym, część A
 
 Ten dokument opisuje, jak obsługiwać interfejs Gemini Notebook Builder
 z klawiatury i z czytnikiem ekranu, oraz co interfejs ogłasza i jak często.
@@ -428,15 +428,19 @@ od A do Z i cyframi od 0 do 9. Nie ma pola, w którym trzeba nacisnąć kombinac
 bo NVDA przechwytuje część klawiszy. Czytnik ekranu odczyta nazwę grupy, potem
 każde pole wyboru z jego stanem, potem listę.
 
-Reguły: co najmniej jeden modyfikator; sam Shift z literą albo cyfrą jest
-niedozwolony; litera albo cyfra wymaga co najmniej dwóch modyfikatorów albo
-klawisza Windows; klawisze od F1 do F24 wystarczy połączyć z jednym
-modyfikatorem. Naruszenie reguły pokazuje błąd przy polu, w liście błędów na
+Reguły: co najmniej jeden modyfikator; każdy klawisz, także od F1 do F24,
+wymaga co najmniej dwóch modyfikatorów albo klawisza Windows; Control plus Alt
+z literą albo cyfrą jest niedozwolone, bo prawy Alt na polskiej klawiaturze to
+Control plus Alt i zabrałby polskie litery. Opis pola ostrzega też, że Control
+plus Shift plus litera bywa skrótem przeglądarki. Naruszenie reguły pokazuje błąd przy polu, w liście błędów na
 górze zakładki, z odnośnikiem do pola. Po zapisie zakładki fokus trafia na
 komunikat w regionie stanu, który mówi, jaka kombinacja działa teraz. Gdy
 Windows odmówi, bo kombinację zajmuje inny program, komunikat błędu mówi to
 wprost i podaje kombinację, która nadal działa; plik konfiguracji się wtedy nie
-zmienia. Nowa kombinacja działa od razu, bez restartu serwera.
+zmienia. Każdy odrzucony zapis kombinacji, także przez reguły, zaczyna komunikat
+od zdania „Nie zapisano kombinacji.” i kończy go zdaniem „Nadal działa
+kombinacja: …”, bo po odrzuceniu strona pokazuje wpisane wartości i bez tego
+zdania wyglądałaby jak zapisana. Nowa kombinacja działa od razu, bez restartu serwera.
 
 ### Aktywny projekt skrótu
 

@@ -128,17 +128,20 @@ if sys.platform == "win32":
                     True, f"Nowy skrót działa od razu: {kombinacja.jako_slowa()}.", dziala
                 )
             if wynik.kod_bledu == _win32.ERROR_HOTKEY_ALREADY_REGISTERED:
-                powod = "Kombinacja jest już zajęta przez inny program."
+                powod = f"Kombinacja {kombinacja.jako_slowa()} jest już zajęta przez inny program."
             elif wynik.kod_bledu is not None:
-                powod = f"Windows odmówił rejestracji (kod błędu {wynik.kod_bledu})."
+                powod = (
+                    f"Windows odmówił rejestracji kombinacji {kombinacja.jako_slowa()} "
+                    f"(kod błędu {wynik.kod_bledu})."
+                )
             else:
-                powod = "Nie udało się zarejestrować kombinacji."
+                powod = f"Nie udało się zarejestrować kombinacji {kombinacja.jako_slowa()}."
             if dziala is not None:
                 slowa_dzialajacej = rozbierz_kombinacje(dziala).jako_slowa()
-                nadal = f"Nadal działa poprzednia kombinacja: {slowa_dzialajacej}."
+                nadal = f"Nadal działa kombinacja: {slowa_dzialajacej}."
             else:
                 nadal = "Obecnie żadna kombinacja nie jest zarejestrowana."
-            komunikat = f"Nie zmieniono skrótu na {kombinacja.jako_slowa()}. {powod} {nadal}"
+            komunikat = f"Nie zapisano kombinacji. {powod} {nadal}"
             _LOG.warning(komunikat)
             return WynikZmianySkrotu(False, komunikat, dziala)
 

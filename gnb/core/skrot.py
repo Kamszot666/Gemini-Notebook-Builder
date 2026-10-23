@@ -124,12 +124,14 @@ def zbuduj_kombinacje(
 ) -> KombinacjaSkrotu:
     """Sprawdza reguły i zwraca kombinację albo zgłasza ``BladTrwaly`` po polsku.
 
-    Reguły: klawisz z listy dozwolonych; co najmniej jeden modyfikator; sam
-    Shift z literą albo cyfrą jest niedozwolony, bo zabrałby wpisywanie wielkich
-    liter i znaków we wszystkich programach; litera albo cyfra wymaga co najmniej
-    dwóch modyfikatorów albo klawisza Windows, bo Control plus litera i Alt plus
-    litera to zwykłe skróty programów. Klawisze F1 do F24 wystarczy połączyć
-    z jednym modyfikatorem.
+    Reguły (decyzje użytkownika z 23 października 2026): klawisz z listy
+    dozwolonych; co najmniej jeden modyfikator; każdy klawisz, także F1 do F24,
+    wymaga co najmniej dwóch modyfikatorów albo klawisza Windows, bo pojedynczy
+    modyfikator z klawiszem to skróty programów i systemu (Alt plus F4 zamyka
+    okna, Shift plus F10 otwiera menu kontekstowe, Control plus F4 zamyka
+    kartę); Control plus Alt z literą albo cyfrą, z Shiftem albo bez, jest
+    niedozwolone, bo na polskiej klawiaturze prawy Alt (AltGr) to dla Windows
+    Control plus Alt i taki skrót zabrałby polskie litery.
     """
     nazwa = klawisz.strip().upper()
     if nazwa not in KLAWISZE_SKROTU:
@@ -144,17 +146,19 @@ def zbuduj_kombinacje(
             "albo Windows."
         )
     jest_znakiem = nazwa not in KLAWISZE_FUNKCYJNE
-    if jest_znakiem and kombinacja.liczba_modyfikatorow == 1 and shift:
+    if jest_znakiem and control and alt:
         raise BladTrwaly(
-            "Sam Shift z literą albo cyfrą jest niedozwolony, bo zabrałby wpisywanie wielkich "
-            "liter i znaków we wszystkich programach. Dodaj drugi modyfikator albo wybierz "
-            "klawisz funkcyjny od F1 do F24."
+            "Control plus Alt z literą albo cyfrą jest niedozwolone, bo na polskiej klawiaturze "
+            "prawy Alt (AltGr) to dla Windows Control plus Alt, więc taki skrót zabrałby "
+            "polskie litery: ą, ę, ł, ń, ó, ś, ź, ż i ć. Wybierz klawisz funkcyjny od F1 do F24 "
+            "albo inne modyfikatory."
         )
-    if jest_znakiem and kombinacja.liczba_modyfikatorow < 2 and not windows:
+    if kombinacja.liczba_modyfikatorow < 2 and not windows:
         raise BladTrwaly(
-            "Litera albo cyfra wymaga co najmniej dwóch modyfikatorów albo klawisza Windows, "
-            "bo Control plus litera i Alt plus litera to zwykłe skróty programów, na przykład "
-            "Control plus C. Dodaj drugi modyfikator albo wybierz klawisz funkcyjny od F1 do F24."
+            "Skrót wymaga co najmniej dwóch modyfikatorów albo klawisza Windows, bo pojedynczy "
+            "modyfikator z klawiszem to zwykłe skróty programów i systemu, na przykład "
+            "Alt plus F4 zamyka okna, Shift plus F10 otwiera menu kontekstowe, a Control plus C "
+            "kopiuje. Dodaj drugi modyfikator."
         )
     return kombinacja
 

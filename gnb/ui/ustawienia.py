@@ -582,12 +582,14 @@ ZAKLADKI: tuple[Zakladka, ...] = (
             PoleUstawien(
                 "globalny_skrot_kombinacja",
                 "Kombinacja skrótu",
-                "Zaznacz klawisze modyfikujące i wybierz klawisz z listy. Wymagany jest co "
-                "najmniej jeden modyfikator. Sam Shift z literą albo cyfrą jest niedozwolony. "
-                "Litera albo cyfra wymaga co najmniej dwóch modyfikatorów albo klawisza "
-                "Windows. Klawisze od F1 do F24 wystarczy połączyć z jednym modyfikatorem. "
-                "Jeśli Windows odmówi, bo kombinację zajmuje inny program, poprzednia "
-                "kombinacja zostaje.",
+                "Zaznacz klawisze modyfikujące i wybierz klawisz z listy. Wymagane są co "
+                "najmniej dwa modyfikatory albo klawisz Windows, także z klawiszami od F1 do "
+                "F24. Control plus Alt z literą albo cyfrą jest niedozwolone, bo prawy Alt "
+                "na polskiej klawiaturze to dla Windows Control plus Alt i zabrałby polskie "
+                "litery. Uwaga: Control plus Shift plus litera to często skrót przeglądarki "
+                "albo innego programu, na przykład Control plus Shift plus T przywraca kartę, "
+                "więc taki skrót zabierze im tę kombinację. Jeśli Windows odmówi, bo "
+                "kombinację zajmuje inny program, poprzednia kombinacja zostaje.",
                 Rodzaj.SKROT,
                 zmiana_od_razu=True,
             ),

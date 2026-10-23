@@ -99,6 +99,7 @@ button {
   font: inherit; cursor: pointer;
 }
 button:hover { text-decoration: underline; }
+.pole-pliku, .akcja-formularza { display: block; }
 .blok { margin: 2rem 0; padding: 1.25rem; border: 2px solid var(--ramka); border-radius: 6px; }
 .bledy { border: 3px solid var(--blad); }
 .bledy h2, .bledy h3 { color: var(--blad); }
@@ -306,6 +307,10 @@ def strona_glowna(
 {blad_projekt}{brak_projektow}<button type="submit" id="przejdz-do-projektu"
   formaction="{escapuj(SCIEZKA_WYBORU_PROJEKTU)}" formmethod="post"
   formenctype="application/x-www-form-urlencoded" formnovalidate>Przejdź do projektu</button>
+<button type="submit" id="ustaw-aktywny-projekt"
+  formaction="{escapuj(sciezka_projektu(wybrany or "nowy"))}/aktywny-skrot" formmethod="post"
+  formenctype="application/x-www-form-urlencoded" formnovalidate>
+Ustaw jako aktywny projekt skrótu</button>
 <div id="blok-nazwy-projektu">
 <label for="nazwa_projektu">Nazwa nowego projektu</label>
 <input type="text" id="nazwa_projektu" name="nazwa_projektu"
@@ -333,9 +338,13 @@ wybrano Nowa grupa.</p>
 <label for="adresy">{NAZWA_POLA_ADRESOW}</label>
 <textarea id="adresy" name="adresy"{atrybuty_adresy}>{escapuj(dane.adresy)}</textarea>
 {blad_adresy}
+<div class="pole-pliku">
 <label for="pliki">Pliki z dysku</label>
 <input type="file" id="pliki" name="pliki" multiple>
+</div>
+<div class="akcja-formularza">
 <button type="submit">Dodaj materiały i rozpocznij przetwarzanie</button>
+</div>
 </form>"""
 
     tresc = formularz + _sekcja_skrotu_glowna(aktywny_projekt_skrotu, ostatni_komunikat_skrotu)
@@ -415,6 +424,8 @@ def strona_projektu(
     zrodla_html: str = "",
     opis_projektu: ProjektNaLiscie | None = None,
     szkic_tekstu: StanSzkicu | None = None,
+    pliki_wynikowe: list[str] | None = None,
+    komunikat_pliku: str = "",
 ) -> str:
     """Strona projektu: region postępu, dwa pola tekstowe oraz raport po zakończeniu.
 
@@ -443,6 +454,8 @@ def strona_projektu(
         zrodla_html,
         nazwa,
         szkic_tekstu or StanSzkicu("", 0),
+        pliki_wynikowe or [],
+        komunikat_pliku,
     )
     czesci.append(f'<div id="wynik-po-zakonczeniu">{fragment_wyniku}</div>')
 
@@ -458,6 +471,8 @@ def strona_projektu(
     fragmenty_skryptu = [
         _SKRYPT_LICZNIKA,
         _skrypt_szkicu("dosylanie-tekst", "komunikat-szkicu-dosylania"),
+        _SKRYPT_OTWIERANIA_PLIKOW,
+        _SKRYPT_FOKUS_WYNIKOW,
     ]
     if trwa:
         fragmenty_skryptu.append(
@@ -479,6 +494,8 @@ def _fragment_wyniku(
     zrodla_html: str = "",
     nazwa: str = "",
     szkic: StanSzkicu | None = None,
+    pliki_wynikowe: list[str] | None = None,
+    komunikat_pliku: str = "",
 ) -> str:
     """Buduje blok pokazywany po zakończeniu przebiegu: podsumowanie, raport, źródła i dosyłanie.
 
@@ -492,9 +509,12 @@ def _fragment_wyniku(
         return ""
     czesci = []
     if podsumowanie is not None:
-        czesci.append(_sekcja_podsumowania(podsumowanie))
+        czesci.append(_sekcja_podsumowania(podsumowanie, naglowek_wynikow=True))
     if raport is not None:
-        czesci.append(_sekcja_raportu(raport))
+        czesci.append(_sekcja_raportu(raport, naglowek_wynikow=podsumowanie is None))
+        czesci.append(
+            _sekcja_plikow_wynikowych(sciezka, pliki_wynikowe or [], token_csrf, komunikat_pliku)
+        )
     if zrodla_html:
         czesci.append(zrodla_html)
     if raport is not None:
@@ -506,11 +526,54 @@ def _fragment_wyniku(
     return "\n".join(czesci)
 
 
-def _sekcja_raportu(raport: str) -> str:
-    """Blok raportu końcowego z adresami http i https jako klikalnymi odnośnikami."""
+def _sekcja_raportu(raport: str, *, naglowek_wynikow: bool = False) -> str:
+    """Blok raportu końcowego z adresami http i https jako klikalnymi odnośnikami.
+
+    Gdy blok jest pierwszą sekcją wyników, jego nagłówek można ustawić jako cel
+    przejścia po zakończeniu przetwarzania (``naglowek_wynikow``).
+    """
+    atrybuty = ' id="naglowek-wynikow" tabindex="-1"' if naglowek_wynikow else ""
     return (
-        '<div class="blok">\n<h2>Raport końcowy</h2>\n'
+        f'<div class="blok">\n<h2{atrybuty}>Raport końcowy</h2>\n'
         f"<pre>{tekst_z_odnosnikami(raport)}</pre>\n</div>"
+    )
+
+
+def _sekcja_plikow_wynikowych(
+    sciezka: str, pliki: list[str], token_csrf: str, komunikat: str
+) -> str:
+    """Wykaz plików wynikowych projektu, każdy z przyciskiem otwarcia i podglądem tekstu.
+
+    Przeglądarka nie otworzy pliku lokalnego z odnośnika ``file://`` na stronie
+    wczytanej przez http, więc otwarcie robi serwer: przycisk wysyła metodą POST
+    z tokenem CSRF samą nazwę pliku. Podgląd jako tekst jest zwykłym odnośnikiem
+    i pokazuje treść jako zwykły tekst, nigdy jako HTML.
+    """
+    if not pliki:
+        return ""
+    pozycje = []
+    for nazwa_pliku in pliki:
+        podglad = ""
+        if nazwa_pliku.lower().endswith((".md", ".txt")):
+            podglad = (
+                f'<p><a href="{escapuj(sciezka)}/plik/{quote(nazwa_pliku, safe="")}">'
+                f"Podgląd pliku {escapuj(nazwa_pliku)} jako tekst</a></p>"
+            )
+        pozycje.append(
+            f'<li>\n<form class="otworz-plik" method="post" '
+            f'action="{escapuj(sciezka)}/otworz-plik">\n'
+            f"{_pole_csrf(token_csrf)}\n"
+            f'<input type="hidden" name="plik" value="{escapuj(nazwa_pliku)}">\n'
+            f'<div class="akcja-formularza">'
+            f'<button type="submit">Otwórz plik {escapuj(nazwa_pliku)}</button></div>\n'
+            f"</form>\n{podglad}\n</li>"
+        )
+    return (
+        '<div class="blok">\n<h2>Pliki wynikowe</h2>\n'
+        '<p class="pomoc">Przycisk otwiera plik w aplikacji domyślnej systemu na tym '
+        "komputerze, na przykład w Notepad++.</p>\n"
+        f'<p id="komunikat-plikow" role="status" aria-live="polite">{escapuj(komunikat)}</p>\n'
+        f"<ul>\n{chr(10).join(pozycje)}\n</ul>\n</div>"
     )
 
 
@@ -555,14 +618,18 @@ def _formularz_dosylania(
 <label for="dosylanie-adresy">{NAZWA_POLA_ADRESOW}</label>
 <textarea id="dosylanie-adresy" name="adresy"{atrybuty_adresy}>{escapuj(dane.adresy)}</textarea>
 {blad_adresy}
+<div class="pole-pliku">
 <label for="dosylanie-pliki">Pliki z dysku</label>
 <input type="file" id="dosylanie-pliki" name="pliki" multiple>
+</div>
 <label for="dosylanie-grupa">Nazwa grupy tematycznej</label>
 <input type="text" id="dosylanie-grupa" name="grupa" list="dosylanie-grupy"
   value="{escapuj(dane.grupa)}" required{atrybuty_grupa}>
 <datalist id="dosylanie-grupy">{opcje_grup}</datalist>
 {blad_grupa}
+<div class="akcja-formularza">
 <button type="submit">Dodaj źródła i uruchom kolejny przebieg</button>
+</div>
 </form>"""
 
 
@@ -590,16 +657,21 @@ def _sekcja_postepu(sciezka: str, informacja: InformacjaOZadaniu | None) -> str:
         f'<p id="postep-tresc" role="status" aria-live="polite" data-koniec="{koniec}">{tresc}</p>'
     )
     return (
-        f'<div class="blok">\n<h2 id="naglowek-stanu">Stan przetwarzania: {stan_slowny}</h2>\n'
+        f'<div class="blok">\n<h2 id="naglowek-stanu" tabindex="-1">'
+        f"Stan przetwarzania: {stan_slowny}</h2>\n"
         f"{akapit_postepu}\n"
         f"{blad}\n</div>"
     )
 
 
-def _sekcja_podsumowania(podsumowanie: PodsumowanieWyniku) -> str:
+def _sekcja_podsumowania(
+    podsumowanie: PodsumowanieWyniku, *, naglowek_wynikow: bool = False
+) -> str:
+    """Podsumowanie przebiegu; jego nagłówek jest celem przejścia po zakończeniu pracy."""
     wznowienie = "tak" if podsumowanie.wznowiono else "nie"
+    atrybuty = ' id="naglowek-wynikow" tabindex="-1"' if naglowek_wynikow else ""
     return (
-        '<div class="blok">\n<h2>Podsumowanie</h2>\n<ul>\n'
+        f'<div class="blok">\n<h2{atrybuty}>Podsumowanie</h2>\n<ul>\n'
         f"<li>Źródła przetworzone: {podsumowanie.liczba_przetworzonych}</li>\n"
         f"<li>Źródła pominięte: {podsumowanie.liczba_pominietych}</li>\n"
         f"<li>Źródła z błędem: {podsumowanie.liczba_bledow}</li>\n"
@@ -724,9 +796,9 @@ _SKRYPT_POSTEPU = """
 (function () {
   var region = document.getElementById('postep-tresc');
   var naglowek = document.getElementById('naglowek-stanu');
-  var wynik = document.getElementById('wynik-po-zakonczeniu');
   if (!region || region.getAttribute('data-koniec') === 'tak') { return; }
   function odswiez() {
+    if (region.getAttribute('data-koniec') === 'tak') { return; }
     fetch('SCIEZKA_POSTEPU', { headers: { 'Accept': 'application/json' } })
       .then(function (o) { return o.ok ? o.text() : null; })
       .then(function (t) {
@@ -739,20 +811,54 @@ _SKRYPT_POSTEPU = """
         if (dane.stan && dane.stan !== 'trwa') {
           region.setAttribute('data-koniec', 'tak');
           if (naglowek && dane.naglowek) { naglowek.textContent = dane.naglowek; }
-          if (wynik && !wynik.hasChildNodes()) {
-            var odnosnik = document.createElement('a');
-            odnosnik.href = window.location.pathname;
-            odnosnik.textContent = 'Pokaż wyniki przetwarzania';
-            var akapit = document.createElement('p');
-            akapit.appendChild(odnosnik);
-            wynik.appendChild(akapit);
-          }
+          setTimeout(function () {
+            window.location.replace(window.location.pathname + '?gotowe=1#naglowek-wynikow');
+          }, 700);
         }
       })
       .catch(function () {});
   }
   odswiez();
   setInterval(odswiez, 4000);
+})();
+""".strip()
+
+_SKRYPT_OTWIERANIA_PLIKOW = """
+(function () {
+  var region = document.getElementById('komunikat-plikow');
+  var formularze = document.querySelectorAll('form.otworz-plik');
+  if (!region || !window.fetch) { return; }
+  function obsluz(zdarzenie) {
+    zdarzenie.preventDefault();
+    var formularz = zdarzenie.currentTarget;
+    var tresc = new URLSearchParams(new FormData(formularz)).toString();
+    fetch(formularz.action, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: tresc
+    })
+      .then(function (o) { return o.json().catch(function () { return null; }); })
+      .then(function (dane) {
+        region.textContent = (dane && dane.komunikat) ? dane.komunikat
+          : 'Nie udało się otworzyć pliku.';
+      })
+      .catch(function () { region.textContent = 'Nie udało się połączyć z serwerem.'; });
+  }
+  for (var i = 0; i < formularze.length; i++) {
+    formularze[i].addEventListener('submit', obsluz);
+  }
+})();
+""".strip()
+
+_SKRYPT_FOKUS_WYNIKOW = """
+(function () {
+  if (window.location.hash !== '#naglowek-wynikow') { return; }
+  var cel = document.getElementById('naglowek-wynikow')
+    || document.getElementById('naglowek-stanu');
+  if (cel) { cel.focus(); }
 })();
 """.strip()
 
@@ -765,6 +871,7 @@ _SKRYPT_FORMULARZA_GLOWNEGO = """
   var blokGrupy = document.getElementById('blok-nazwy-grupy');
   var nazwaGrupy = document.getElementById('nazwa_grupy');
   var przejdz = document.getElementById('przejdz-do-projektu');
+  var ustaw = document.getElementById('ustaw-aktywny-projekt');
   var region = document.getElementById('komunikat-formularza');
   var stanAktywnego = document.getElementById('stan-aktywnego-projektu');
   var pole = document.querySelector('#formularz-glowny input[name="NAZWA_POLA_CSRF"]');
@@ -780,6 +887,13 @@ _SKRYPT_FORMULARZA_GLOWNEGO = """
     pokaz(blokProjektu, nazwaProjektu, nowy);
     pokaz(blokGrupy, nazwaGrupy, grupa.value === 'WYBOR_NOWA_GRUPA');
     if (przejdz) { przejdz.hidden = nowy; }
+    if (ustaw) {
+      ustaw.hidden = nowy;
+      if (!nowy) {
+        ustaw.setAttribute('formaction',
+          '/projekt/' + encodeURIComponent(projekt.value) + '/aktywny-skrot');
+      }
+    }
   }
   function ustawGrupy(lista, domyslna) {
     while (grupa.options.length) { grupa.remove(0); }
@@ -851,6 +965,33 @@ _SKRYPT_FORMULARZA_GLOWNEGO = """
     czasomierz = setTimeout(function () { zmianaProjektu(wybrany, moj); }, 700);
   });
   grupa.addEventListener('change', odswiezWidocznosc);
+  if (ustaw) {
+    ustaw.addEventListener('click', function (zdarzenie) {
+      if (projekt.value === '' || !window.fetch) { return; }
+      zdarzenie.preventDefault();
+      fetch('/projekt/' + encodeURIComponent(projekt.value) + '/aktywny-skrot', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: 'NAZWA_POLA_CSRF=' + encodeURIComponent(pole ? pole.value : '')
+      })
+        .then(function (o) { return o.ok ? o.json() : null; })
+        .then(function (dane) {
+          if (dane && dane.aktywny) {
+            var zdanie = 'Aktywny projekt skrótu: ' + dane.aktywny + '.';
+            if (stanAktywnego) { stanAktywnego.textContent = zdanie; }
+            ogloszenie([zdanie]);
+          } else {
+            ogloszenie(['Nie udało się ustawić aktywnego projektu skrótu.']);
+          }
+        })
+        .catch(function () {
+          ogloszenie(['Nie udało się ustawić aktywnego projektu skrótu.']);
+        });
+    });
+  }
   odswiezWidocznosc();
 })();
 """.strip()

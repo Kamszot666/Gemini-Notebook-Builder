@@ -248,7 +248,7 @@ Wymagania techniczne:
 5. Błędy walidacji powiązane z polem przez `aria-describedby` oraz `aria-invalid`, a lista błędów dostępna również jako tekst.
 6. Postęp długich operacji w regionie `role="status"` z `aria-live="polite"`. Nie używaj `aria-live="assertive"` do zwykłego postępu.
 7. Komunikaty o postępie muszą być dławione. Maksymalnie jeden komunikat na trzy do pięciu sekund, w formie podsumowania, na przykład „Przetworzono 12 z 40 źródeł”. Ogłaszanie każdego pojedynczego zdarzenia czyni interfejs bezużytecznym z czytnikiem ekranu.
-8. Nie przenoś fokusu bez działania użytkownika. Wyjątkiem jest przeniesienie fokusu na komunikat błędu po nieudanej walidacji wysłanego formularza.
+8. Nie przenoś fokusu bez działania użytkownika. Wyjątkami są przeniesienie fokusu na komunikat błędu po nieudanej walidacji wysłanego formularza oraz przejście do wyników po zakończeniu przetwarzania: strona sama wczytuje się ponownie z wynikami i stawia fokus na nagłówku wyników, bo użytkownik sam uruchomił przetwarzanie i czeka na wynik (decyzja użytkownika z 23 października 2026, szczegóły w `docs/ACCESSIBILITY.md`). Bez JavaScriptu zachowanie jest bez zmian.
 9. Brak animacji utrudniających pracę z czytnikiem ekranu. Respektuj `prefers-reduced-motion`.
 10. ARIA stosuj tylko tam, gdzie semantyczny HTML nie wystarcza. Zły ARIA jest gorszy niż brak ARIA.
 

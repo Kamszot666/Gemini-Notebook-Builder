@@ -72,6 +72,7 @@ from gnb.potok import (
 )
 from gnb.ui import csrf, formularze, widoki, widoki_ustawien, wyglad
 from gnb.ui.blokada import BlokadaInstancji
+from gnb.ui.otwieranie import otworz_plik
 from gnb.ui.projekty import opisz_projekt, znajdz_projekty
 from gnb.ui.stan_skrotu import (
     NAZWA_PLIKU_STANU_SKROTU,
@@ -97,6 +98,8 @@ from gnb.ui.zadania import RejestrZadan, StanZadania, ZadanieJuzTrwa
 _LOG = logging.getLogger("gnb.ui")
 _TYP_HTML = "text/html; charset=utf-8"
 _TYP_JSON = "application/json; charset=utf-8"
+ROZSZERZENIA_PLIKOW_WYNIKOWYCH = (".md", ".txt", ".pdf")
+ROZSZERZENIA_PODGLADU = (".md", ".txt")
 _KATALOG_CZCIONEK = Path(__file__).parent / "czcionki"
 _KATALOG_PLIKOW_ZASTEPCZYCH = "zastepcze"
 _NADWYZKA_LIMITU_BAJTOW = 1_048_576
@@ -337,6 +340,8 @@ class _Handler(BaseHTTPRequestHandler):
             self._pokaz_ustawienia()
         elif sciezka.startswith(wyglad.SCIEZKA_CZCIONEK):
             self._wyslij_czcionke(sciezka[len(wyglad.SCIEZKA_CZCIONEK) :])
+        elif (adres_pliku := _rozbij_adres_pliku(sciezka)) is not None:
+            self._pokaz_podglad_pliku(*adres_pliku)
         elif sciezka.startswith("/projekt/") and sciezka.endswith("/grupy"):
             self._pokaz_grupy_projektu(
                 self._nazwa_z_url(sciezka[len("/projekt/") : -len("/grupy")])
@@ -368,6 +373,10 @@ class _Handler(BaseHTTPRequestHandler):
             self._wznow_projekt(self._nazwa_z_url(sciezka[len("/projekt/") : -len("/wznow")]))
         elif sciezka.startswith("/projekt/") and sciezka.endswith("/pola"):
             self._zapisz_pola(self._nazwa_z_url(sciezka[len("/projekt/") : -len("/pola")]))
+        elif sciezka.startswith("/projekt/") and sciezka.endswith("/otworz-plik"):
+            self._otworz_plik_wynikowy(
+                self._nazwa_z_url(sciezka[len("/projekt/") : -len("/otworz-plik")])
+            )
         elif sciezka.startswith("/projekt/") and sciezka.endswith("/aktywny-skrot"):
             self._ustaw_aktywny_projekt_skrotu(
                 self._nazwa_z_url(sciezka[len("/projekt/") : -len("/aktywny-skrot")])
@@ -516,6 +525,97 @@ class _Handler(BaseHTTPRequestHandler):
         self._serwer.aktywny_projekt_skrotu.ustaw(uklad.nazwa_projektu)
         self._przekieruj(sciezka_projektu(uklad.nazwa_projektu))
 
+    def _pliki_wynikowe_projektu(self, uklad: UkladProjektu) -> list[str]:
+        """Nazwy plików wynikowych projektu znanych checkpointowi i istniejących na dysku.
+
+        To jedyne nazwy, które trasy otwierania i podglądu pliku przyjmują od
+        przeglądarki. Są to same nazwy plików z katalogu plików wynikowych, bez
+        ścieżek, w kolejności pierwszego użycia.
+        """
+        checkpoint = self._wczytaj_checkpoint_do_widoku(uklad)
+        if checkpoint is None:
+            return []
+        nazwy = dict.fromkeys(
+            Path(wynik.sciezka_wzgledna).name
+            for stan in checkpoint.zrodla.values()
+            for wynik in stan.wyniki
+        )
+        return [
+            nazwa
+            for nazwa in nazwy
+            if nazwa.lower().endswith(ROZSZERZENIA_PLIKOW_WYNIKOWYCH)
+            and (uklad.pliki_wynikowe / nazwa).is_file()
+        ]
+
+    def _plik_wynikowy_z_wykazu(self, uklad: UkladProjektu, nazwa_pliku: str) -> Path | None:
+        """Zwraca ścieżkę pliku wynikowego, jeśli jego nazwa jest w wykazie projektu.
+
+        Nazwa z przeglądarki jest porównywana dosłownie z wykazem nazw plików, więc
+        ciąg z separatorami ścieżki albo ``..`` nigdy nie przejdzie. Dodatkowo
+        sprawdzane jest, że plik leży bezpośrednio w katalogu plików wynikowych.
+        """
+        if nazwa_pliku not in self._pliki_wynikowe_projektu(uklad):
+            return None
+        sciezka = uklad.pliki_wynikowe / nazwa_pliku
+        try:
+            if sciezka.resolve().parent != uklad.pliki_wynikowe.resolve():
+                return None
+        except OSError:
+            return None
+        return sciezka
+
+    def _otworz_plik_wynikowy(self, nazwa: str) -> None:
+        """Otwiera plik wynikowy projektu w aplikacji domyślnej systemu.
+
+        Zmienia stan komputera, więc działa metodą POST z tokenem CSRF. Przyjmuje
+        wyłącznie nazwę pliku z wykazu plików wynikowych projektu, nigdy ścieżkę.
+        Skrypt strony prosi o odpowiedź JSON, żeby ogłosić wynik w regionie stanu
+        bez przeładowania strony; bez JavaScriptu strona projektu wczytuje się
+        ponownie z komunikatem.
+        """
+        wynik_formularza = self._parsuj_formularz()
+        if wynik_formularza is None:
+            return
+        if not self._csrf_ok(wynik_formularza.pole(csrf.NAZWA_POLA_FORMULARZA)):
+            return
+        uklad = self._znajdz_istniejacy_projekt(nazwa)
+        if uklad is None:
+            self._blad(404, "Nie znaleziono projektu", f"Nie ma projektu o nazwie „{nazwa}”.")
+            return
+
+        nazwa_pliku = wynik_formularza.pole("plik").strip()
+        sciezka = self._plik_wynikowy_z_wykazu(uklad, nazwa_pliku)
+        if sciezka is None:
+            kod = 404
+            komunikat = f"Nie ma pliku wynikowego „{nazwa_pliku}” w tym projekcie."
+        else:
+            powod_bledu = otworz_plik(sciezka)
+            if powod_bledu is None:
+                kod = 200
+                komunikat = f"Otwarto plik {nazwa_pliku} w aplikacji domyślnej."
+            else:
+                kod = 500
+                komunikat = powod_bledu
+        if "application/json" in self.headers.get("Accept", ""):
+            dane = {"ok": kod == 200, "komunikat": komunikat}
+            self._wyslij(kod, json.dumps(dane, ensure_ascii=False).encode("utf-8"), _TYP_JSON)
+            return
+        self._pokaz_projekt(uklad.nazwa_projektu, kod=kod, komunikat_pliku=komunikat)
+
+    def _pokaz_podglad_pliku(self, nazwa: str, nazwa_pliku: str) -> None:
+        """Pokazuje treść pliku MD albo TXT jako zwykły tekst, nigdy jako HTML."""
+        uklad = self._znajdz_istniejacy_projekt(nazwa)
+        sciezka = self._plik_wynikowy_z_wykazu(uklad, nazwa_pliku) if uklad is not None else None
+        if sciezka is None or not sciezka.name.lower().endswith(ROZSZERZENIA_PODGLADU):
+            self._blad(404, "Nie znaleziono pliku", "Nie ma takiego pliku wynikowego do podglądu.")
+            return
+        try:
+            tresc = sciezka.read_bytes()
+        except OSError:
+            self._blad(404, "Nie znaleziono pliku", "Nie udało się odczytać pliku wynikowego.")
+            return
+        self._wyslij(200, tresc, "text/plain; charset=utf-8")
+
     def _pokaz_projekt(
         self,
         nazwa: str,
@@ -524,6 +624,7 @@ class _Handler(BaseHTTPRequestHandler):
         bledy: list[BladPola] | None = None,
         dane_dosylania: DaneFormularzaProjektu | None = None,
         bledy_dosylania: list[BladPola] | None = None,
+        komunikat_pliku: str = "",
     ) -> None:
         uklad = ustal_uklad(self._konfiguracja.katalog_wynikow, nazwa)
         if not uklad.katalog_projektu.is_dir():
@@ -568,6 +669,8 @@ class _Handler(BaseHTTPRequestHandler):
             zrodla_html=self._zrodla_html(uklad, token),
             opis_projektu=opisz_projekt(uklad.katalog_projektu),
             szkic_tekstu=self._serwer.szkic_tekstu_skrotu.pobierz(uklad.nazwa_projektu),
+            pliki_wynikowe=self._pliki_wynikowe_projektu(uklad),
+            komunikat_pliku=komunikat_pliku,
         )
         self._wyslij_html(kod, html, token=token)
 
@@ -615,9 +718,7 @@ class _Handler(BaseHTTPRequestHandler):
             uklad = ustal_uklad(self._konfiguracja.katalog_wynikow, informacja.nazwa_projektu)
             if _odczytaj_tekst(uklad.raport) is not None:
                 dane["naglowek"] = "Stan przetwarzania: zakończone"
-                dane["komunikat"] = (
-                    "Przetwarzanie zakończone. Aktywuj odnośnik „Pokaż wyniki przetwarzania”."
-                )
+                dane["komunikat"] = "Przetwarzanie zakończone. Przechodzę do wyników."
         elif informacja.stan is StanZadania.BLAD:
             dane["naglowek"] = "Stan przetwarzania: zakończone błędem"
             powod = informacja.komunikat_bledu or "Powód nie został zapisany."
@@ -916,6 +1017,24 @@ class _Handler(BaseHTTPRequestHandler):
         if not self._csrf_ok(wynik_formularza.pole(csrf.NAZWA_POLA_FORMULARZA)):
             return
 
+        # Przycisk na stronie głównej wysyła razem z formularzem listę „Projekt”. Bez
+        # JavaScriptu adres przycisku wskazuje projekt zaznaczony przy wczytaniu strony,
+        # a użytkownik mógł wybrać na liście inny, więc wartość z listy rozstrzyga.
+        z_formularza_glownego = "projekt" in wynik_formularza.pola
+        if z_formularza_glownego:
+            nazwa = wynik_formularza.pole("projekt").strip()
+            if not nazwa:
+                self._pokaz_strone_glowna(
+                    kod=400,
+                    dane=_dane_formularza_glownego(wynik_formularza),
+                    bledy=[
+                        BladPola(
+                            "projekt", "Wybierz istniejący projekt, żeby ustawić go jako aktywny."
+                        )
+                    ],
+                )
+                return
+
         uklad = ustal_uklad(self._konfiguracja.katalog_wynikow, nazwa)
         if not uklad.katalog_projektu.is_dir():
             self._blad(404, "Nie znaleziono projektu", f"Nie ma projektu o nazwie „{nazwa}”.")
@@ -925,6 +1044,11 @@ class _Handler(BaseHTTPRequestHandler):
         if "application/json" in self.headers.get("Accept", ""):
             dane = {"aktywny": uklad.nazwa_projektu}
             self._wyslij(200, json.dumps(dane, ensure_ascii=False).encode("utf-8"), _TYP_JSON)
+            return
+        if z_formularza_glownego:
+            # Strona główna wraca z tym, co użytkownik zdążył wpisać, i ze zdaniem
+            # „Aktywny projekt skrótu: nazwa.” w sekcji skrótu.
+            self._pokaz_strone_glowna(dane=_dane_formularza_glownego(wynik_formularza))
             return
         self._przekieruj(sciezka_projektu(uklad.nazwa_projektu))
 
@@ -1560,6 +1684,35 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(cialo)
+
+
+def _dane_formularza_glownego(
+    wynik_formularza: formularze.WynikFormularza,
+) -> DaneFormularzaProjektu:
+    """Odtwarza dane formularza strony głównej z wysłanych pól, bez plików."""
+    return DaneFormularzaProjektu(
+        nazwa_projektu=wynik_formularza.pole("nazwa_projektu").strip(),
+        tekst=wynik_formularza.pole("tekst"),
+        adresy=wynik_formularza.pole("adresy"),
+        projekt=wynik_formularza.pole("projekt").strip(),
+        wybor_grupy=wynik_formularza.pole("wybor_grupy", widoki.WYBOR_BEZ_GRUPY),
+        nazwa_grupy=wynik_formularza.pole("nazwa_grupy").strip(),
+    )
+
+
+def _rozbij_adres_pliku(sciezka: str) -> tuple[str, str] | None:
+    """Rozbija ``/projekt/NAZWA/plik/PLIK`` na nazwę projektu i nazwę pliku albo zwraca nic.
+
+    Obie części są rozkodowane z adresu. Ukośnik w nazwie pliku musiałby przyjść jako
+    ``%2F``, a po rozkodowaniu taka nazwa nie pasuje do żadnej nazwy z wykazu.
+    """
+    czesci = sciezka.split("/")
+    if len(czesci) == 5 and czesci[1] == "projekt" and czesci[3] == "plik":
+        nazwa_projektu = unquote(czesci[2]).strip().strip("/")
+        nazwa_pliku = unquote(czesci[4])
+        if nazwa_projektu and nazwa_pliku:
+            return nazwa_projektu, nazwa_pliku
+    return None
 
 
 IDENTYFIKATOR_ZAKLADKI_SKROTU = "skrot"

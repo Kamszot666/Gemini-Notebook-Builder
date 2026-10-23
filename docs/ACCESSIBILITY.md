@@ -1,4 +1,4 @@
-# Dostępność interfejsu WWW — stan po etapie siedemnastym, część B
+# Dostępność interfejsu WWW — stan po etapie siedemnastym, część C
 
 Ten dokument opisuje, jak obsługiwać interfejs Gemini Notebook Builder
 z klawiatury i z czytnikiem ekranu, oraz co interfejs ogłasza i jak często.
@@ -61,6 +61,17 @@ Strona główna ma jeden formularz dodawania materiałów. Pola, od góry do do�
    wysłanie formularza metodą POST z tokenem zabezpieczającym. Przy wybranym
    „Nowy projekt” skrypt go ukrywa, a bez skryptu strona wraca z komunikatem
    „Wybierz istniejący projekt, żeby do niego przejść.”.
+   Zaraz za nim jest przycisk „Ustaw jako aktywny projekt skrótu”: ustawia
+   wybrany na liście projekt jako cel globalnego skrótu, bez przechodzenia na
+   jego stronę. Ze skryptem odpowiedź jest ogłaszana w regionie stanu zdaniem
+   „Aktywny projekt skrótu: nazwa.” i aktualizuje tekst „Aktywny projekt skrótu”
+   w sekcji skrótu, a fokus zostaje na przycisku. Bez skryptu strona wczytuje się
+   ponownie z tym, co zdążyłeś wpisać, i z tym samym zdaniem w sekcji skrótu;
+   rozstrzyga projekt zaznaczony na liście w chwili naciśnięcia. Przy „Nowy
+   projekt” przycisk jest ukryty tak samo jak „Przejdź do projektu”, a bez
+   skryptu strona wraca z komunikatem „Wybierz istniejący projekt, żeby ustawić
+   go jako aktywny.”. Przycisk działa metodą POST z tokenem zabezpieczającym i tą
+   samą trasą co przycisk na stronie projektu.
 3. Pole „Nazwa nowego projektu”. Widoczne i wymagane tylko wtedy, gdy na liście
    „Projekt” wybrano „Nowy projekt”. Przy wybranym istniejącym projekcie skrypt
    ukrywa je atrybutem hidden, więc czytnik ekranu na nie nie trafia. Nazwa staje
@@ -77,7 +88,14 @@ Strona główna ma jeden formularz dodawania materiałów. Pola, od góry do do�
 8. Pliki z dysku. Pole wyboru pliku z możliwością wskazania wielu plików naraz.
    Otwiera zwykłe okno wyboru pliku systemu Windows, w pełni dostępne z NVDA.
    Obsługiwane formaty to te same, które przyjmuje wiersz poleceń; ich pełny
-   wykaz jest w `FORMATS.md`.
+   wykaz jest w `FORMATS.md`. Pole wyboru pliku leży w osobnym bloku razem ze
+   swoją etykietą, a przycisk „Dodaj materiały i rozpocznij przetwarzanie” w
+   kolejnym, osobnym bloku. Powód: po odsłuchu NVDA czytał pole pliku i przycisk
+   jednym ciągiem („Pliki z dysku: Nie wybrano plikuDodaj materiały i rozpocznij
+   przetwarzanie”). Teraz w trybie przeglądania są to dwa osobne elementy. Ten
+   sam układ ma formularz „Dodaj kolejne źródła” na stronie projektu i pole
+   „Plik z ręcznie zapisaną treścią tego źródła” przy źródle, które zamiast
+   dawnego aria-label ma zwykłą etykietę.
 9. Przycisk „Dodaj materiały i rozpocznij przetwarzanie”.
 
 Musisz podać przynajmniej jedno źródło: tekst, adres albo plik. Klawisz Enter
@@ -142,12 +160,22 @@ Gdy w przeglądarce działa JavaScript, region odpytuje stan od razu po
 wczytaniu strony, a potem co cztery sekundy — dzięki temu krótki przebieg,
 trwający kilka sekund, zdąża pokazać choć jeden pośredni komunikat postępu,
 zamiast milczeć aż do zakończenia. Gdy przetwarzanie się skończy, region
-ogłasza jedno zdanie: „Przetwarzanie zakończone. Aktywuj odnośnik „Pokaż wyniki
-przetwarzania”.”, a odnośnik o tej nazwie pojawia się pod regionem. Strona
+ogłasza jedno zdanie: „Przetwarzanie zakończone. Przechodzę do wyników.”, a po
+chwili sama wczytuje się ponownie i stawia fokus na nagłówku wyników. Strona
 niczego więcej nie przebudowuje w miejscu, bo wstawianie całego raportu przy
 działającym NVDA przenosiło fokus w nieprzewidywalne miejsca; wyniki pokazuje
-dopiero ponowne wczytanie strony po aktywowaniu odnośnika. Nagłówek „Stan
-przetwarzania” zmienia się razem z regionem.
+dopiero ponowne wczytanie strony. Nagłówek „Stan przetwarzania” zmienia się
+razem z regionem.
+
+Przejście do wyników to świadomy wyjątek od zasady „nie przenoś fokusu bez
+działania użytkownika” (decyzja użytkownika z 23 października 2026): użytkownik
+sam uruchomił przetwarzanie i czeka na wynik, a dawny odnośnik „Pokaż wyniki
+przetwarzania” wymagał dodatkowego kroku. Fokus trafia na nagłówek „Podsumowanie”
+(a gdy go nie ma, na „Raport końcowy”; po błędzie na „Stan przetwarzania”) tylko
+wtedy, gdy adres strony kończy się znacznikiem `#naglowek-wynikow`, więc zwykłe
+otwarcie strony projektu fokusu nie przenosi. Bez JavaScriptu zachowanie jest bez
+zmian: strona nie odpytuje stanu i nie przechodzi sama, a wyniki widać po
+aktywowaniu odnośnika „Odśwież stan”.
 
 Gdy JavaScript jest wyłączony, region pokazuje stan z chwili wczytania strony.
 Aktualny stan sprawdzasz, aktywując odnośnik „Odśwież stan”, który jest zwykłym
@@ -172,7 +200,21 @@ a do etykiety nie dopisujemy słowa „wymagana”. Opis pomocniczy, na przykła
 polem promptu wyszukiwania, jest przypięty przez aria-describedby. Pole wyboru
 pliku też ma zwykłą etykietę. Nazwa grupy jest wymagana.
 
-Pod raportem jest formularz „Dodaj kolejne źródła” z polami zbudowanymi tak
+Pod raportem jest sekcja „Pliki wynikowe”. Każdy plik ma przycisk „Otwórz plik
+NAZWA”, który otwiera go w aplikacji domyślnej systemu na tym komputerze, na
+przykład w Notepad++ dla plików MD i TXT, oraz odnośnik „Podgląd pliku NAZWA jako
+tekst” (tylko dla MD i TXT), który pokazuje treść w przeglądarce jako zwykły
+tekst. Zwykły odnośnik do pliku lokalnego nie zadziałałby, bo przeglądarka nie
+otwiera adresów `file://` ze strony wczytanej przez http, więc otwarcie robi
+serwer, który działa na tym samym komputerze. Przycisk wysyła metodą POST z
+tokenem zabezpieczającym samą nazwę pliku. Serwer przyjmuje wyłącznie nazwy z
+wykazu plików wynikowych tego projektu, nigdy ścieżki, a nazwa z separatorami
+ścieżki albo spoza wykazu kończy się odmową. Ze skryptem wynik jest ogłaszany w
+regionie „komunikat plików” zdaniem „Otwarto plik NAZWA w aplikacji domyślnej.”
+bez przeładowania strony; bez skryptu strona projektu wczytuje się ponownie z
+tym samym zdaniem. Na systemie innym niż Windows komunikat odsyła do podglądu.
+
+Pod raportem jest też formularz „Dodaj kolejne źródła” z polami zbudowanymi tak
 samo, bez pola nazwy — nazwa jest już znana z adresu strony. Pole grupy jest
 polem tekstowym z listą podpowiedzi zawierającą grupy, które projekt już zna,
 i jest domyślnie wypełnione ostatnią z nich, więc kolejne źródło trafia do

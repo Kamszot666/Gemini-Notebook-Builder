@@ -427,7 +427,7 @@ def test_przycisk_przejdz_przy_nowym_projekcie_daje_komunikat_i_nie_zmienia_akty
     )
 
     assert odpowiedz.status == 400
-    assert "Wybierz istniejący projekt, żeby do niego przejść." in strona
+    assert "Najpierw wybierz istniejący projekt z listy Projekt." in strona
     assert "Wpisany tekst zostaje." in strona
     assert aktywny.aktualny() == "Projekt J"
 

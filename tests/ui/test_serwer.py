@@ -363,7 +363,7 @@ def test_ustawienie_aktywnego_projektu_skrotu_dla_nieistniejacego_projektu_daje_
     assert odpowiedz.status == 404
 
 
-def test_strona_projektu_po_ustawieniu_aktywnym_nie_pokazuje_juz_przycisku(
+def test_strona_projektu_po_ustawieniu_aktywnym_nadal_pokazuje_przycisk(
     serwer_z_projektem: tuple[str, int, AktywnyProjektSkrotu],
 ) -> None:
     host, port, _ = serwer_z_projektem
@@ -377,7 +377,7 @@ def test_strona_projektu_po_ustawieniu_aktywnym_nie_pokazuje_juz_przycisku(
     strona, tekst = klient.get_tekst("/projekt/Projekt%20Testowy")
     assert strona.status == 200
     assert "Ten projekt jest teraz aktywnym projektem globalnego skrótu." in tekst
-    assert "Ustaw jako aktywny projekt skrótu" not in tekst
+    assert "Ustaw jako aktywny projekt skrótu" in tekst
 
 
 def test_plik_z_adresami_ponad_limit_jest_zrodlem_a_adresy_nie_sa_dodawane(

@@ -195,6 +195,10 @@ WYBOR_BEZ_GRUPY = "__bez__"
 WYBOR_NOWA_GRUPA = "__nowa__"
 PREFIKS_GRUPY = "g:"
 NAZWA_PROJEKTU_NOWEGO = "Nowy projekt"
+# Komunikat po naciśnięciu przycisku wymagającego istniejącego projektu, gdy na
+# liście „Projekt” zaznaczono „Nowy projekt”. Skrypt ogłasza go w regionie stanu,
+# a serwer pokazuje go na liście błędów, gdy skrypt nie działa.
+KOMUNIKAT_WYBIERZ_PROJEKT = "Najpierw wybierz istniejący projekt z listy Projekt."
 
 
 def _atrybuty_pola_z_opisem(
@@ -352,6 +356,7 @@ wybrano Nowa grupa.</p>
     skrypt = skrypt.replace("WYBOR_BEZ_GRUPY", WYBOR_BEZ_GRUPY)
     skrypt = skrypt.replace("WYBOR_NOWA_GRUPA", WYBOR_NOWA_GRUPA)
     skrypt = skrypt.replace("PREFIKS_GRUPY", PREFIKS_GRUPY)
+    skrypt = skrypt.replace("KOMUNIKAT_WYBIERZ_PROJEKT", KOMUNIKAT_WYBIERZ_PROJEKT)
     skrypt += "\n" + _skrypt_szkicu("tekst", "komunikat-szkicu", lista_projektow="projekt")
     if bledy:
         skrypt += "\n" + _SKRYPT_FOKUS_BLEDOW
@@ -542,7 +547,10 @@ def _sekcja_raportu(raport: str, *, naglowek_wynikow: bool = False) -> str:
 def _sekcja_plikow_wynikowych(
     sciezka: str, pliki: list[str], token_csrf: str, komunikat: str
 ) -> str:
-    """Wykaz plików wynikowych projektu, każdy z przyciskiem otwarcia i podglądem tekstu.
+    """Wykaz plików wynikowych projektu, każdy z przyciskiem otwarcia i podglądami.
+
+    Plik MD ma dwa podglądy: jako stronę, po której czytnik ekranu przechodzi
+    klawiszem nagłówka, i jako zwykły tekst. Plik TXT ma tylko podgląd tekstu.
 
     Przeglądarka nie otworzy pliku lokalnego z odnośnika ``file://`` na stronie
     wczytanej przez http, więc otwarcie robi serwer: przycisk wysyła metodą POST
@@ -554,8 +562,13 @@ def _sekcja_plikow_wynikowych(
     pozycje = []
     for nazwa_pliku in pliki:
         podglad = ""
+        if nazwa_pliku.lower().endswith(".md"):
+            podglad += (
+                f'<p><a href="{escapuj(sciezka)}/strona/{quote(nazwa_pliku, safe="")}">'
+                f"Podgląd pliku {escapuj(nazwa_pliku)} jako strona</a></p>"
+            )
         if nazwa_pliku.lower().endswith((".md", ".txt")):
-            podglad = (
+            podglad += (
                 f'<p><a href="{escapuj(sciezka)}/plik/{quote(nazwa_pliku, safe="")}">'
                 f"Podgląd pliku {escapuj(nazwa_pliku)} jako tekst</a></p>"
             )
@@ -690,24 +703,25 @@ def _sekcja_skrotu_projektu(
 ) -> str:
     """Stan globalnego skrótu na stronie projektu, z przyciskiem ustawienia go jako aktywnego.
 
-    Przycisk nie pokazuje się, gdy ten projekt już jest aktywny — nie ma co
-    ustawiać jeszcze raz tego samego.
+    Przycisk jest zawsze, także gdy ten projekt już jest aktywny: przycisk, który
+    raz jest, a raz go nie ma, przeszkadza w pracy z czytnikiem ekranu, a po
+    pierwszym przebiegu projekt jest aktywny właśnie dlatego, że go uruchomiono.
+    Ponowne ustawienie tego samego projektu niczego nie psuje.
     """
     if aktywny_projekt_skrotu == nazwa:
         status = "Ten projekt jest teraz aktywnym projektem globalnego skrótu."
-        przycisk = ""
     else:
         status = (
             f"Aktywny projekt skrótu: {escapuj(aktywny_projekt_skrotu)}."
             if aktywny_projekt_skrotu
             else "Brak aktywnego projektu skrótu."
         )
-        przycisk = (
-            f'<form method="post" action="{escapuj(sciezka)}/aktywny-skrot">\n'
-            f"{_pole_csrf(token_csrf)}\n"
-            '<button type="submit">Ustaw jako aktywny projekt skrótu</button>\n'
-            "</form>"
-        )
+    przycisk = (
+        f'<form method="post" action="{escapuj(sciezka)}/aktywny-skrot">\n'
+        f"{_pole_csrf(token_csrf)}\n"
+        '<button type="submit">Ustaw jako aktywny projekt skrótu</button>\n'
+        "</form>"
+    )
     return (
         '<div class="blok">\n<h2>Globalny skrót klawiszowy</h2>\n'
         f"<p>{status}</p>\n"
@@ -778,6 +792,32 @@ Aplikacja nigdzie jej nie wysyła.</p>
 </div>
 <p><a href="{escapuj(sciezka)}">Wróć do projektu</a></p>""",
     )
+
+
+STYL_PODGLADU_MARKDOWN = """
+.podglad-md table { border-collapse: collapse; margin: 1rem 0; }
+.podglad-md th, .podglad-md td {
+  border: 2px solid var(--ramka); padding: 0.4rem 0.7rem; text-align: left; vertical-align: top;
+}
+.podglad-md blockquote {
+  margin: 1rem 0; padding: 0.1rem 1rem; border-left: 4px solid var(--ramka);
+}
+.podglad-md code { font: 1rem/1.5 ui-monospace, "Consolas", monospace; }
+""".strip()
+
+
+def strona_podgladu_markdown(*, nazwa_projektu: str, nazwa_pliku: str, tresc_html: str) -> str:
+    """Strona podglądu pliku MD: odnośnik powrotu, treść jako HTML i znów odnośnik powrotu.
+
+    Argument `tresc_html` musi pochodzić z ``gnb.ui.podglad_markdown`` i jest
+    jedynym fragmentem wstawianym bez escapowania, bo ten moduł już go zabezpieczył
+    (wąski wyjątek od sekcji jedenastej CLAUDE.md). Nazwy trafiają do strony
+    wyłącznie przez ``escapuj``. Strona nie ma skryptu. Odnośnik powrotu jest
+    na początku i na końcu, bo plik bywa długi.
+    """
+    powrot = f'<p><a href="{escapuj(sciezka_projektu(nazwa_projektu))}">Wróć do projektu</a></p>'
+    tresc = f'{powrot}\n<article class="podglad-md">\n{tresc_html}\n</article>\n{powrot}'
+    return _dokument(f"Podgląd pliku {nazwa_pliku}", tresc, styl_dodatkowy=STYL_PODGLADU_MARKDOWN)
 
 
 def strona_bledu(*, kod: int, tytul: str, komunikat: str) -> str:
@@ -886,13 +926,9 @@ _SKRYPT_FORMULARZA_GLOWNEGO = """
     var nowy = projekt.value === '';
     pokaz(blokProjektu, nazwaProjektu, nowy);
     pokaz(blokGrupy, nazwaGrupy, grupa.value === 'WYBOR_NOWA_GRUPA');
-    if (przejdz) { przejdz.hidden = nowy; }
-    if (ustaw) {
-      ustaw.hidden = nowy;
-      if (!nowy) {
-        ustaw.setAttribute('formaction',
-          '/projekt/' + encodeURIComponent(projekt.value) + '/aktywny-skrot');
-      }
+    if (ustaw && !nowy) {
+      ustaw.setAttribute('formaction',
+        '/projekt/' + encodeURIComponent(projekt.value) + '/aktywny-skrot');
     }
   }
   function ustawGrupy(lista, domyslna) {
@@ -965,9 +1001,19 @@ _SKRYPT_FORMULARZA_GLOWNEGO = """
     czasomierz = setTimeout(function () { zmianaProjektu(wybrany, moj); }, 700);
   });
   grupa.addEventListener('change', odswiezWidocznosc);
+  function bezProjektu(zdarzenie) {
+    if (projekt.value !== '') { return false; }
+    zdarzenie.preventDefault();
+    ogloszenie(['KOMUNIKAT_WYBIERZ_PROJEKT']);
+    return true;
+  }
+  if (przejdz) {
+    przejdz.addEventListener('click', bezProjektu);
+  }
   if (ustaw) {
     ustaw.addEventListener('click', function (zdarzenie) {
-      if (projekt.value === '' || !window.fetch) { return; }
+      if (bezProjektu(zdarzenie)) { return; }
+      if (!window.fetch) { return; }
       zdarzenie.preventDefault();
       fetch('/projekt/' + encodeURIComponent(projekt.value) + '/aktywny-skrot', {
         method: 'POST',

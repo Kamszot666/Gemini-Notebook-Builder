@@ -1,4 +1,4 @@
-# Obsługiwane formaty — stan po etapie siedemnastym, część B
+# Obsługiwane formaty — stan po etapie siedemnastym, część D
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
 Etap czternasty dodał formaty biurowe ODT, ODS, ODP, PPTX, XLSX, XLS, RTF, DOC
@@ -170,9 +170,17 @@ zegar systemowy.
 ### Ekstrakcja treści artykułu
 
 Treść artykułu jest wydobywana biblioteką `trafilatura`, która odrzuca menu,
-banery zgody na pliki cookie, reklamy, ramki boczne i stopkę. Rozpoznane
-nagłówki, listy, tabele, cytaty i bloki kodu trafiają do struktury dokumentu,
-więc struktura dobrze zbudowanego artykułu trafia do pliku MD.
+banery zgody na pliki cookie, ramki boczne i stopkę. Rozpoznane nagłówki,
+listy, tabele, cytaty i bloki kodu trafiają do struktury dokumentu, więc
+struktura dobrze zbudowanego artykułu trafia do pliku MD.
+
+Trafilatura jest wywoływana dwa razy. Tryb precyzji rozstrzyga tylko, czy
+strona ma artykuł, a treść pochodzi z trybu domyślnego. Powód: na dużych
+portalach tryb precyzji odcinał prawie cały artykuł (z przepisu 61 słów zamiast
+417, z komentarza 80 zamiast 1156). Skutek uboczny trybu domyślnego: w tekście
+zostaje drobny szum, na przykład podpisy zdjęć, przyciski udostępniania
+i powtórzony tytuł. Reklamy i bloki „Czytaj także” mogą więc trafić do wyniku;
+ich filtr jest świadomie odłożony (zagadnienie otwarte 13 w CLAUDE.md).
 
 Gdy trafilatura nic nie zwróci, wchodzi mechanizm zapasowy oparty na `lxml`,
 który odzyskuje same akapity. Zgłasza on niski poziom pewności struktury, więc

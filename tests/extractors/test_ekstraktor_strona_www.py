@@ -8,8 +8,12 @@ tekst strony, a pobieraniem zajmuje się osobny moduł.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
+
+import pytest
 
 from gnb.core.stale import PoziomPewnosciStruktury, RodzajBloku, TypZrodla
+from gnb.extractors import strona_www
 from gnb.extractors.strona_www import (
     METODA_GLOWNA,
     METODA_ZAPASOWA,
@@ -252,3 +256,59 @@ def test_artykul_bez_odnosnikow_nie_dostaje_pustej_sekcji() -> None:
     dokument = _ekstraktor().wyekstrahuj("strona_www-1", tekst)
 
     assert NAGLOWEK_SEKCJI_ODNOSNIKOW not in dokument.tekst
+
+
+def _podstawka_trafilatury(wyniki: dict[bool, str | None]) -> Any:
+    """Zwraca funkcję udającą trafilaturę, która odpowiada zależnie od trybu precyzji."""
+
+    def podstawka(tekst: str, **argumenty: Any) -> str | None:
+        return wyniki[bool(argumenty.get("favor_precision"))]
+
+    return podstawka
+
+
+_XML_KROTKI = '<doc title="T"><main><p>Tylko wstęp artykułu.</p></main></doc>'
+_XML_PELNY = (
+    '<doc title="T"><main><p>Tylko wstęp artykułu.</p>'
+    "<p>Dalsza część artykułu, którą tryb precyzji odciął.</p></main></doc>"
+)
+
+
+def test_tresc_pochodzi_z_trybu_domyslnego_a_nie_z_trybu_precyzji(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tryb precyzji obcinał artykuły z dużych portali do tytułu i wstępu.
+
+    Na stronach z etapu siedemnastego, części D, dawał 61 słów zamiast 417 oraz
+    80 zamiast 1156. Test pilnuje, żeby treść pochodziła z trybu domyślnego, bo
+    utrata treści ma wyższy priorytet niż czystość wyniku.
+    """
+    monkeypatch.setattr(
+        strona_www.trafilatura,
+        "extract",
+        _podstawka_trafilatury({True: _XML_KROTKI, False: _XML_PELNY}),
+    )
+
+    dokument = _ekstraktor().wyekstrahuj("strona_www-1", "<html></html>")
+
+    assert dokument.metoda_ekstrakcji == METODA_GLOWNA
+    assert "Dalsza część artykułu, którą tryb precyzji odciął." in dokument.tekst
+
+
+def test_pusty_wynik_trybu_precyzji_kieruje_do_mechanizmu_zapasowego(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tryb precyzji rozstrzyga, czy strona ma artykuł; tryb domyślny sam tego nie robi.
+
+    Strona z samą nawigacją daje w trybie domyślnym fałszywy „artykuł” złożony
+    z tekstów odnośników, więc pusty wynik trybu precyzji ma wygrywać.
+    """
+    monkeypatch.setattr(
+        strona_www.trafilatura,
+        "extract",
+        _podstawka_trafilatury({True: None, False: _XML_PELNY}),
+    )
+
+    dokument = _ekstraktor().wyekstrahuj("strona_www-3", _STRONA_BEZ_ARTYKULU)
+
+    assert dokument.metoda_ekstrakcji == METODA_ZAPASOWA

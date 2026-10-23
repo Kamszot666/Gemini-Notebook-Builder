@@ -8,8 +8,10 @@ czyli zapisanie jej z przeglądarki po wykonaniu skryptów i podanie zapisanego
 pliku jako źródła.
 
 Podstawowym narzędziem jest ``trafilatura``, zgodnie z sekcją piętnastą
-CLAUDE.md. Odrzuca ona menu, banery zgody na pliki cookie, reklamy, ramki
-boczne i stopkę, a zostawia właściwy tekst artykułu. Ekstraktor prosi ją
+CLAUDE.md. Odrzuca ona menu, banery zgody na pliki cookie, ramki boczne
+i stopkę, a zostawia właściwy tekst artykułu. Drobny szum, na przykład podpisy
+zdjęć i przyciski udostępniania, bywa zachowany; jego filtr jest świadomie
+odłożony (zagadnienie otwarte w sekcji 18e CLAUDE.md). Ekstraktor prosi ją
 o wynik w postaci XML, dzięki czemu zna strukturę dokumentu: nagłówki, listy,
 tabele, cytaty i bloki kodu. Z tej struktury powstaje tekst w zapisie Markdown
 oraz lista bloków, na której pracuje reguła wyboru formatu.
@@ -211,7 +213,26 @@ def czy_wymaga_skryptow(tekst_strony: str, tresc_wyekstrahowana: str) -> bool:
 
 
 def _wywolaj_trafilature(tekst: str) -> str | None:
-    """Wywołuje trafilaturę z ustawieniami dobranymi pod materiał do notatnika."""
+    """Wywołuje trafilaturę z ustawieniami dobranymi pod materiał do notatnika.
+
+    Trafilatura jest wywoływana dwa razy. Tryb precyzji (``favor_precision``)
+    służy wyłącznie do rozstrzygnięcia, czy na stronie jest artykuł: strona
+    z samą nawigacją daje w nim wynik pusty i trafia do mechanizmu zapasowego,
+    zamiast zapisać wykaz odnośników jako treść. Samej treści z tego trybu nie
+    bierzemy, bo na dużych portalach odcinał prawie cały artykuł i zostawiał
+    tytuł z wstępem: z przepisu na zupę 61 słów zamiast 417, z komentarza
+    politycznego 80 słów zamiast 1156. Treść pochodzi z trybu domyślnego, który
+    ją zachowuje i przy okazji drobny szum, na przykład podpisy zdjęć i przyciski
+    udostępniania. Utrata treści ma według sekcji czwartej CLAUDE.md wyższy
+    priorytet niż czystość wyniku.
+    """
+    if not _wywolaj_trafilature_z_ustawieniami(tekst, favor_precision=True):
+        return None
+    return _wywolaj_trafilature_z_ustawieniami(tekst, favor_precision=False)
+
+
+def _wywolaj_trafilature_z_ustawieniami(tekst: str, *, favor_precision: bool) -> str | None:
+    """Jedno wywołanie trafilatury z wynikiem w XML; zwraca wartość pustą przy braku treści."""
     wynik: Any = trafilatura.extract(
         tekst,
         output_format="xml",
@@ -220,7 +241,7 @@ def _wywolaj_trafilature(tekst: str) -> str | None:
         include_links=True,
         include_comments=False,
         with_metadata=True,
-        favor_precision=True,
+        favor_precision=favor_precision,
     )
     return wynik if isinstance(wynik, str) else None
 

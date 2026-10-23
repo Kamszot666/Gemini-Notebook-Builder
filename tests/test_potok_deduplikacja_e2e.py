@@ -56,7 +56,7 @@ def _pliki_o_tej_samej_tresci(tmp_path: Path) -> list[PozycjaWejsciowa]:
 def test_pewny_duplikat_znika_z_wynikow_i_zwalnia_slot(tmp_path: Path) -> None:
     wynik = przetworz_projekt(
         _pliki_o_tej_samej_tresci(tmp_path),
-        Konfiguracja(katalog_wynikow=tmp_path / "wyniki"),
+        Konfiguracja(formaty_wynikowe=("txt",), katalog_wynikow=tmp_path / "wyniki"),
         nazwa_projektu="Test pewnego duplikatu",
         zegar=_zegar_krokowy(),
     )
@@ -104,7 +104,7 @@ def test_srednie_podobienstwo_zostawia_oba_zrodla_i_akapit_unikalny(tmp_path: Pa
 
     wynik = przetworz_projekt(
         pozycje,
-        Konfiguracja(katalog_wynikow=tmp_path / "wyniki"),
+        Konfiguracja(formaty_wynikowe=("txt",), katalog_wynikow=tmp_path / "wyniki"),
         nazwa_projektu="Test przedruku",
         zegar=_zegar_krokowy(),
     )
@@ -197,7 +197,7 @@ def test_duplikat_z_poprzedniego_uruchomienia_nie_zajmuje_limitu(tmp_path: Path)
 
     pierwsze = przetworz_projekt(
         [przyjmij_tekst(tekst_a, moment_pierwszy), przyjmij_tekst(tekst_b, moment_pierwszy)],
-        Konfiguracja(katalog_wynikow=katalog_wynikow, limit_zrodel=3),
+        Konfiguracja(formaty_wynikowe=("txt",), katalog_wynikow=katalog_wynikow, limit_zrodel=3),
         nazwa_projektu="Dup",
         zegar=_zegar_krokowy(),
     )
@@ -210,7 +210,7 @@ def test_duplikat_z_poprzedniego_uruchomienia_nie_zajmuje_limitu(tmp_path: Path)
 
     drugie = przetworz_projekt(
         [przyjmij_tekst(tekst_nowy, moment_drugi)],
-        Konfiguracja(katalog_wynikow=katalog_wynikow, limit_zrodel=2),
+        Konfiguracja(formaty_wynikowe=("txt",), katalog_wynikow=katalog_wynikow, limit_zrodel=2),
         nazwa_projektu="Dup",
         zegar=_zegar_krokowy(),
     )
@@ -262,7 +262,7 @@ def _pozycja_z_pliku(katalog: Path, nazwa: str, tresc: str) -> PozycjaWejsciowa:
 
 def test_duplikat_doslany_w_kolejnym_przebiegu_jest_wykrywany(tmp_path: Path) -> None:
     """Źródło dosłane później jest porównywane z już spakowanymi, a duplikatem zostaje nowe."""
-    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path / "wyniki")
+    konfiguracja = Konfiguracja(formaty_wynikowe=("txt",), katalog_wynikow=tmp_path / "wyniki")
     katalog = tmp_path / "wejscia"
 
     pierwsze = przetworz_projekt(

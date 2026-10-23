@@ -87,7 +87,7 @@ def test_plik_mhtml_przechodzi_caly_potok(tmp_path: Path) -> None:
 
     wynik = przetworz_projekt(
         [przyjmij_plik(plik, moment)],
-        Konfiguracja(katalog_wynikow=tmp_path / "wyniki"),
+        Konfiguracja(formaty_wynikowe=("txt",), katalog_wynikow=tmp_path / "wyniki"),
         nazwa_projektu="Test MHTML",
     )
 

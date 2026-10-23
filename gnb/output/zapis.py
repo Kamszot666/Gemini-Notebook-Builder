@@ -1,24 +1,30 @@
-"""Zapis plików wynikowych źródła: TXT zawsze, MD warunkowo, PDF dla grup obrazów.
+"""Zapis plików wynikowych źródła: MD domyślnie, TXT opcjonalnie, PDF dla grup obrazów.
 
 Pliki są zapisywane w UTF-8 bez znaku kolejności bajtów, z końcami wierszy LF,
-i zawsze kończą się pojedynczym znakiem nowej linii. W etapie pierwszym każde
-źródło daje własny plik i nie ma łączenia źródeł — to zadanie etapu szóstego.
+i zawsze kończą się pojedynczym znakiem nowej linii. Format wynikowy wybiera
+konfiguracja: domyślnie powstaje wyłącznie MD, a TXT można włączyć obok niego.
+Przy obu formatach każda treść leży w dwóch plikach, z których do notatnika
+wgrywa się tylko jeden.
 
-Wersja TXT i wersja MD mogą mieć różną treść. Dla źródła Markdown plik MD
-zachowuje znaczniki, a plik TXT dostaje tę samą treść przepisaną bez znaczników,
-przygotowaną przez `gnb.output.tekst_bez_znacznikow`. Dzięki temu dwa pliki
-wynikowe tego samego źródła nie są swoimi kopiami i nie zajmują dwóch slotów
-notatnika na identyczną treść.
+Plik MD powstaje dla każdego źródła, gdy format jest włączony. Struktura w nim
+pochodzi wyłącznie z bloków zgłoszonych przez ekstraktor. Tekst bez struktury,
+na przykład z OCR, transkrypcji albo płaskiego pliku TXT, staje się akapitami,
+a znaki, które Markdown odczytałby jako składnię, są escapowane. Dla źródła ze
+strukturą plik TXT dostaje tę samą treść przepisaną bez znaczników,
+przygotowaną przez `gnb.output.tekst_bez_znacznikow`.
 
-Na początku każdego pliku, w wersji TXT i w wersji MD, zapisywany jest nagłówek
-metadanych źródła, w identycznej postaci zwykłego tekstu. Buduje go moduł
-`gnb.output.naglowek_metadanych`.
+Na początku każdego pliku pojedynczego źródła, w wersji TXT i w wersji MD,
+zapisywany jest nagłówek metadanych w identycznej postaci zwykłego tekstu.
+Buduje go moduł `gnb.output.naglowek_metadanych`. Plik grupy w wersji MD ma
+nagłówek każdego źródła w postaci listy pod nagłówkiem drugiego poziomu
+(`gnb.output.markdown_pliku`).
 
 Moduł zwraca opis `PlikWynikowy` dla każdego zapisanego pliku, z policzonymi
 słowami i znakami, rozmiarem w bajtach oraz sumą kontrolną. Liczby te dotyczą
-zawartości pliku, więc obejmują nagłówek. Limity notatnika są sprawdzane osobno,
-na samej treści dokumentu, ponieważ nagłówek jest informacją o źródle, a nie jego
-treścią.
+zawartości pliku, więc obejmują nagłówek. Słowa pliku MD są liczone po usunięciu
+znaczników składni, tą samą funkcją co dla TXT, żeby limit nie zależał od
+formatu. Limity notatnika są sprawdzane osobno, na samej treści dokumentu,
+ponieważ nagłówek jest informacją o źródle, a nie jego treścią.
 """
 
 from __future__ import annotations
@@ -29,10 +35,25 @@ from gnb.core.identyfikatory import suma_kontrolna_pliku
 from gnb.core.liczenie_slow import policz_slowa, policz_znaki
 from gnb.core.model import DokumentZnormalizowany, PlikWynikowy
 from gnb.core.stale import FormatWynikowy
+from gnb.extractors.escapowanie_markdown import escapuj_tekst_plaski
+from gnb.output.markdown_pliku import policz_slowa_markdown
 from gnb.output.naglowek_metadanych import polacz_z_trescia
-from gnb.output.regula_md import DecyzjaFormatu
 
 FORMAT_MD = "md"
+FORMAT_TXT = "txt"
+
+_ROZSZERZENIA = {FormatWynikowy.MD: "md", FormatWynikowy.TXT: "txt"}
+
+
+def tresc_markdown_zrodla(tekst: str, *, ma_struktura: bool) -> str:
+    """Zwraca treść źródła w zapisie Markdown.
+
+    Gdy ekstraktor zwrócił tekst ze znacznikami, jest on już Markdownem. Inaczej
+    tekst staje się akapitami, a znaki składni są escapowane, żeby przypadkowy
+    krzyżyk albo myślnik na początku wiersza nie stał się fałszywym nagłówkiem
+    albo listą.
+    """
+    return tekst if ma_struktura else escapuj_tekst_plaski(tekst)
 
 
 def zapisz_wyniki(
@@ -40,17 +61,16 @@ def zapisz_wyniki(
     nazwa_bazowa: str,
     identyfikator_zrodla: str,
     dokument: DokumentZnormalizowany,
-    decyzja: DecyzjaFormatu,
     *,
-    formaty_wlaczone: tuple[str, ...] = ("txt", "md"),
+    formaty_wlaczone: tuple[str, ...] = (FORMAT_MD,),
     tekst_txt: str | None = None,
     naglowek: str = "",
 ) -> list[PlikWynikowy]:
-    """Zapisuje plik TXT zawsze, a plik MD tylko gdy pozwala reguła i konfiguracja.
+    """Zapisuje pliki MD i TXT źródła według włączonych formatów.
 
-    Plik MD powstaje, gdy `decyzja.generuj_md` jest prawdą oraz format ``md``
-    jest obecny w `formaty_wlaczone`. Treścią pliku MD jest znormalizowany tekst
-    dokumentu. Treścią pliku TXT jest `tekst_txt`, jeżeli został podany, a w
+    Treścią pliku MD jest znormalizowany tekst dokumentu, a gdy `tekst_txt` nie
+    został podany (źródło bez struktury), tekst ten jest escapowany jak zwykły
+    akapit. Treścią pliku TXT jest `tekst_txt`, jeżeli został podany, a w
     przeciwnym razie ten sam znormalizowany tekst. Wywołujący podaje `tekst_txt`
     wtedy, gdy tekst źródła zawiera znaczniki formatowania i wersja TXT ma być
     ich pozbawiona.
@@ -59,20 +79,23 @@ def zapisz_wyniki(
     w identycznej postaci i jest oddzielony od treści jednym pustym wierszem.
     """
     katalog_wynikow.mkdir(parents=True, exist_ok=True)
-    tresc_md = _z_koncowym_znakiem_nowej_linii(polacz_z_trescia(naglowek, dokument.tekst))
-    tresc_txt = _z_koncowym_znakiem_nowej_linii(
-        polacz_z_trescia(naglowek, dokument.tekst if tekst_txt is None else tekst_txt)
-    )
-
     wyniki: list[PlikWynikowy] = []
-    sciezka_txt = katalog_wynikow / f"{nazwa_bazowa}.txt"
-    _zapisz_tekst(sciezka_txt, tresc_txt)
-    wyniki.append(_opis_pliku(sciezka_txt, FormatWynikowy.TXT, identyfikator_zrodla))
 
-    if decyzja.generuj_md and FORMAT_MD in formaty_wlaczone:
+    if FORMAT_MD in formaty_wlaczone:
+        tresc_md = tresc_markdown_zrodla(dokument.tekst, ma_struktura=tekst_txt is not None)
         sciezka_md = katalog_wynikow / f"{nazwa_bazowa}.md"
-        _zapisz_tekst(sciezka_md, tresc_md)
+        _zapisz_tekst(
+            sciezka_md, _z_koncowym_znakiem_nowej_linii(polacz_z_trescia(naglowek, tresc_md))
+        )
         wyniki.append(_opis_pliku(sciezka_md, FormatWynikowy.MD, identyfikator_zrodla))
+
+    if FORMAT_TXT in formaty_wlaczone:
+        tresc_txt = _z_koncowym_znakiem_nowej_linii(
+            polacz_z_trescia(naglowek, dokument.tekst if tekst_txt is None else tekst_txt)
+        )
+        sciezka_txt = katalog_wynikow / f"{nazwa_bazowa}.txt"
+        _zapisz_tekst(sciezka_txt, tresc_txt)
+        wyniki.append(_opis_pliku(sciezka_txt, FormatWynikowy.TXT, identyfikator_zrodla))
 
     return wyniki
 
@@ -82,31 +105,22 @@ def zapisz_plik_pakietu(
     nazwa_bazowa: str,
     tresc: str,
     identyfikatory_zrodel: list[str],
+    *,
+    format_pliku: FormatWynikowy = FormatWynikowy.TXT,
 ) -> PlikWynikowy:
-    """Zapisuje jeden gotowy plik TXT pakietu i zwraca jego opis.
+    """Zapisuje jeden gotowy plik pakietu (TXT albo MD) i zwraca jego opis.
 
-    Używane do plików, które powstają w etapie szóstym: części podzielonego
+    Używane do plików, które powstają w fazie pakowania: części podzielonego
     źródła oraz plików grupy łączących kilka małych źródeł. Treść jest już złożona
-    razem z nagłówkami metadanych przez `gnb.output.skladanie`, więc ta funkcja
-    tylko dopisuje końcowy znak nowej linii, zapisuje plik w UTF-8 bez znaku
-    kolejności bajtów i liczy jego zawartość. Plik MD nie powstaje: fragment ani
-    kompilacja kilku źródeł nie są jednym dokumentem, więc gwarancja wiernej
-    struktury Markdown by tu nie obowiązywała.
+    razem z nagłówkami metadanych przez `gnb.output.skladanie` albo
+    `gnb.output.markdown_pliku`, więc ta funkcja tylko dopisuje końcowy znak nowej
+    linii, zapisuje plik w UTF-8 bez znaku kolejności bajtów i liczy jego
+    zawartość.
     """
     katalog_wynikow.mkdir(parents=True, exist_ok=True)
-    sciezka = katalog_wynikow / f"{nazwa_bazowa}.txt"
+    sciezka = katalog_wynikow / f"{nazwa_bazowa}.{_ROZSZERZENIA[format_pliku]}"
     _zapisz_tekst(sciezka, _z_koncowym_znakiem_nowej_linii(tresc))
-    dane = sciezka.read_bytes()
-    tekst = dane.decode("utf-8")
-    return PlikWynikowy(
-        sciezka=sciezka,
-        format=FormatWynikowy.TXT,
-        identyfikatory_zrodel=list(identyfikatory_zrodel),
-        liczba_slow=policz_slowa(tekst),
-        liczba_znakow=policz_znaki(tekst),
-        rozmiar_bajtow=len(dane),
-        checksum=suma_kontrolna_pliku(sciezka),
-    )
+    return _opis_pliku(sciezka, format_pliku, None, identyfikatory_zrodel)
 
 
 def zapisz_plik_pdf(
@@ -153,16 +167,27 @@ def _zapisz_tekst(sciezka: Path, tresc: str) -> None:
 
 
 def _opis_pliku(
-    sciezka: Path, format_pliku: FormatWynikowy, identyfikator_zrodla: str
+    sciezka: Path,
+    format_pliku: FormatWynikowy,
+    identyfikator_zrodla: str | None,
+    identyfikatory_zrodel: list[str] | None = None,
 ) -> PlikWynikowy:
     """Buduje `PlikWynikowy` z rzeczywistej zawartości zapisanego pliku."""
     dane = sciezka.read_bytes()
     tekst = dane.decode("utf-8")
+    liczba_slow = (
+        policz_slowa_markdown(tekst) if format_pliku is FormatWynikowy.MD else policz_slowa(tekst)
+    )
+    identyfikatory = (
+        list(identyfikatory_zrodel)
+        if identyfikatory_zrodel is not None
+        else [identyfikator_zrodla or ""]
+    )
     return PlikWynikowy(
         sciezka=sciezka,
         format=format_pliku,
-        identyfikatory_zrodel=[identyfikator_zrodla],
-        liczba_slow=policz_slowa(tekst),
+        identyfikatory_zrodel=identyfikatory,
+        liczba_slow=liczba_slow,
         liczba_znakow=policz_znaki(tekst),
         rozmiar_bajtow=len(dane),
         checksum=suma_kontrolna_pliku(sciezka),

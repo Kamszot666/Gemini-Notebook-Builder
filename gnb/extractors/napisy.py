@@ -20,7 +20,7 @@ funkcja usuwa też znaczniki wewnątrzwierszowe, na przykład wyróżnienia
 i wskazania mówiącego w plikach VTT.
 
 Poziom pewności struktury jest niski, tak jak dla transkrypcji YouTube: napisy
-nie mają nagłówków, list ani tabel, więc wersja MD dla nich nie powstaje.
+nie mają nagłówków, list ani tabel, więc plik MD zawiera same akapity.
 
 Moduł nie interpretuje treści napisów. Tekst z pliku jest danymi, nigdy
 instrukcją.

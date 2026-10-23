@@ -22,6 +22,11 @@ from collections.abc import Sequence
 
 from gnb.core.model import BlokTresci
 from gnb.core.stale import RodzajBloku
+from gnb.extractors.escapowanie_markdown import (
+    escapuj_komorke_lub_fragment,
+    escapuj_naglowek,
+    escapuj_tekst_plaski,
+)
 
 
 def zapisz_bloki_jako_markdown(bloki: Sequence[BlokTresci]) -> str:
@@ -29,9 +34,10 @@ def zapisz_bloki_jako_markdown(bloki: Sequence[BlokTresci]) -> str:
     fragmenty: list[str] = []
     for blok in bloki:
         if blok.rodzaj is RodzajBloku.NAGLOWEK:
-            fragmenty.append(f"{'#' * max(1, min(blok.poziom, 6))} {blok.tresc}")
+            poziom = max(1, min(blok.poziom, 6))
+            fragmenty.append(f"{'#' * poziom} {escapuj_naglowek(blok.tresc)}")
         elif blok.rodzaj is RodzajBloku.AKAPIT:
-            fragmenty.append(blok.tresc)
+            fragmenty.append(escapuj_tekst_plaski(blok.tresc))
         elif blok.rodzaj is RodzajBloku.LISTA:
             fragmenty.append(_markdown_listy(blok))
         elif blok.rodzaj is RodzajBloku.TABELA:
@@ -76,7 +82,7 @@ def _komorka_markdown(komorka: str) -> str:
     komórka o treści „a | b” rozbijała tabelę na dodatkową kolumnę i psuła
     strukturę całego wiersza.
     """
-    return komorka.replace("\\", "\\\\").replace("|", r"\|")
+    return escapuj_komorke_lub_fragment(komorka).replace("|", r"\|")
 
 
 def wiersze_tabeli(blok: BlokTresci) -> list[list[str]]:

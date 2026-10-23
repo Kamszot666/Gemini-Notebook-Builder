@@ -135,7 +135,7 @@ def test_wartosc_rowna_domyslnej_nie_trafia_do_pliku_gdy_klucza_nie_bylo(tmp_pat
     plik = _zapisz_stary(tmp_path)
 
     zapisz_ustawienia(
-        plik, {"limit_adresow_z_pliku": 200, "limit_zrodel": 100, "formaty_wynikowe": ("txt", "md")}
+        plik, {"limit_adresow_z_pliku": 200, "limit_zrodel": 100, "formaty_wynikowe": ("md",)}
     )
 
     tresc = plik.read_text(encoding="utf-8")

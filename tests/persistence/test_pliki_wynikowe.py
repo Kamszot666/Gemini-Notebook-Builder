@@ -9,6 +9,7 @@ from gnb.persistence.pliki_wynikowe import (
     NOWA_NAZWA_BRAK,
     czlonkowie_grupy,
     domknij_zastapione_pliki,
+    liczba_slotow_wynikow,
     pozostale_pliki_zrodla,
     usun_plik_wynikowy,
     usun_pliki_zrodla,
@@ -106,13 +107,42 @@ def test_znajdz_brakujace_pliki_pomija_istniejace_i_zrodla_niespakowane(tmp_path
     assert znajdz_brakujace_pliki(uklad, checkpoint) == []
 
 
-def test_brak_pliku_md_nie_zajmuje_slotu(tmp_path: Path) -> None:
+def test_brak_pliku_md_obok_pliku_txt_nie_zajmuje_slotu(tmp_path: Path) -> None:
+    uklad = _uklad(tmp_path)
+    _utworz(uklad, "pliki_wynikowe/a.txt")
+    checkpoint = _checkpoint(
+        uklad,
+        _stan(
+            "a",
+            wyniki=[_wynik("pliki_wynikowe/a.md", "md"), _wynik("pliki_wynikowe/a.txt", "txt")],
+        ),
+    )
+
+    (brak,) = znajdz_brakujace_pliki(uklad, checkpoint)
+
+    assert brak.sciezka_wzgledna == "pliki_wynikowe/a.md"
+    assert not brak.czy_zajmuje_slot
+
+
+def test_brak_jedynego_pliku_md_zajmuje_slot(tmp_path: Path) -> None:
+    """Gdy MD jest jedynym plikiem tekstowym źródła, jego brak oznacza brak treści."""
     uklad = _uklad(tmp_path)
     checkpoint = _checkpoint(uklad, _stan("a", wyniki=[_wynik("pliki_wynikowe/a.md", "md")]))
 
     (brak,) = znajdz_brakujace_pliki(uklad, checkpoint)
 
-    assert not brak.czy_zajmuje_slot
+    assert brak.czy_zajmuje_slot
+
+
+def test_liczba_slotow_liczy_plik_md_z_siostra_txt_raz(tmp_path: Path) -> None:
+    uklad = _uklad(tmp_path)
+    checkpoint = _checkpoint(
+        uklad,
+        _stan("a", wyniki=[_wynik("p/a.md", "md"), _wynik("p/a.txt", "txt")]),
+        _stan("b", wyniki=[_wynik("p/b.md", "md")]),
+    )
+
+    assert liczba_slotow_wynikow(checkpoint) == 2
 
 
 def test_usun_plik_wynikowy_nie_wychodzi_poza_katalog_projektu(tmp_path: Path) -> None:

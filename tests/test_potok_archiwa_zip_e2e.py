@@ -39,6 +39,7 @@ def _zegar() -> Callable[[], datetime]:
 
 def _konfiguracja(tmp_path: Path, **nadpisania: Any) -> Konfiguracja:
     ustawienia: dict[str, Any] = {
+        "formaty_wynikowe": ("txt",),
         "katalog_wynikow": tmp_path / "wyniki",
         "deduplikacja_hash_wlaczona": False,
         "deduplikacja_kosmetyczna_wlaczona": False,

@@ -64,7 +64,7 @@ def zbuduj_dokument(
 
     Poziom pewności struktury jest niski, ponieważ transkrypcja mowy nie ma
     struktury dokumentu: nie ma w niej nagłówków, list ani tabel. Dzięki temu
-    reguła z sekcji ósmej CLAUDE.md nigdy nie wygeneruje dla filmu wersji MD.
+    plik MD z transkrypcji filmu zawiera same akapity, bez zgadywanej struktury.
     """
     segmenty, atrybucja = usun_atrybucje(wynik.napisy.segmenty, wynik.napisy.typ)
     akapity = zbuduj_akapity(segmenty)

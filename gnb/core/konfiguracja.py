@@ -57,7 +57,7 @@ DOMYSLNY_LIMIT_ZRODEL = 100
 DOMYSLNY_LIMIT_ADRESOW_Z_PLIKU = 200
 DOMYSLNY_BEZPIECZNY_LIMIT_SLOW = 480_000
 DOMYSLNY_BEZPIECZNY_LIMIT_MB = 190
-DOMYSLNE_FORMATY_WYNIKOWE: tuple[str, ...] = ("txt", "md")
+DOMYSLNE_FORMATY_WYNIKOWE: tuple[str, ...] = ("md",)
 DOMYSLNE_ZACHOWYWANIE_ORYGINALOW = True
 DOMYSLNE_ZACHOWYWANIE_ODNOSNIKOW = True
 
@@ -1158,7 +1158,7 @@ def _jako_prawda_falsz(scalone: Mapping[str, object], pole: str, domyslna: bool)
 
 
 def _jako_formaty(scalone: Mapping[str, object], domyslne: tuple[str, ...]) -> tuple[str, ...]:
-    """Zamienia wartość pola formatów na uporządkowaną krotkę z gwarantowanym TXT."""
+    """Zamienia wartość pola formatów na uporządkowaną krotkę z co najmniej jednym formatem."""
     if "formaty_wynikowe" not in scalone:
         return domyslne
     surowa = scalone["formaty_wynikowe"]
@@ -1173,6 +1173,9 @@ def _jako_formaty(scalone: Mapping[str, object], domyslne: tuple[str, ...]) -> t
         raise BladTrwaly(
             f"Nieobsługiwane formaty wynikowe: {', '.join(nieznane)}. Dozwolone: txt, md."
         )
-    if "txt" not in elementy:
-        elementy.insert(0, "txt")
+    if not elementy:
+        raise BladTrwaly(
+            "Ustawienie „formaty_wynikowe” musi zawierać co najmniej jeden format tekstowy: "
+            "md albo txt."
+        )
     return tuple(dict.fromkeys(elementy))

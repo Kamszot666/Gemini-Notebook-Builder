@@ -11,8 +11,8 @@ znaczników Markdown, który trafia do notatnika. Funkcja `opis_jako_metadane`
 buduje z tego samego opisu słownik napisów do manifestu. Funkcja
 `zbuduj_dokument_wyekstrahowany` jest wspólnym finałem czterech adapterów
 ekstrakcji: składa `DokumentWyekstrahowany` z twardo ustawionym niskim poziomem
-pewności struktury, żeby reguła generowania Markdown nie utworzyła wersji MD
-z opisu, który prozą nie jest.
+pewności struktury, żeby opis nie dostał zgadniętej struktury w pliku MD,
+bo prozą nie jest.
 """
 
 from __future__ import annotations

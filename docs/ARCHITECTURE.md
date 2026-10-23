@@ -1,4 +1,4 @@
-# Architektura — stan po etapie piętnastym, część F
+# Architektura — stan po etapie siedemnastym, część B
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
 zakończeniu etapu czternastego. Pełny docelowy podział na pakiety opisuje
@@ -270,7 +270,9 @@ pliku wynikowego.
 ## Pakiet gnb.output
 
 - `gnb/output/regula_md.py` — deterministyczna reguła wyboru między TXT a MD.
-- `gnb/output/zapis.py` — zapis TXT zawsze, MD warunkowo, w UTF-8 bez BOM z LF.
+- `gnb/output/zapis.py` — zapis MD i TXT według konfiguracji (domyślnie sam MD), w UTF-8 bez BOM z LF.
+- `gnb/output/markdown_pliku.py` — składanie plików MD: nagłówki źródeł w pliku grupy, przesuwanie nagłówków, liczenie słów bez znaczników.
+- `gnb/extractors/escapowanie_markdown.py` — escapowanie składni Markdown w tekście spoza bloków strukturalnych.
   Funkcja `zapisz_plik_pakietu` zapisuje gotowy plik części albo pliku grupy w
   formacie TXT, a `zapisz_plik_pdf` zapisuje gotowe bajty tematycznego pliku PDF
   grupy obrazów.

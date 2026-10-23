@@ -53,6 +53,7 @@ def test_wszystkie_formaty_dokumentowe_sa_przetwarzane_bez_bledow(tmp_path: Path
     # włączonej deduplikacji część z nich słusznie znika jako duplikat. Ten test
     # sprawdza samą obsługę formatów, więc deduplikacja jest w nim wyłączona.
     konfiguracja = Konfiguracja(
+        formaty_wynikowe=("txt",),
         katalog_wynikow=tmp_path,
         deduplikacja_hash_wlaczona=False,
         deduplikacja_kosmetyczna_wlaczona=False,
@@ -151,7 +152,7 @@ def test_naglowek_pliku_binarnego_ma_pole_plik_a_nie_adres(tmp_path: Path) -> No
     moment = datetime(2026, 8, 28, 9, 0, tzinfo=UTC)
     pozycje = [przyjmij_plik(KATALOG_DANYCH / "dokument.docx", moment)]
 
-    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path)
+    konfiguracja = Konfiguracja(formaty_wynikowe=("txt",), katalog_wynikow=tmp_path)
     wynik = przetworz_projekt(
         pozycje, konfiguracja, nazwa_projektu="Test nagłówka DOCX", zegar=_zegar_krokowy()
     )

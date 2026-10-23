@@ -15,7 +15,7 @@ PDF nie ma niezawodnie odtwarzalnej struktury dokumentu: format zapisuje tekst
 jako pozycjonowane fragmenty na stronie, a nie jako drzewo nagłówków i akapitów.
 Zgadywanie nagłówków z wielkości czcionki byłoby heurystyką bez pewności, więc
 ekstraktor nie tworzy bloków strukturalnych i zawsze zgłasza niski poziom
-pewności — sekcja ósma CLAUDE.md nie pozwala wtedy na wersję MD.
+pewności, a plik MD zawiera same akapity.
 
 Nagłówek i numer strony powtarzane na każdej stronie zaśmiecałyby wynik,
 gdyby trafiały do tekstu tyle razy, ile jest stron. Wykrywanie jest celowo

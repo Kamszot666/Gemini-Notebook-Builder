@@ -531,9 +531,11 @@ ZAKLADKI: tuple[Zakladka, ...] = (
             ),
             PoleUstawien(
                 "formaty_wynikowe",
-                "Twórz także pliki Markdown",
-                "Plik TXT powstaje zawsze. Gdy włączone, dokument o wyraźnej strukturze dostaje "
-                "dodatkowo plik Markdown.",
+                "Formaty plików dla notatnika",
+                "Domyślnie powstaje wyłącznie plik Markdown, po którym łatwo nawigować klawiszem "
+                "nagłówka w czytniku ekranu. Zaznacz co najmniej jeden format. Przy obu "
+                "formatach każda treść leży w dwóch plikach, a do notatnika trzeba wgrać tylko "
+                "jeden z nich.",
                 Rodzaj.FORMATY,
             ),
             _logiczne(
@@ -715,7 +717,15 @@ def wartosc_slowami(pole: PoleUstawien, wartosc: object) -> str:
     if pole.nazwy_opcji and str(wartosc) in pole.opcje:
         return pole.nazwy_opcji[pole.opcje.index(str(wartosc))]
     if pole.rodzaj is Rodzaj.FORMATY:
-        return "tak" if "md" in _jako_krotka(wartosc) else "nie"
+        formaty = _jako_krotka(wartosc)
+        return (
+            " i ".join(
+                nazwa
+                for klucz, nazwa in (("md", "Markdown"), ("txt", "tekstowy"))
+                if klucz in formaty
+            )
+            or "brak"
+        )
     if pole.rodzaj is Rodzaj.SKROT:
         return rozbierz_kombinacje(str(wartosc)).jako_slowa()
     if isinstance(wartosc, (tuple, list)):
@@ -765,7 +775,16 @@ def _odczytaj_pole(pole: PoleUstawien, formularz: Mapping[str, str]) -> object:
     if pole.rodzaj is Rodzaj.LOGICZNE:
         return pole.nazwa in formularz
     if pole.rodzaj is Rodzaj.FORMATY:
-        return ("txt", "md") if pole.nazwa in formularz else ("txt",)
+        wybrane = tuple(
+            format_pliku
+            for format_pliku in ("md", "txt")
+            if f"{pole.nazwa}_{format_pliku}" in formularz
+        )
+        if not wybrane:
+            raise BladWartosciUstawienia(
+                pole.nazwa, "Zaznacz co najmniej jeden format: Markdown albo tekstowy."
+            )
+        return wybrane
     if pole.rodzaj is Rodzaj.SKROT:
         return _odczytaj_kombinacje(pole, formularz)
     if pole.rodzaj is Rodzaj.LICZBA:

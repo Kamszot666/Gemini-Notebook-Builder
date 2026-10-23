@@ -48,7 +48,7 @@ def _zegar_krokowy() -> Callable[[], datetime]:
 
 
 def _konfiguracja(tmp_path: Path) -> Konfiguracja:
-    return Konfiguracja(katalog_wynikow=tmp_path / "wyniki")
+    return Konfiguracja(katalog_wynikow=tmp_path / "wyniki", formaty_wynikowe=("txt",))
 
 
 def _pozycje(*tresci: str, grupa: str | None = None) -> list[PozycjaWejsciowa]:

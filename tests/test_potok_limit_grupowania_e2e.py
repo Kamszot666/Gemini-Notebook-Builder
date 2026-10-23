@@ -51,6 +51,7 @@ def _pozycje() -> list[PozycjaWejsciowa]:
 
 def _konfiguracja(tmp_path: Path) -> Konfiguracja:
     return Konfiguracja(
+        formaty_wynikowe=("txt",),
         katalog_wynikow=tmp_path,
         deduplikacja_hash_wlaczona=False,
         deduplikacja_kosmetyczna_wlaczona=False,

@@ -1,4 +1,4 @@
-# Konfiguracja — stan po etapie siedemnastym, część A
+# Konfiguracja — stan po etapie siedemnastym, część B
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
 obsługuje po etapie trzynastym. Z listy w sekcji jedenastej a pliku
@@ -149,11 +149,16 @@ Nazwa pola w pliku TOML, odpowiadająca zmienna środowiskowa oraz znaczenie:
    w całości. Domyślnie 190. Dla plików tekstowych rozmiar surowego pliku nie
    jest ograniczeniem wejścia, bo nadmiarową treścią zajmuje się podział.
 5. `formaty_wynikowe`, zmienna `GNB_FORMATY_WYNIKOWE`. Lista formatów plików
-   wynikowych. Dozwolone wartości to `txt` i `md`. Format `txt` jest zawsze
-   obecny, nawet gdy go nie wymienisz, bo plik TXT powstaje zawsze. Pozostawienie
-   samego `txt` wyłącza generowanie wersji MD niezależnie od struktury dokumentu.
-   W pliku TOML podaje się to jako listę, na przykład `["txt", "md"]`. W zmiennej
-   środowiskowej jako wartości rozdzielone przecinkiem, na przykład `txt,md`.
+   wynikowych. Dozwolone wartości to `md` i `txt`, a co najmniej jedna musi być
+   podana (pusta lista kończy się błędem trwałym). Domyślnie `["md"]` (zmiana
+   z etapu siedemnastego, części B: dawniej TXT powstawał zawsze, a MD warunkowo).
+   Przy obu formatach każda treść leży w dwóch plikach o tej samej nazwie, a do
+   notatnika wgrywa się tylko jeden z nich, więc drugi nie zajmuje slotu. Plik
+   konfiguracji, który wymieniał tylko `txt`, nadal daje sam TXT. W pliku TOML
+   podaje się to jako listę, na przykład `["md", "txt"]`. W zmiennej środowiskowej
+   jako wartości rozdzielone przecinkiem, na przykład `md,txt`. Na stronie
+   ustawień, w zakładce „Pliki wynikowe”, to dwa pola wyboru: „Plik Markdown (MD)”
+   i „Plik tekstowy (TXT)”.
 6. `zachowuj_oryginaly`, zmienna `GNB_ZACHOWUJ_ORYGINALY`. Decyduje, czy w
    katalogu projektu ma powstawać podkatalog `materialy_zrodlowe` z kopią
    każdego przetworzonego źródła. Domyślnie włączone. Po wyłączeniu ten
@@ -554,7 +559,7 @@ limit_zrodel = 100
 limit_adresow_z_pliku = 200
 bezpieczny_limit_slow = 480000
 bezpieczny_limit_mb = 190
-formaty_wynikowe = ["txt", "md"]
+formaty_wynikowe = ["md"]
 zachowuj_oryginaly = true
 zachowuj_odnosniki = true
 

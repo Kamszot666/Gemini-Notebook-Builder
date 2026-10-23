@@ -204,12 +204,18 @@ def test_przetworz_z_grupa_laczy_zrodla_w_jeden_plik(
 
     assert kod == 0
     capsys.readouterr()
-    pliki_txt = list((tmp_path / "Test grupy CLI" / "pliki_wynikowe").glob("*.txt"))
-    assert len(pliki_txt) == 1
-    tresc = pliki_txt[0].read_text(encoding="utf-8")
+    katalog_wynikow = tmp_path / "Test grupy CLI" / "pliki_wynikowe"
+    assert list(katalog_wynikow.glob("*.txt")) == []
+    pliki_md = list(katalog_wynikow.glob("*.md"))
+    assert len(pliki_md) == 1
+    tresc = pliki_md[0].read_text(encoding="utf-8")
     assert "Pierwsza notatka o rozliczeniu rocznym." in tresc
     assert "Druga notatka o zaliczkach kwartalnych." in tresc
     assert tresc.count("Identyfikator źródła: ") == 2
+    # Plik grupy ma jeden nagłówek pierwszego poziomu i nagłówek drugiego poziomu na źródło.
+    wiersze = tresc.splitlines()
+    assert [w for w in wiersze if w.startswith("# ")] == ["# Grupa „Notatki podatkowe”"]
+    assert len([w for w in wiersze if w.startswith("## ")]) == 2
 
 
 def test_przetworz_z_flaga_nuty_kieruje_pdf_do_sciezki_audiverisa(

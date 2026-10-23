@@ -9,6 +9,7 @@ CSRF i odmawia, gdy trwa przetwarzanie.
 from __future__ import annotations
 
 import http.client
+import re
 import threading
 import time
 from collections.abc import Iterator
@@ -175,7 +176,16 @@ def test_strona_projektu_pokazuje_zrodla_z_dzialaniami_powiazanymi_z_nazwa_zrodl
     opis = f"zrodlo-{identyfikator}-opis"
     assert f'id="{opis}"' in strona
     assert strona.count(f'aria-describedby="{opis}"') >= 3
-    assert 'aria-label="Plik z ręcznie zapisaną treścią tego źródła"' in strona
+    # Pole pliku ma zwykłą etykietę, bez aria-label (sekcja 11 punkt 2 CLAUDE.md), a pole
+    # pliku i przycisk leżą w osobnych blokach, żeby NVDA czytał je osobno.
+    assert "aria-label" not in strona
+    assert re.search(
+        r'<div class="pole-pliku">\s*<label for="(zastap-[^"]+)">'
+        r"Plik z ręcznie zapisaną treścią tego źródła</label>\s*"
+        r'<input type="file" id="\1"[^>]*>\s*</div>\s*'
+        r'<div class="akcja-formularza">\s*<button[^>]*>Zastąp treść plikiem</button>\s*</div>',
+        strona,
+    )
 
 
 def test_nazwa_zrodla_jest_escapowana_w_wykazie(

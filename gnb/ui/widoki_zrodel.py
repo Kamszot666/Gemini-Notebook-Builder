@@ -174,11 +174,13 @@ def _pozycja_zrodla(sciezka: str, zrodlo: ZrodloDoWidoku, token_csrf: str) -> st
             f'<form method="post" action="{escapuj(adres_zrodla)}/zastap" '
             'enctype="multipart/form-data">\n'
             f"{_pole_csrf(token_csrf)}\n"
+            '<div class="pole-pliku">\n'
+            f'<label for="zastap-{id_el}">Plik z ręcznie zapisaną treścią tego źródła</label>\n'
             f'<input type="file" id="zastap-{id_el}" name="plik" required '
-            'aria-label="Plik z ręcznie zapisaną treścią tego źródła" '
-            f'aria-describedby="{id_opisu}">\n'
+            f'aria-describedby="{id_opisu}">\n</div>\n'
+            '<div class="akcja-formularza">\n'
             f'<button type="submit" aria-describedby="{id_opisu}">'
-            "Zastąp treść plikiem</button>\n</form>"
+            "Zastąp treść plikiem</button>\n</div>\n</form>"
         )
     dzialania.append(
         f'<form method="post" action="{escapuj(adres_zrodla)}/usun">\n'

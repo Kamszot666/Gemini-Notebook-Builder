@@ -1,4 +1,4 @@
-# Architektura — stan po etapie siedemnastym, część B
+# Architektura — stan po etapie siedemnastym, część C
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
 zakończeniu etapu czternastego. Pełny docelowy podział na pakiety opisuje
@@ -451,6 +451,7 @@ istniejący potok z żądaniem HTTP przez semantyczny, dostępny HTML.
   brakujących plików wynikowych. Zależy od
   `widoki.py`, a nie odwrotnie: gotowy fragment jest przekazywany do strony
   projektu jako napis. Sekcja brakujących plików tylko pokazuje rozbieżność.
+- `gnb/ui/otwieranie.py` — otwarcie pliku wynikowego w aplikacji domyślnej systemu (`os.startfile` na Windows, wewnątrz sprawdzenia `sys.platform`; na innym systemie czytelny komunikat). Wywołuje je trasa `POST /projekt/NAZWA/otworz-plik`, która przyjmuje wyłącznie nazwę pliku z wykazu plików wynikowych projektu; obok trasa `GET /projekt/NAZWA/plik/PLIK` z podglądem MD i TXT jako zwykły tekst.
 - `gnb/ui/ustawienia.py`, `gnb/ui/widoki_ustawien.py` — strona `/ustawienia`.
 - `gnb/ui/wyglad.py` — schematy kolorów, kroje pisma, rozmiar czcionki, wzór
   kontrastu WCAG i arkusz zmiennych CSS. Serwer wstawia ten arkusz w miejsce

@@ -241,7 +241,7 @@ def test_strona_projektu_w_trakcie_przetwarzania_odpytuje_od_razu_i_ma_id_nagło
         limit_znakow_instrukcji=10_000,
         token_csrf="t",
     )
-    assert '<h2 id="naglowek-stanu">' in html
+    assert '<h2 id="naglowek-stanu" tabindex="-1">' in html
     # Skrypt musi odpytać stan od razu, nie dopiero po pierwszych 4 sekundach —
     # w przeciwnym razie krótki przebieg (kilka sekund) kończy się, zanim
     # pierwszy odczyt w ogóle nastąpi, i użytkownik nie usłyszy żadnego
@@ -694,3 +694,194 @@ def test_pola_tekstu_i_adresow_maja_nowe_nazwy_jako_etykiety_w_obu_formularzach(
         zbieracz = _ZbieraczPolTekstowych()
         zbieracz.feed(html)
         assert zbieracz.tekst_etykiety(identyfikator) == nazwa, identyfikator
+
+
+# --- etap siedemnasty, część C: interfejs ------------------------------------
+
+
+def _wpis_listy_c(nazwa: str) -> ProjektNaLiscie:
+    return ProjektNaLiscie(
+        nazwa=nazwa,
+        katalog=Path("/x") / nazwa,
+        zakonczony=True,
+        liczba_zrodel=1,
+        czas_ostatniej_zmiany="2026-10-23T10:00:00+00:00",
+    )
+
+
+def test_strona_glowna_ma_przycisk_aktywnego_projektu_zaraz_za_przejdz_do_projektu() -> None:
+    html = strona_glowna(
+        projekty=[_wpis_listy_c("Podatki 2026")],
+        token_csrf="t",
+        wybrany_projekt="Podatki 2026",
+    )
+
+    przejdz = html.index("Przejdź do projektu</button>")
+    ustaw = html.index("Ustaw jako aktywny projekt skrótu</button>")
+    assert przejdz < ustaw < html.index('id="blok-nazwy-projektu"')
+    przycisk = re.search(r'<button type="submit" id="ustaw-aktywny-projekt"[^>]*>', html)
+    assert przycisk is not None
+    assert 'formaction="/projekt/Podatki%202026/aktywny-skrot"' in przycisk.group(0)
+    assert 'formmethod="post"' in przycisk.group(0)
+    assert "application/x-www-form-urlencoded" in przycisk.group(0)
+    # Przycisk leży w formularzu z tokenem CSRF.
+    assert html.index('name="token_csrf"') < ustaw < html.index("</form>")
+
+
+def test_skrypt_strony_glownej_chowa_przycisk_aktywnego_projektu_przy_nowym_projekcie() -> None:
+    html = strona_glowna(projekty=[], token_csrf="t")
+
+    assert "var ustaw = document.getElementById('ustaw-aktywny-projekt');" in html
+    assert "ustaw.hidden = nowy;" in html
+    # Przy zmianie projektu adres przycisku wskazuje projekt wybrany na liście.
+    assert "'/aktywny-skrot');" in html
+    assert "ogloszenie([zdanie]);" in html
+
+
+def test_strona_glowna_ma_pole_pliku_i_przycisk_wysylania_w_osobnych_blokach() -> None:
+    html = strona_glowna(projekty=[], token_csrf="t")
+
+    assert re.search(
+        r'<div class="pole-pliku">\s*<label for="pliki">Pliki z dysku</label>\s*'
+        r'<input type="file" id="pliki" name="pliki" multiple>\s*</div>\s*'
+        r'<div class="akcja-formularza">\s*'
+        r'<button type="submit">Dodaj materiały i rozpocznij przetwarzanie</button>\s*</div>',
+        html,
+    )
+
+
+def test_formularz_dosylania_ma_pole_pliku_i_przycisk_w_osobnych_blokach() -> None:
+    html = strona_projektu(
+        nazwa="Projekt",
+        informacja=None,
+        pola=PolaNotatnika(),
+        limit_znakow_instrukcji=10_000,
+        token_csrf="t",
+        raport="Raport.",
+    )
+
+    assert re.search(
+        r'<div class="pole-pliku">\s*<label for="dosylanie-pliki">Pliki z dysku</label>\s*'
+        r'<input type="file" id="dosylanie-pliki" name="pliki" multiple>\s*</div>',
+        html,
+    )
+    assert re.search(
+        r'<div class="akcja-formularza">\s*'
+        r'<button type="submit">Dodaj źródła i uruchom kolejny przebieg</button>\s*</div>',
+        html,
+    )
+
+
+def test_wszystkie_pola_pliku_w_interfejsie_maja_etykiete_i_nie_maja_aria_label() -> None:
+    glowna = strona_glowna(projekty=[], token_csrf="t")
+    projekt = strona_projektu(
+        nazwa="Projekt",
+        informacja=None,
+        pola=PolaNotatnika(),
+        limit_znakow_instrukcji=10_000,
+        token_csrf="t",
+        raport="Raport.",
+    )
+
+    for html in (glowna, projekt):
+        for pole in re.findall(r'<input type="file"[^>]*>', html):
+            identyfikator = re.search(r'id="([^"]+)"', pole)
+            assert identyfikator is not None
+            assert f'<label for="{identyfikator.group(1)}">' in html
+        assert "aria-label" not in html
+
+
+def test_pliki_wynikowe_na_stronie_projektu_maja_przycisk_otwarcia_i_podglad() -> None:
+    html = strona_projektu(
+        nazwa="Projekt Zrodel",
+        informacja=None,
+        pola=PolaNotatnika(),
+        limit_znakow_instrukcji=10_000,
+        token_csrf="tok",
+        raport="Raport.",
+        pliki_wynikowe=["notatka_1.md", "obraz.pdf"],
+    )
+
+    assert "<h2>Pliki wynikowe</h2>" in html
+    assert 'action="/projekt/Projekt%20Zrodel/otworz-plik"' in html
+    assert "Otwórz plik notatka_1.md</button>" in html
+    assert "Otwórz plik obraz.pdf</button>" in html
+    assert html.count('name="plik" value=') == 2
+    assert html.count('value="tok"') >= 2
+    # Podgląd jako tekst tylko dla MD i TXT, nie dla PDF.
+    assert 'href="/projekt/Projekt%20Zrodel/plik/notatka_1.md"' in html
+    assert "/plik/obraz.pdf" not in html
+    assert 'id="komunikat-plikow" role="status"' in html
+
+
+def test_nazwa_pliku_wynikowego_jest_escapowana_na_stronie() -> None:
+    html = strona_projektu(
+        nazwa="P",
+        informacja=None,
+        pola=PolaNotatnika(),
+        limit_znakow_instrukcji=10_000,
+        token_csrf="t",
+        raport="Raport.",
+        pliki_wynikowe=['<img src=x onerror="alert(1)">.md'],
+        komunikat_pliku='<script>alert("x")</script>',
+    )
+
+    assert "<img src=x" not in html
+    assert "<script>alert" not in html
+
+
+def test_po_zakonczeniu_skrypt_od_razu_przechodzi_do_wynikow_bez_odnosnika() -> None:
+    informacja = InformacjaOZadaniu(
+        nazwa_projektu="Projekt",
+        stan=StanZadania.TRWA,
+        komunikat_postepu="Trwa.",
+        komunikat_bledu=None,
+        wynik=None,
+    )
+    html = strona_projektu(
+        nazwa="Projekt",
+        informacja=informacja,
+        pola=PolaNotatnika(),
+        limit_znakow_instrukcji=10_000,
+        token_csrf="t",
+    )
+
+    assert "Pokaż wyniki przetwarzania" not in html
+    assert (
+        "window.location.replace(window.location.pathname + '?gotowe=1#naglowek-wynikow')" in html
+    )
+    # Fokus na nagłówku wyników po wczytaniu, tylko gdy adres wskazuje ten nagłówek.
+    assert "window.location.hash !== '#naglowek-wynikow'" in html
+    assert "cel.focus();" in html
+
+
+def test_pierwsza_sekcja_wynikow_jest_celem_przejscia_z_fokusem() -> None:
+    podsumowanie = PodsumowanieWyniku(
+        liczba_przetworzonych=2,
+        liczba_pominietych=0,
+        liczba_bledow=0,
+        katalog_projektu="/x",
+        wznowiono=False,
+    )
+    z_podsumowaniem = strona_projektu(
+        nazwa="P",
+        informacja=None,
+        pola=PolaNotatnika(),
+        limit_znakow_instrukcji=10_000,
+        token_csrf="t",
+        podsumowanie=podsumowanie,
+        raport="Raport.",
+    )
+    sam_raport = strona_projektu(
+        nazwa="P",
+        informacja=None,
+        pola=PolaNotatnika(),
+        limit_znakow_instrukcji=10_000,
+        token_csrf="t",
+        raport="Raport.",
+    )
+
+    assert '<h2 id="naglowek-wynikow" tabindex="-1">Podsumowanie</h2>' in z_podsumowaniem
+    assert z_podsumowaniem.count('id="naglowek-wynikow"') == 1
+    assert '<h2 id="naglowek-wynikow" tabindex="-1">Raport końcowy</h2>' in sam_raport
+    assert sam_raport.count('id="naglowek-wynikow"') == 1

@@ -23,8 +23,11 @@ notatnika nie zależy od formatu (sekcja dziewiąta CLAUDE.md).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+
+from markdown_it.token import Token
 
 from gnb.core.liczenie_slow import policz_slowa
 from gnb.extractors.escapowanie_markdown import (
@@ -32,6 +35,7 @@ from gnb.extractors.escapowanie_markdown import (
     escapuj_naglowek,
 )
 from gnb.extractors.markdown import utworz_parser
+from gnb.extractors.strona_www import NAGLOWEK_SEKCJI_ODNOSNIKOW
 from gnb.output.naglowek_metadanych import (
     ETYKIETA_ADRES,
     ETYKIETA_IDENTYFIKATOR,
@@ -43,8 +47,10 @@ from gnb.output.tekst_bez_znacznikow import zamien_markdown_na_tekst
 
 NAJPLYTSZY_POZIOM_TRESCI_ZRODLA_W_GRUPIE = 3
 NAJGLEBSZY_POZIOM_NAGLOWKA = 6
+POZIOM_WYKAZU_ODNOSNIKOW_W_GRUPIE = 3
 
 _PARSER = utworz_parser()
+_POZYCJA_WYKAZU = re.compile(r"^\d+\. ")
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,23 +82,91 @@ def przesun_naglowki(tekst_markdown: str, najplytszy_poziom_docelowy: int) -> st
     nagłówki dokumentu albo zapis wiersza byłby inny.
     """
     tokeny = _PARSER.parse(tekst_markdown)
-    naglowki = [
+    naglowki = _naglowki_dokumentu(tokeny)
+    if not naglowki:
+        return tekst_markdown
+    poziomy = [int(tokeny[indeks].tag[1:]) for indeks in naglowki]
+    przesuniecie = najplytszy_poziom_docelowy - min(poziomy)
+    if przesuniecie <= 0:
+        return tekst_markdown
+    return _przepisz_poziomy_naglowkow(
+        tekst_markdown,
+        tokeny,
+        naglowki,
+        [min(NAJGLEBSZY_POZIOM_NAGLOWKA, poziom + przesuniecie) for poziom in poziomy],
+    )
+
+
+def usun_przeskoki_naglowkow(tekst_markdown: str) -> str:
+    """Zamienia przeskok poziomu nagłówka o więcej niż jeden na kolejny poziom.
+
+    Nawigacja klawiszem poziomu nagłówka w czytniku ekranu gubi miejsce, gdy po
+    nagłówku trzeciego poziomu następuje od razu piąty. Każdy nagłówek dostaje
+    poziom o jeden głębszy niż najbliższy płytszy nagłówek, który go poprzedza,
+    więc względne położenie zostaje: dwa nagłówki równorzędne w źródle pozostają
+    równorzędne. Nagłówek bez płytszego poprzednika, na przykład pierwszy w tekście,
+    zachowuje swój poziom. Nagłówki płytsze niż poprzedni nigdy nie są zmieniane.
+    """
+    tokeny = _PARSER.parse(tekst_markdown)
+    naglowki = _naglowki_dokumentu(tokeny)
+    if not naglowki:
+        return tekst_markdown
+
+    stos: list[tuple[int, int]] = []
+    pierwotne = [int(tokeny[indeks].tag[1:]) for indeks in naglowki]
+    nowe: list[int] = []
+    for poziom in pierwotne:
+        while stos and stos[-1][0] >= poziom:
+            stos.pop()
+        nowy = stos[-1][1] + 1 if stos else poziom
+        stos.append((poziom, nowy))
+        nowe.append(min(NAJGLEBSZY_POZIOM_NAGLOWKA, nowy))
+
+    if nowe == pierwotne:
+        return tekst_markdown
+    return _przepisz_poziomy_naglowkow(tekst_markdown, tokeny, naglowki, nowe)
+
+
+def oddziel_wykaz_odnosnikow(tekst_markdown: str) -> tuple[str, str]:
+    """Oddziela końcowy wykaz odnośników od reszty treści źródła.
+
+    Wykaz dopisuje ekstraktor stron na końcu tekstu pod nagłówkiem drugiego
+    poziomu. Zwraca parę (treść bez wykazu, wykaz); gdy wykazu nie ma albo po jego
+    nagłówku jest cokolwiek poza pozycjami numerowanymi, wykaz jest pusty, a treść
+    zostaje cała.
+    """
+    naglowek_wykazu = f"## {NAGLOWEK_SEKCJI_ODNOSNIKOW}"
+    if tekst_markdown.startswith(f"{naglowek_wykazu}\n"):
+        poczatek = 0
+    else:
+        pozycja = tekst_markdown.rfind(f"\n{naglowek_wykazu}\n")
+        if pozycja == -1:
+            return tekst_markdown, ""
+        poczatek = pozycja + 1
+    wykaz = tekst_markdown[poczatek:]
+    pozycje = wykaz.split("\n")[1:]
+    if any(wiersz.strip() and not _POZYCJA_WYKAZU.match(wiersz) for wiersz in pozycje):
+        return tekst_markdown, ""
+    return tekst_markdown[:poczatek].rstrip("\n"), wykaz
+
+
+def _naglowki_dokumentu(tokeny: list[Token]) -> list[int]:
+    """Zwraca indeksy tokenów nagłówków leżących bezpośrednio w dokumencie."""
+    return [
         indeks
         for indeks, token in enumerate(tokeny)
         if token.type == "heading_open" and token.level == 0 and token.map
     ]
-    if not naglowki:
-        return tekst_markdown
-    najplytszy = min(int(tokeny[indeks].tag[1:]) for indeks in naglowki)
-    przesuniecie = najplytszy_poziom_docelowy - najplytszy
-    if przesuniecie <= 0:
-        return tekst_markdown
 
+
+def _przepisz_poziomy_naglowkow(
+    tekst_markdown: str, tokeny: list[Token], naglowki: list[int], nowe_poziomy: list[int]
+) -> str:
+    """Zapisuje nagłówki z nowymi poziomami, także te z podkreśleniem, jako krzyżyki."""
     wiersze = tekst_markdown.split("\n")
-    for indeks in reversed(naglowki):
+    for indeks, nowy_poziom in reversed(list(zip(naglowki, nowe_poziomy, strict=True))):
         token = tokeny[indeks]
         poczatek, koniec = token.map or (0, 0)
-        nowy_poziom = min(NAJGLEBSZY_POZIOM_NAGLOWKA, int(token.tag[1:]) + przesuniecie)
         krzyzyki = "#" * nowy_poziom
         if token.markup in ("=", "-"):
             tresc = " ".join(tokeny[indeks + 1].content.split())
@@ -145,7 +219,13 @@ def zloz_plik_grupy_markdown(
     for fragment in fragmenty:
         sekcja = [f"## {escapuj_naglowek(tytul_zrodla(fragment.naglowek_metadanych))}"]
         lista = naglowek_metadanych_jako_liste(fragment.naglowek_metadanych)
-        tresc = przesun_naglowki(fragment.tresc_markdown, NAJPLYTSZY_POZIOM_TRESCI_ZRODLA_W_GRUPIE)
+        # Wykaz odnośników leży zawsze o jeden poziom pod tytułem źródła, bez
+        # względu na to, jak głęboko sięga hierarchia samego artykułu.
+        tresc_glowna, wykaz = oddziel_wykaz_odnosnikow(fragment.tresc_markdown)
+        tresc = przesun_naglowki(tresc_glowna, NAJPLYTSZY_POZIOM_TRESCI_ZRODLA_W_GRUPIE)
+        if wykaz:
+            wykaz = f"{'#' * POZIOM_WYKAZU_ODNOSNIKOW_W_GRUPIE}{wykaz[2:]}"
+            tresc = polacz_z_trescia(tresc, wykaz) if tresc else wykaz
         sekcja.append(polacz_z_trescia(lista, tresc))
         czesci.append("\n\n".join(czesc for czesc in sekcja if czesc))
     return "\n\n".join(czesci)

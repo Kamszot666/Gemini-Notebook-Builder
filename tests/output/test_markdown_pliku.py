@@ -7,12 +7,15 @@ from gnb.extractors.markdown import utworz_parser
 from gnb.output.markdown_pliku import (
     FragmentGrupyMarkdown,
     naglowek_metadanych_jako_liste,
+    oddziel_wykaz_odnosnikow,
     policz_slowa_markdown,
     przesun_naglowki,
     tytul_zrodla,
+    usun_przeskoki_naglowkow,
     zloz_plik_grupy_markdown,
 )
 from gnb.output.tekst_bez_znacznikow import zamien_markdown_na_tekst
+from gnb.output.zapis import tresc_markdown_zrodla
 
 
 def _naglowki(tekst: str) -> list[tuple[int, str]]:
@@ -147,3 +150,102 @@ def test_liczenie_slow_md_pomija_znaczniki_skladni_i_zgadza_sie_z_txt() -> None:
         "znaczniki składni (krzyżyki, gwiazdki, kreski tabeli) nie są słowami"
     )
     assert "**" not in tekst_txt
+
+
+def test_przeskok_naglowka_o_wiecej_niz_jeden_poziom_jest_zamieniony_na_kolejny() -> None:
+    tekst = "## Lek\n\n#### Jak działa\n\n#### Jak stosować\n\n##### Sposób podawania\n\n#### Dawki"
+
+    wynik = usun_przeskoki_naglowkow(tekst)
+
+    assert _naglowki(wynik) == [
+        (2, "Lek"),
+        (3, "Jak działa"),
+        (3, "Jak stosować"),
+        (4, "Sposób podawania"),
+        (3, "Dawki"),
+    ]
+
+
+def test_naglowki_bez_przeskokow_zostaja_bez_zmian() -> None:
+    tekst = "# A\n\n## B\n\n### C\n\n## D\n\nTreść."
+
+    assert usun_przeskoki_naglowkow(tekst) == tekst
+
+
+def test_naglowek_plytszy_niz_pierwszy_nie_jest_poglebiany() -> None:
+    tekst = "### A\n\n#### B\n\n## C"
+
+    assert _naglowki(usun_przeskoki_naglowkow(tekst)) == [(3, "A"), (4, "B"), (2, "C")]
+
+
+def test_wyrownanie_przeskokow_nie_rusza_naglowkow_w_blokach_kodu() -> None:
+    tekst = "# A\n\n```\n#### nie nagłówek\n```\n\n#### B"
+
+    wynik = usun_przeskoki_naglowkow(tekst)
+
+    assert "#### nie nagłówek" in wynik
+    assert _naglowki(wynik) == [(1, "A"), (2, "B")]
+
+
+def test_wykaz_odnosnikow_jest_oddzielany_od_tresci() -> None:
+    tekst = (
+        "# Artykuł\n\nTreść.\n\n## Odnośniki wymienione w artykule\n\n1. Tekst — https://a.example"
+    )
+
+    tresc, wykaz = oddziel_wykaz_odnosnikow(tekst)
+
+    assert tresc == "# Artykuł\n\nTreść."
+    assert wykaz == "## Odnośniki wymienione w artykule\n\n1. Tekst — https://a.example"
+
+
+def test_tekst_bez_wykazu_odnosnikow_nie_jest_dzielony() -> None:
+    tekst = "# Artykuł\n\nTreść."
+
+    assert oddziel_wykaz_odnosnikow(tekst) == (tekst, "")
+
+
+def test_naglowek_o_nazwie_wykazu_z_innymi_wierszami_pod_spodem_nie_jest_wykazem() -> None:
+    tekst = "# A\n\n## Odnośniki wymienione w artykule\n\nTo jest zwykły akapit autora."
+
+    assert oddziel_wykaz_odnosnikow(tekst) == (tekst, "")
+
+
+def test_wykaz_odnosnikow_ma_w_grupie_zawsze_trzeci_poziom_bez_wzgledu_na_artykul() -> None:
+    wykaz = "## Odnośniki wymienione w artykule\n\n1. Tekst — https://a.example"
+    # Pierwszy artykuł ma nagłówki od poziomu drugiego, drugi od pierwszego: bez
+    # poprawki wykaz leżałby w nich na poziomie trzecim i czwartym.
+    tekst = zloz_plik_grupy_markdown(
+        [
+            FragmentGrupyMarkdown("Tytuł: Pierwszy", f"## Sekcja\n\nTreść A.\n\n{wykaz}"),
+            FragmentGrupyMarkdown("Tytuł: Drugi", f"# Drugi\n\nTreść B.\n\n{wykaz}"),
+        ],
+        tytul_pliku="Grupa",
+    )
+
+    poziomy_wykazu = [
+        poziom for poziom, tresc in _naglowki(tekst) if tresc == "Odnośniki wymienione w artykule"
+    ]
+    assert poziomy_wykazu == [3, 3]
+
+
+def test_wykaz_nie_wplywa_na_przesuniecie_naglowkow_artykulu_w_grupie() -> None:
+    wykaz = "## Odnośniki wymienione w artykule\n\n1. Tekst — https://a.example"
+    tekst = zloz_plik_grupy_markdown(
+        [FragmentGrupyMarkdown("Tytuł: A", f"### Sekcja\n\nTreść.\n\n{wykaz}")],
+        tytul_pliku="Grupa",
+    )
+
+    assert _naglowki(tekst) == [
+        (1, "Grupa"),
+        (2, "A"),
+        (3, "Sekcja"),
+        (3, "Odnośniki wymienione w artykule"),
+    ]
+
+
+def test_tresc_markdown_zrodla_wyrownuje_przeskoki_tylko_dla_tekstu_ze_struktura() -> None:
+    ze_struktura = tresc_markdown_zrodla("## A\n\n##### B", ma_struktura=True)
+    bez_struktury = tresc_markdown_zrodla("## A\n\n##### B", ma_struktura=False)
+
+    assert _naglowki(ze_struktura) == [(2, "A"), (3, "B")]
+    assert _naglowki(bez_struktury) == []

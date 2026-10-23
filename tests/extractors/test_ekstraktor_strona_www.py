@@ -312,3 +312,127 @@ def test_pusty_wynik_trybu_precyzji_kieruje_do_mechanizmu_zapasowego(
     dokument = _ekstraktor().wyekstrahuj("strona_www-3", _STRONA_BEZ_ARTYKULU)
 
     assert dokument.metoda_ekstrakcji == METODA_ZAPASOWA
+
+
+def _xml_strony(*bloki: str) -> str:
+    return f'<doc title="Tytuł"><main>{"".join(bloki)}</main></doc>'
+
+
+_TRESC_1 = (
+    "<p>Rada miasta przyjęła uchwałę w sprawie nowego planu zagospodarowania terenów "
+    "nad rzeką po kilkugodzinnej debacie radnych.</p>"
+)
+_TRESC_2 = (
+    "<p>Mieszkańcy dzielnicy od dawna zabiegali o zmianę przeznaczenia gruntów i teraz "
+    "liczą na szybkie rozpoczęcie prac budowlanych.</p>"
+)
+_TRESC_3 = (
+    "<p>Pierwsze prace mają ruszyć wiosną, o ile pozwolą na to warunki pogodowe oraz "
+    "terminy przetargów ogłoszonych przez urząd.</p>"
+)
+
+
+def _wyekstrahuj_z_xml(
+    monkeypatch: pytest.MonkeyPatch, xml: str, *, filtruj_elementy: bool = True
+) -> Any:
+    monkeypatch.setattr(
+        strona_www.trafilatura, "extract", _podstawka_trafilatury({True: xml, False: xml})
+    )
+    ekstraktor = EkstraktorStronyWww(filtruj_elementy=filtruj_elementy)
+    return ekstraktor.wyekstrahuj("strona_www-1", "<html></html>")
+
+
+def test_odnosnik_stojacy_luzem_obok_akapitu_nie_gubi_reszty_zdania(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Trafilatura zwraca czasem odnośnik w środku zdania jako osobne dziecko `main`.
+
+    Tekst odnośnika i reszta zdania za nim leżały poza akapitem i przepadały.
+    """
+    xml = _xml_strony(
+        _TRESC_1,
+        "<p>Tym bardziej cieszy </p>"
+        '<ref target="https://przyklad.example/a">ruch ministerstwa</ref>'
+        ", które we wtorek oświadczyło, że decyzja zapadła.",
+        _TRESC_2,
+    )
+
+    dokument = _wyekstrahuj_z_xml(monkeypatch, xml)
+
+    assert "Tym bardziej cieszy ruch ministerstwa, które we wtorek oświadczyło" in dokument.tekst
+    assert any("ruch ministerstwa, które" in blok.tresc for blok in dokument.bloki)
+
+
+def test_filtr_usuwa_reklamy_i_zapisuje_je_w_pliku_posrednim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    xml = _xml_strony(_TRESC_1, "<p>REKLAMA</p>", _TRESC_2, "<p>REKLAMA</p>", _TRESC_3)
+
+    dokument = _wyekstrahuj_z_xml(monkeypatch, xml)
+
+    assert "REKLAMA" not in dokument.tekst
+    assert dokument.metadane[strona_www.KLUCZ_USUNIETYCH_FRAGMENTOW] == "2"
+    assert dokument.plik_posredni is not None
+    sufiks, bajty = dokument.plik_posredni
+    assert sufiks == strona_www.SUFIKS_USUNIETYCH_FRAGMENTOW
+    assert bajty.decode("utf-8").count("Powód: reklama. Tekst: REKLAMA") == 2
+
+
+def test_wylaczony_filtr_zostawia_reklamy_i_nie_zostawia_sladu_w_metadanych(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    xml = _xml_strony(_TRESC_1, "<p>REKLAMA</p>", _TRESC_2)
+
+    dokument = _wyekstrahuj_z_xml(monkeypatch, xml, filtruj_elementy=False)
+
+    assert "REKLAMA" in dokument.tekst
+    assert strona_www.KLUCZ_USUNIETYCH_FRAGMENTOW not in dokument.metadane
+    assert dokument.plik_posredni is None
+
+
+def test_strona_bez_elementow_strony_ma_licznik_zero_i_nie_tworzy_pliku(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dokument = _wyekstrahuj_z_xml(monkeypatch, _xml_strony(_TRESC_1, _TRESC_2, _TRESC_3))
+
+    assert dokument.metadane[strona_www.KLUCZ_USUNIETYCH_FRAGMENTOW] == "0"
+    assert dokument.plik_posredni is None
+
+
+def test_adresy_z_usunietych_blokow_nie_trafiaja_do_wykazu_odnosnikow(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    xml = _xml_strony(
+        '<p>Rada przyjęła <ref target="https://przyklad.example/tresc">uchwałę</ref> '
+        "po długiej debacie radnych, którzy przez wiele godzin omawiali plan terenów.</p>",
+        _TRESC_2,
+        "<p>Czytaj także</p>",
+        '<p><ref target="https://przyklad.example/polecany-1">Pierwszy polecany tekst</ref></p>',
+        '<p><ref target="https://przyklad.example/polecany-2">Drugi polecany tekst</ref></p>',
+        _TRESC_3,
+    )
+
+    dokument = _wyekstrahuj_z_xml(monkeypatch, xml)
+
+    assert "https://przyklad.example/tresc" in dokument.tekst
+    assert "polecany-1" not in dokument.tekst
+    assert "polecany-2" not in dokument.tekst
+    assert dokument.metadane["liczba_odnosnikow"] == "1"
+
+
+def test_bezpiecznik_filtra_dodaje_ostrzezenie_i_zostawia_tresc(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    xml = _xml_strony(
+        "<p>Krótki tekst artykułu.</p>",
+        "<p>Newsletter " + "słowo " * 30 + "</p>",
+        "<p>Zapisz mnie</p>",
+    )
+
+    dokument = _wyekstrahuj_z_xml(monkeypatch, xml)
+
+    assert "Zapisz mnie" in dokument.tekst
+    assert any("Filtr elementów strony" in ostrzezenie for ostrzezenie in dokument.ostrzezenia)
+    assert dokument.metadane[strona_www.KLUCZ_USUNIETYCH_FRAGMENTOW] == "0"
+    assert dokument.plik_posredni is not None
+    assert "bezpiecznik" in dokument.plik_posredni[1].decode("utf-8")

@@ -255,7 +255,7 @@ Wymagania techniczne:
 Wymagania bezpieczeństwa interfejsu, ściśle powiązane z zasadą „treść to dane”:
 
 1. Serwer nasłuchuje wyłącznie na `127.0.0.1`. Nigdy na `0.0.0.0`.
-2. Treść pobrana ze źródeł nigdy nie trafia do przeglądarki jako HTML. Zawsze jako tekst z pełnym escapowaniem. Podgląd artykułu ze strony trzeciej wstawiony jako HTML to podatność.
+2. Treść pobrana ze źródeł nigdy nie trafia do przeglądarki jako HTML. Zawsze jako tekst z pełnym escapowaniem. Podgląd artykułu ze strony trzeciej wstawiony jako HTML to podatność. Jedyny wyjątek, zatwierdzony przez użytkownika 23 października 2026: podgląd pliku wynikowego MD jako strona (`gnb/ui/podglad_markdown.py`), żeby czytnik ekranu mógł przechodzić po nagłówkach. Warunki konieczne: znaczniki buduje wyłącznie aplikacja z ustalonego zestawu elementów, a każdy tekst jest escapowany; surowy HTML z pliku jest pokazywany jako tekst; odnośniki tylko http i https, z `rel="noopener noreferrer"`, każdy inny schemat jest tekstem; żadnych obrazów, ramek ani skryptów z treści, a nagłówek `Content-Security-Policy` blokuje skrypty i zasoby zewnętrzne; trasa przyjmuje wyłącznie nazwę z wykazu plików wynikowych projektu; testy wstrzyknięcia pilnują każdego z tych warunków. Wyjątku nie rozszerzaj na inne treści ze źródeł.
 3. Bez zasobów z zewnętrznych CDN. Wszystko lokalnie, żeby interfejs działał bez internetu i był przewidywalny dla czytnika ekranu.
 4. Operacje zmieniające stan wykonuj metodą POST z ochroną przed CSRF.
 
@@ -409,6 +409,7 @@ Pełny zapis każdej pozycji, z objawem, przyczyną i propozycją, jest w `docs/
 11. Skrót dopisuje `https://` do adresu bez schematu, co psuje stronę działającą wyłącznie po http. Decyzja użytkownika: pobieranie próbuje https, a po błędzie połączenia http; osobna, mała naprawa po części F etapu piętnastego, obok blokady z punktu 10, nie wcześniej.
 12. Zamknięte, etap szesnasty: skrót klawiszowy wybierany w ustawieniach (cztery pola wyboru Control, Alt, Shift, Windows i lista „Klawisz”, bez pola przechwytującego; nowy skrót działa od razu, a gdy Windows odmówi, zostaje poprzedni; co najmniej jeden modyfikator, bez Caps Lock, Insert i Num Lock; domyślnie nadal Control plus Shift plus F12). Opis w `gnb/hotkeys/CLAUDE.md`, punkt 16.
 13. Zamknięte, etap siedemnasty, część D: deterministyczny filtr elementów strony po trafilaturze (`gnb/extractors/filtr_elementow_strony.py`) usuwa reklamy, przyciski udostępniania, podpisy zdjęć, blok newslettera, notki o autorze, licznik komentarzy i bloki polecanych artykułów. Usunięte fragmenty są w wynikach pośrednich, ich liczba w manifeście, a ustawienie `filtr_elementow_strony` go wyłącza. Decyzja użytkownika z 23 października 2026 zastąpiła wcześniejsze odłożenie.
+14. Pogrubienie, kursywa i inne formatowanie wewnątrz akapitu nie są przenoszone do plików MD, bo ekstraktory zgłaszają bloki, a nie formatowanie w akapicie. Nagłówki, listy i tabele są zrobione. Decyzja użytkownika z 23 października 2026: odłożone; użytkownik prosił o zachowanie formatowania, więc wraca po etapach bieżących. Wymagałoby zmiany kontraktu `BlokTresci` albo znaczników w tekście bloku (szczegóły w `docs/DECYZJE_I_ZAGADNIENIA.md`).
 
 ## 19. Kryterium ukończenia funkcji
 

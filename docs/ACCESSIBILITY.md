@@ -1,4 +1,4 @@
-# Dostępność interfejsu WWW — stan po etapie siedemnastym, część C
+# Dostępność interfejsu WWW — stan po etapie siedemnastym, część D
 
 Ten dokument opisuje, jak obsługiwać interfejs Gemini Notebook Builder
 z klawiatury i z czytnikiem ekranu, oraz co interfejs ogłasza i jak często.
@@ -58,9 +58,14 @@ Strona główna ma jeden formularz dodawania materiałów. Pola, od góry do do�
    aktywny projekt skrótu, jeżeli taki jest.
 2. Przycisk „Przejdź do projektu”, zaraz za listą. Otwiera stronę wybranego
    projektu i ustawia go jako aktywny projekt skrótu. Działa bez JavaScriptu jako
-   wysłanie formularza metodą POST z tokenem zabezpieczającym. Przy wybranym
-   „Nowy projekt” skrypt go ukrywa, a bez skryptu strona wraca z komunikatem
-   „Wybierz istniejący projekt, żeby do niego przejść.”.
+   wysłanie formularza metodą POST z tokenem zabezpieczającym. Oba przyciski,
+   „Przejdź do projektu” i „Ustaw jako aktywny projekt skrótu”, są zawsze widoczne,
+   w tym samym miejscu i w tej samej kolejności, niezależnie od wyboru na liście
+   „Projekt” i od stanu przetwarzania: przycisk, który raz jest, a raz go nie ma,
+   przeszkadza w pracy z czytnikiem ekranu. Przy wybranym „Nowy projekt”
+   naciśnięcie któregokolwiek z nich niczego nie zmienia, a region stanu ogłasza
+   „Najpierw wybierz istniejący projekt z listy Projekt.”. Bez skryptu serwer wraca
+   na stronę główną z tym samym zdaniem na liście błędów.
    Zaraz za nim jest przycisk „Ustaw jako aktywny projekt skrótu”: ustawia
    wybrany na liście projekt jako cel globalnego skrótu, bez przechodzenia na
    jego stronę. Ze skryptem odpowiedź jest ogłaszana w regionie stanu zdaniem
@@ -204,7 +209,8 @@ Pod raportem jest sekcja „Pliki wynikowe”. Każdy plik ma przycisk „Otwór
 NAZWA”, który otwiera go w aplikacji domyślnej systemu na tym komputerze, na
 przykład w Notepad++ dla plików MD i TXT, oraz odnośnik „Podgląd pliku NAZWA jako
 tekst” (tylko dla MD i TXT), który pokazuje treść w przeglądarce jako zwykły
-tekst. Zwykły odnośnik do pliku lokalnego nie zadziałałby, bo przeglądarka nie
+tekst. Plik MD ma jeszcze odnośnik „Podgląd pliku NAZWA jako strona”, opisany niżej
+w części „Podgląd pliku MD jako strona”. Zwykły odnośnik do pliku lokalnego nie zadziałałby, bo przeglądarka nie
 otwiera adresów `file://` ze strony wczytanej przez http, więc otwarcie robi
 serwer, który działa na tym samym komputerze. Przycisk wysyła metodą POST z
 tokenem zabezpieczającym samą nazwę pliku. Serwer przyjmuje wyłącznie nazwy z
@@ -438,11 +444,39 @@ kolory. Ustawienia działają na wszystkich stronach przez zmienne CSS.
 Interfejs nie używa animacji utrudniających pracę z czytnikiem ekranu i respektuje
 systemowe ustawienie ograniczenia ruchu.
 
+## Podgląd pliku MD jako strona
+
+W Notepad++ nie da się przechodzić po nagłówkach klawiszem H, bo litera się po
+prostu wpisuje. Dlatego przy każdym pliku MD w sekcji „Pliki wynikowe” jest
+odnośnik „Podgląd pliku NAZWA jako strona”. Obok niego zostają przycisk „Otwórz plik
+NAZWA” i odnośnik „Podgląd pliku NAZWA jako tekst”.
+
+Jak czytać podgląd z NVDA. Strona ma tytuł „Podgląd pliku NAZWA”, na początku
+odnośnik „Wróć do projektu”, potem treść pliku, a na końcu znów „Wróć do projektu”,
+bo plik bywa długi. W trybie przeglądania klawisz H przechodzi do następnego
+nagłówka, Shift plus H do poprzedniego, a cyfry od 1 do 6 do następnego nagłówka
+danego poziomu. Nagłówki pliku MD zachowują swój poziom: nagłówek pierwszego
+poziomu to nazwa grupy, drugiego tytuł źródła, a głębsze to nagłówki artykułu.
+Klawisz T przechodzi po tabelach, L po listach, a Q po cytatach. Metadane źródła
+na początku pliku są zwykłym akapitem, którego wiersze rozdziela łamanie wiersza.
+
+Podgląd jest świadomym, wąskim wyjątkiem od zasady z następnej części. Zasady, które
+go ograniczają, są w CLAUDE.md, sekcja 11, i w `docs/DECYZJE_I_ZAGADNIENIA.md`.
+
 ## Bezpieczeństwo w kontekście dostępności
 
-Treść pobrana ze źródeł nigdy nie trafia do przeglądarki jako HTML. Podgląd
-artykułu czy transkrypcji jest zawsze zwykłym tekstem z pełnym escapowaniem, więc
-strona źródła nie może wpłynąć na zachowanie interfejsu ani na czytnik ekranu.
+Treść pobrana ze źródeł nigdy nie trafia do przeglądarki jako HTML, z jednym
+wąskim wyjątkiem: podgląd pliku wynikowego MD jako strona (opisany wyżej, sekcja 11
+CLAUDE.md). Wyjątek dotyczy wyłącznie pliku, który aplikacja sama zapisała w katalogu
+wyników projektu, i ma pięć zabezpieczeń. Znaczniki HTML buduje wyłącznie aplikacja,
+z ustalonego zestawu elementów, a cały tekst jest escapowany, także nagłówki, komórki
+tabel i bloki kodu. Surowy HTML z pliku jest pokazywany jako tekst. Odnośniki
+działają tylko dla adresów http i https i dostają `rel="noopener noreferrer"`, a każdy
+inny schemat, na przykład `javascript:` albo `data:`, jest zwykłym tekstem. Obrazów,
+ramek i skryptów z treści nie ma. Nagłówek `Content-Security-Policy` strony podglądu
+blokuje skrypty i zasoby zewnętrzne. Poza tym podgląd artykułu czy transkrypcji jest
+zwykłym tekstem z pełnym escapowaniem, więc strona źródła nie może wpłynąć na
+zachowanie interfejsu ani na czytnik ekranu.
 
 Interfejs nie ładuje żadnego zasobu z zewnętrznego serwera. Działa bez internetu
 i jest przewidywalny dla czytnika ekranu, ponieważ nic w nim nie dochodzi po
@@ -495,7 +529,7 @@ zdania wyglądałaby jak zapisana. Nowa kombinacja działa od razu, bez restartu
 Skrót dodaje materiał do jednego projektu, nigdy do „ostatnio otwartego” i nigdy
 do projektu zapasowego. Wybierasz go przyciskiem „Ustaw jako aktywny projekt
 skrótu” na stronie danego projektu albo wyborem projektu na liście „Projekt” na
-stronie głównej. Strona główna i strona każdego projektu pokazują
+stronie głównej. Przycisk na stronie projektu jest zawsze, także gdy projekt już jest aktywny. Strona główna i strona każdego projektu pokazują
 tekst „Aktywny projekt skrótu: nazwa” albo „Brak aktywnego projektu skrótu” —
 region ten sam, co reszta stanu skrótu, więc czytnik ekranu odczyta go razem
 z resztą strony przy zwykłym przechodzeniu po treści.

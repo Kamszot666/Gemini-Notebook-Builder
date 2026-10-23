@@ -137,6 +137,7 @@ def domyslny_rejestr_binarny(
     sciezka_audiveris: str = "",
     nuty_zapis_dzwiekow_wlaczony: bool = True,
     sciezka_libreoffice: str = "",
+    filtruj_elementy_strony: bool = True,
 ) -> RejestrEkstraktorowBinarnych:
     """Buduje rejestr ekstraktorów formatów binarnych.
 
@@ -198,7 +199,7 @@ def domyslny_rejestr_binarny(
             EkstraktorXlsx(),
             EkstraktorXls(),
             EkstraktorRtf(),
-            EkstraktorMhtml(),
+            EkstraktorMhtml(filtruj_elementy=filtruj_elementy_strony),
             EkstraktorDoc(sciezka_libreoffice),
             EkstraktorPpt(sciezka_libreoffice),
             EkstraktorObrazu(ustawienia, ocr_wlaczony=ocr_wlaczony),
@@ -216,7 +217,9 @@ def domyslny_rejestr_binarny(
     )
 
 
-def domyslny_rejestr(zachowuj_odnosniki: bool = True) -> RejestrEkstraktorow:
+def domyslny_rejestr(
+    zachowuj_odnosniki: bool = True, filtruj_elementy_strony: bool = True
+) -> RejestrEkstraktorow:
     """Buduje rejestr ekstraktorów tekstowych: tekstu, Markdown, CSV, napisów
     plikowych oraz stron internetowych i plików HTML.
 
@@ -227,7 +230,8 @@ def domyslny_rejestr(zachowuj_odnosniki: bool = True) -> RejestrEkstraktorow:
     ekstraktorów CSV i napisów, bo rozpoznają swój format po rozszerzeniu.
 
     Argument `zachowuj_odnosniki` pochodzi z konfiguracji i decyduje o tym, czy
-    na końcu treści artykułu powstaje wykaz odnośników.
+    na końcu treści artykułu powstaje wykaz odnośników. Argument
+    `filtruj_elementy_strony` włącza filtr reklam i innych elementów strony.
     """
     from gnb.extractors.markdown import EkstraktorMarkdown
     from gnb.extractors.napisy import EkstraktorNapisow
@@ -237,7 +241,9 @@ def domyslny_rejestr(zachowuj_odnosniki: bool = True) -> RejestrEkstraktorow:
 
     return RejestrEkstraktorow(
         (
-            EkstraktorStronyWww(zachowuj_odnosniki=zachowuj_odnosniki),
+            EkstraktorStronyWww(
+                zachowuj_odnosniki=zachowuj_odnosniki, filtruj_elementy=filtruj_elementy_strony
+            ),
             EkstraktorMarkdown(),
             EkstraktorCsv(),
             EkstraktorTsv(),

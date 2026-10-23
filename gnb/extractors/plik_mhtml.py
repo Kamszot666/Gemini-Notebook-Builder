@@ -46,8 +46,8 @@ class EkstraktorMhtml:
     metoda = METODA_EKSTRAKCJI
     tekst_zawiera_znaczniki = True
 
-    def __init__(self, zachowuj_odnosniki: bool = True) -> None:
-        self._strona = EkstraktorStronyWww(zachowuj_odnosniki)
+    def __init__(self, zachowuj_odnosniki: bool = True, filtruj_elementy: bool = True) -> None:
+        self._strona = EkstraktorStronyWww(zachowuj_odnosniki, filtruj_elementy)
 
     def obsluguje(self, typ_zrodla: TypZrodla, format_zrodla: str) -> bool:
         return typ_zrodla is TypZrodla.PLIK_DOKUMENT and format_zrodla in FORMATY_MHTML
@@ -75,6 +75,7 @@ class EkstraktorMhtml:
             bloki = dokument.bloki
             tytul = dokument.tytul
             metadane = dict(dokument.metadane)
+            plik_posredni = dokument.plik_posredni
         else:
             ostrzezenia = ["Plik MHTML nie ma części HTML, użyto części tekstowej bez struktury."]
             tekst = tresc.strip()
@@ -82,6 +83,7 @@ class EkstraktorMhtml:
             bloki = []
             tytul = None
             metadane = {}
+            plik_posredni = None
 
         adres = wiadomosc.get("Snapshot-Content-Location")
         if adres:
@@ -95,6 +97,7 @@ class EkstraktorMhtml:
             bloki=bloki,
             metadane=metadane,
             ostrzezenia=ostrzezenia,
+            plik_posredni=plik_posredni,
         )
 
 

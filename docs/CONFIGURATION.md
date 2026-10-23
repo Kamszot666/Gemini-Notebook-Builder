@@ -1,4 +1,4 @@
-# Konfiguracja — stan po etapie siedemnastym, część B
+# Konfiguracja — stan po etapie siedemnastym, część D
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
 obsługuje po etapie trzynastym. Z listy w sekcji jedenastej a pliku
@@ -222,6 +222,15 @@ Nazwa pola w pliku TOML, odpowiadająca zmienna środowiskowa oraz znaczenie:
     Dodatkowe nazwy parametrów adresu uznawanych za śledzące, usuwane obok listy
     wbudowanej. W pliku TOML lista, w zmiennej środowiskowej wartości rozdzielone
     przecinkiem.
+13. `filtr_elementow_strony`, zmienna `GNB_FILTR_ELEMENTOW_STRONY`. Włącza filtr,
+    który usuwa z tekstu pobranej strony elementy niebędące treścią artykułu:
+    wiersze reklam, przyciski udostępniania, podpisy zdjęć, blok newslettera,
+    notki o autorze, licznik komentarzy i bloki polecanych artykułów. Domyślnie
+    włączone. Dotyczy też stron zapisanych w plikach HTML i MHTML. Usunięte
+    fragmenty zapisują się w katalogu wyników pośrednich projektu w pliku
+    `IDENTYFIKATOR.usuniete-fragmenty.txt`, a ich liczba w manifeście. Gdy filtr
+    usunąłby więcej niż 35 procent słów strony, nie usuwa nic i zgłasza
+    ostrzeżenie. Wartość podaje się tak samo jak w polu `zachowuj_oryginaly`.
 
 ## Pola napisów filmów
 
@@ -575,6 +584,7 @@ wyjatek_robots_dla_zrodel_jawnych = true
 maksymalny_rozmiar_pobrania_mb = 20
 sciezka_certyfikatow = ""
 dodatkowe_parametry_sledzace = []
+filtr_elementow_strony = true
 
 jezyki_napisow = ["pl", "en"]
 napisy_automatyczne = true

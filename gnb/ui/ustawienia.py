@@ -190,7 +190,8 @@ ZAKLADKI: tuple[Zakladka, ...] = (
     Zakladka(
         "pobieranie",
         "Pobieranie stron",
-        "Sieć, plik robots.txt, pamięć podręczna i certyfikaty. Dotyczy adresów stron www.",
+        "Sieć, plik robots.txt, pamięć podręczna, certyfikaty i filtr elementów strony. "
+        "Dotyczy adresów stron www.",
         (
             _tekst(
                 "nazwa_klienta",
@@ -276,6 +277,14 @@ ZAKLADKI: tuple[Zakladka, ...] = (
                 "Dodatkowe parametry śledzące do usunięcia z adresów",
                 "Nazwy parametrów adresu oddzielone przecinkami, które mają być usuwane przed "
                 "porównaniem adresów. Wbudowana lista zostaje, to są dodatkowe nazwy.",
+            ),
+            _logiczne(
+                "filtr_elementow_strony",
+                "Usuwaj z pobranych stron reklamy i inne elementy strony",
+                "Gdy włączone, z tekstu artykułu znikają wiersze reklam, przyciski "
+                "udostępniania, podpisy zdjęć, blok newslettera, notki o autorze, liczniki "
+                "komentarzy i bloki polecanych artykułów. Usunięte fragmenty zapisują się "
+                "w wynikach pośrednich projektu, a ich liczba w manifeście.",
             ),
         ),
     ),

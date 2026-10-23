@@ -61,8 +61,11 @@ from gnb.core.model import BlokTresci, DokumentWyekstrahowany
 from gnb.core.stale import PoziomPewnosciStruktury, RodzajBloku, TypZrodla
 from gnb.extractors.bloki_markdown import zapisz_bloki_jako_markdown
 from gnb.extractors.escapowanie_markdown import escapuj_tekst_plaski
+from gnb.extractors.filtr_elementow_strony import WynikFiltra, przefiltruj_drzewo
 
 METODA_GLOWNA = "trafilatura"
+KLUCZ_USUNIETYCH_FRAGMENTOW = "liczba_usunietych_fragmentow"
+SUFIKS_USUNIETYCH_FRAGMENTOW = "usuniete-fragmenty.txt"
 METODA_ZAPASOWA = "lxml_zapasowy"
 FORMATY_STRON = frozenset({"html", "htm", "xhtml", ""})
 
@@ -119,14 +122,17 @@ class EkstraktorStronyWww:
 
     Argument `zachowuj_odnosniki` odpowiada ustawieniu konfiguracji o tej samej
     nazwie. Wyłączenie go usuwa końcową sekcję z wykazem odnośników, a sama treść
-    artykułu pozostaje bez zmian.
+    artykułu pozostaje bez zmian. Argument `filtruj_elementy` odpowiada
+    ustawieniu `filtr_elementow_strony` i włącza filtr reklam oraz innych
+    elementów strony (`gnb/extractors/filtr_elementow_strony.py`).
     """
 
     metoda = "strona_www"
     tekst_zawiera_znaczniki = True
 
-    def __init__(self, zachowuj_odnosniki: bool = True) -> None:
+    def __init__(self, zachowuj_odnosniki: bool = True, filtruj_elementy: bool = True) -> None:
         self._zachowuj_odnosniki = zachowuj_odnosniki
+        self._filtruj_elementy = filtruj_elementy
 
     def obsluguje(self, typ_zrodla: TypZrodla, format_zrodla: str) -> bool:
         if typ_zrodla is TypZrodla.STRONA_WWW:
@@ -154,6 +160,9 @@ class EkstraktorStronyWww:
         except etree.XMLSyntaxError:
             return None
 
+        _wsun_luzne_odnosniki(drzewo)
+        wynik_filtra = przefiltruj_drzewo(drzewo) if self._filtruj_elementy else None
+
         bloki = _bloki_z_drzewa(drzewo)
         if not bloki:
             return None
@@ -162,7 +171,7 @@ class EkstraktorStronyWww:
         odnosniki = _odnosniki_z_drzewa(drzewo)
         if odnosniki:
             metadane["liczba_odnosnikow"] = str(len(odnosniki))
-        return DokumentWyekstrahowany(
+        dokument = DokumentWyekstrahowany(
             identyfikator_zrodla=identyfikator_zrodla,
             tekst=self._z_sekcja_odnosnikow(zapisz_bloki_jako_markdown(bloki), odnosniki),
             poziom_pewnosci_struktury=PoziomPewnosciStruktury.SREDNI,
@@ -171,6 +180,9 @@ class EkstraktorStronyWww:
             bloki=bloki,
             metadane=metadane,
         )
+        if wynik_filtra is not None:
+            _dolacz_wynik_filtra(dokument, wynik_filtra)
+        return dokument
 
     def _z_sekcja_odnosnikow(self, tekst: str, odnosniki: list[Odnosnik]) -> str:
         """Dopisuje na końcu tekstu wykaz odnośników, o ile jest co wypisać."""
@@ -244,6 +256,39 @@ def _wywolaj_trafilature_z_ustawieniami(tekst: str, *, favor_precision: bool) ->
         favor_precision=favor_precision,
     )
     return wynik if isinstance(wynik, str) else None
+
+
+def _wsun_luzne_odnosniki(drzewo: etree._Element) -> None:
+    """Wsuwa odnośniki stojące luzem w elemencie ``main`` do poprzedzającego akapitu.
+
+    Trafilatura potrafi zwrócić odnośnik w środku zdania jako osobne dziecko
+    elementu ``main``, obok akapitu, a tekst za odnośnikiem leży w jego ogonie.
+    Bez tej poprawki zarówno tekst odnośnika, jak i reszta zdania za nim
+    przepadały, bo bloki powstają wyłącznie z akapitów, nagłówków i innych
+    elementów blokowych. Odnośnik bez poprzedzającego akapitu zostaje, bo nie ma
+    do czego go dołączyć.
+    """
+    glowny = drzewo.find("main")
+    if glowny is None:
+        return
+    for element in list(glowny):
+        if element.tag != "ref":
+            continue
+        poprzedni = element.getprevious()
+        if poprzedni is not None and poprzedni.tag == "p":
+            poprzedni.append(element)
+
+
+def _dolacz_wynik_filtra(dokument: DokumentWyekstrahowany, wynik: WynikFiltra) -> None:
+    """Zapisuje w dokumencie licznik, ostrzeżenie i plik z usuniętymi fragmentami."""
+    dokument.metadane[KLUCZ_USUNIETYCH_FRAGMENTOW] = str(len(wynik.usuniete))
+    if wynik.ostrzezenie:
+        dokument.ostrzezenia.append(wynik.ostrzezenie)
+    if wynik.zawiera_cos_do_zapisu():
+        dokument.plik_posredni = (
+            SUFIKS_USUNIETYCH_FRAGMENTOW,
+            wynik.jako_tekst(dokument.identyfikator_zrodla).encode("utf-8"),
+        )
 
 
 def _metadane_z_drzewa(drzewo: etree._Element) -> dict[str, str]:

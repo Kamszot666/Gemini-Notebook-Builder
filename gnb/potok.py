@@ -633,7 +633,9 @@ def przetworz_projekt(
     Pozwalają podstawić sztuczny transport oraz przygotowane napisy i sprawdzić
     cały potok bez korzystania z sieci.
     """
-    rejestr = rejestr or domyslny_rejestr(konfiguracja.zachowuj_odnosniki)
+    rejestr = rejestr or domyslny_rejestr(
+        konfiguracja.zachowuj_odnosniki, konfiguracja.filtr_elementow_strony
+    )
     rejestr_binarny = rejestr_binarny or domyslny_rejestr_binarny(
         UstawieniaOcr.z_konfiguracji(konfiguracja),
         ocr_wlaczony=konfiguracja.ocr_wlaczony,
@@ -644,6 +646,7 @@ def przetworz_projekt(
         sciezka_audiveris=konfiguracja.sciezka_audiveris,
         nuty_zapis_dzwiekow_wlaczony=konfiguracja.nuty_zapis_dzwiekow_wlaczony,
         sciezka_libreoffice=konfiguracja.sciezka_libreoffice,
+        filtruj_elementy_strony=konfiguracja.filtr_elementow_strony,
     )
     czas_startu = zegar()
 
@@ -1208,6 +1211,10 @@ class _Wykonanie:
 
         ekstraktor = self._rejestr.dobierz(zrodlo.typ_zrodla, pozycja.format_zrodla)
         dokument = ekstraktor.wyekstrahuj(identyfikator, tekst)
+
+        if dokument.plik_posredni is not None:
+            sufiks, bajty_posrednie = dokument.plik_posredni
+            self._zapisz_bajty_posrednie(identyfikator, sufiks, bajty_posrednie)
 
         if zrodlo.typ_zrodla is TypZrodla.STRONA_WWW and czy_wymaga_skryptow(tekst, dokument.tekst):
             self._pomin(zrodlo, pozycja, KOMUNIKAT_WYMAGA_SKRYPTOW)
@@ -3179,6 +3186,7 @@ def _nowy_checkpoint(
             "formaty_wynikowe": ",".join(konfiguracja.formaty_wynikowe),
             "zachowuj_oryginaly": "tak" if konfiguracja.zachowuj_oryginaly else "nie",
             "zachowuj_odnosniki": "tak" if konfiguracja.zachowuj_odnosniki else "nie",
+            "filtr_elementow_strony": "tak" if konfiguracja.filtr_elementow_strony else "nie",
             "ocr_wlaczony": "tak" if konfiguracja.ocr_wlaczony else "nie",
             "ocr_jezyk": konfiguracja.ocr_jezyk,
             "jakosc_grafik": str(konfiguracja.jakosc_grafik),

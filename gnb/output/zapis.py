@@ -36,7 +36,7 @@ from gnb.core.liczenie_slow import policz_slowa, policz_znaki
 from gnb.core.model import DokumentZnormalizowany, PlikWynikowy
 from gnb.core.stale import FormatWynikowy
 from gnb.extractors.escapowanie_markdown import escapuj_tekst_plaski
-from gnb.output.markdown_pliku import policz_slowa_markdown
+from gnb.output.markdown_pliku import policz_slowa_markdown, usun_przeskoki_naglowkow
 from gnb.output.naglowek_metadanych import polacz_z_trescia
 
 FORMAT_MD = "md"
@@ -52,8 +52,12 @@ def tresc_markdown_zrodla(tekst: str, *, ma_struktura: bool) -> str:
     tekst staje się akapitami, a znaki składni są escapowane, żeby przypadkowy
     krzyżyk albo myślnik na początku wiersza nie stał się fałszywym nagłówkiem
     albo listą.
+
+    W tekście ze znacznikami przeskoki poziomów nagłówków o więcej niż jeden są
+    wyrównywane, bo nawigacja klawiszem poziomu nagłówka w czytniku ekranu gubi
+    wtedy miejsce. Względne położenie nagłówków zostaje.
     """
-    return tekst if ma_struktura else escapuj_tekst_plaski(tekst)
+    return usun_przeskoki_naglowkow(tekst) if ma_struktura else escapuj_tekst_plaski(tekst)
 
 
 def zapisz_wyniki(

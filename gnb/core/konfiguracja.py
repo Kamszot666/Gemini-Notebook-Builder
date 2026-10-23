@@ -60,6 +60,7 @@ DOMYSLNY_BEZPIECZNY_LIMIT_MB = 190
 DOMYSLNE_FORMATY_WYNIKOWE: tuple[str, ...] = ("md",)
 DOMYSLNE_ZACHOWYWANIE_ORYGINALOW = True
 DOMYSLNE_ZACHOWYWANIE_ODNOSNIKOW = True
+DOMYSLNY_FILTR_ELEMENTOW_STRONY = True
 
 # Ustawienia pobierania stron internetowych. Nazwa klienta jest rozpoznawalna
 # i wskazuje projekt, zgodnie z wymaganiem sekcji piętnastej CLAUDE.md.
@@ -284,6 +285,7 @@ _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
     PREFIKS_ZMIENNYCH + "FORMATY_WYNIKOWE": "formaty_wynikowe",
     PREFIKS_ZMIENNYCH + "ZACHOWUJ_ORYGINALY": "zachowuj_oryginaly",
     PREFIKS_ZMIENNYCH + "ZACHOWUJ_ODNOSNIKI": "zachowuj_odnosniki",
+    PREFIKS_ZMIENNYCH + "FILTR_ELEMENTOW_STRONY": "filtr_elementow_strony",
     PREFIKS_ZMIENNYCH + "NAZWA_KLIENTA": "nazwa_klienta",
     PREFIKS_ZMIENNYCH + "LIMIT_CZASU_SEKUNDY": "limit_czasu_sekundy",
     PREFIKS_ZMIENNYCH + "LICZBA_PONOWIEN": "liczba_ponowien",
@@ -423,6 +425,7 @@ class Konfiguracja:
     formaty_wynikowe: tuple[str, ...] = DOMYSLNE_FORMATY_WYNIKOWE
     zachowuj_oryginaly: bool = DOMYSLNE_ZACHOWYWANIE_ORYGINALOW
     zachowuj_odnosniki: bool = DOMYSLNE_ZACHOWYWANIE_ODNOSNIKOW
+    filtr_elementow_strony: bool = DOMYSLNY_FILTR_ELEMENTOW_STRONY
     nazwa_klienta: str = DOMYSLNA_NAZWA_KLIENTA
     limit_czasu_sekundy: float = DOMYSLNY_LIMIT_CZASU_SEKUNDY
     liczba_ponowien: int = DOMYSLNA_LICZBA_PONOWIEN
@@ -552,6 +555,9 @@ def wczytaj_konfiguracje(
         ),
         zachowuj_odnosniki=_jako_prawda_falsz(
             scalone, "zachowuj_odnosniki", domyslna.zachowuj_odnosniki
+        ),
+        filtr_elementow_strony=_jako_prawda_falsz(
+            scalone, "filtr_elementow_strony", domyslna.filtr_elementow_strony
         ),
         nazwa_klienta=_jako_napis(scalone, "nazwa_klienta", domyslna.nazwa_klienta),
         limit_czasu_sekundy=_jako_liczba_rzeczywista(

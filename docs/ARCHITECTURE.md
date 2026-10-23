@@ -1,4 +1,4 @@
-# Architektura — stan po etapie siedemnastym, część C
+# Architektura — stan po etapie siedemnastym, część D
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
 zakończeniu etapu czternastego. Pełny docelowy podział na pakiety opisuje
@@ -209,6 +209,13 @@ pliku wynikowego.
   Zbiera też odnośniki zewnętrzne i dopisuje na końcu treści ich ponumerowany
   wykaz, a w samym zdaniu zostawia sam tekst odnośnika. Ten sam ekstraktor
   obsługuje też plik HTML lokalny, bez wykrywania stron wymagających skryptów.
+  Trafilaturę wywołuje dwa razy: tryb precyzji rozstrzyga, czy strona ma
+  artykuł, a treść pochodzi z trybu domyślnego. Odnośniki stojące luzem obok
+  akapitu wsuwa do tego akapitu, żeby nie ginął tekst za nimi.
+- `gnb/extractors/filtr_elementow_strony.py` — deterministyczny filtr elementów
+  strony na drzewie XML trafilatury, przed zbudowaniem bloków i wykazu
+  odnośników. Lista zwrotów i wzorców jest na początku modułu. Zwraca opis
+  usuniętych fragmentów, który ekstraktor zapisuje w polu `plik_posredni`.
 - `gnb/extractors/bloki_markdown.py` — zapis listy bloków treści jako tekstu
   w zapisie Markdown, wspólny dla strony internetowej, CSV, DOCX i EPUB.
 - `gnb/extractors/plik_csv.py` — plik CSV jako jeden blok tabeli, z automatycznym

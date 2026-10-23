@@ -283,9 +283,10 @@ def zbuduj_widok_tekstowy(manifest: Manifest) -> str:
         wiersze.append(f"  Suma kontrolna, skrót: {_skrocona_suma(wpis_zrodla.checksum)}")
         wiersze.append(f"  Status: {wpis_zrodla.status}")
         wiersze.append(f"  Duplikat: {wpis_zrodla.duplikat if wpis_zrodla.duplikat else 'nie'}")
-        wiersze.append(f"  Wygenerowano wersję MD: {_opis_decyzji_md(wpis_zrodla.decyzja_md)}")
+        opis_struktury = _opis_decyzji_md(wpis_zrodla.decyzja_md)
+        wiersze.append(f"  Wyraźna struktura dokumentu (reguła z sekcji ósmej): {opis_struktury}")
         if wpis_zrodla.uzasadnienie_md:
-            wiersze.append("  Spełnione warunki reguły MD:")
+            wiersze.append("  Spełnione warunki struktury:")
             wiersze.extend(f"    - {warunek}" for warunek in wpis_zrodla.uzasadnienie_md)
         if wpis_zrodla.grupa_pakowania:
             wiersze.append(f"  Grupa pakowania: {wpis_zrodla.grupa_pakowania}")

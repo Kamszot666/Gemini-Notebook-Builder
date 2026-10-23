@@ -181,6 +181,7 @@ from gnb.output.manifest import (
     WpisZrodla,
     zapisz_manifest,
 )
+from gnb.output.markdown_pliku import FragmentGrupyMarkdown, zloz_plik_grupy_markdown
 from gnb.output.naglowek_metadanych import (
     ETYKIETA_ADRES,
     ETYKIETA_ARCHIWUM,
@@ -217,7 +218,14 @@ from gnb.output.raport import (
 )
 from gnb.output.skladanie import oznaczenie_pliku_grupy, zloz_plik
 from gnb.output.tekst_bez_znacznikow import zamien_markdown_na_tekst
-from gnb.output.zapis import zapisz_plik_pakietu, zapisz_plik_pdf, zapisz_wyniki
+from gnb.output.zapis import (
+    FORMAT_MD,
+    FORMAT_TXT,
+    tresc_markdown_zrodla,
+    zapisz_plik_pakietu,
+    zapisz_plik_pdf,
+    zapisz_wyniki,
+)
 from gnb.packing import (
     LimityPakowania,
     PlanPliku,
@@ -243,6 +251,7 @@ from gnb.persistence.pliki_wynikowe import (
     POWOD_PLIK_USUNIETY_RECZNIE,
     czlonkowie_grupy,
     domknij_zastapione_pliki,
+    liczba_slotow_wynikow,
     pozostale_pliki_zrodla,
     usun_plik_wynikowy,
     wycofaj_grupe,
@@ -804,9 +813,10 @@ class _Wykonanie:
         self._filmy: dict[str, WynikFazyFilmu] = filmy if filmy is not None else {}
         # Liczba slotów notatnika rzeczywiście zajętych plikami TXT i PDF, licząca
         # unikalne ścieżki, więc plik grupy dzielony przez kilka źródeł liczy się
-        # raz, a wersja MD nie liczy się wcale — zgodnie ze wzorem w raporcie
-        # końcowym. Ustawiana na starcie fazy pakowania w `zapisz_pliki_wynikowe`
-        # i zwiększana w `_stan_wyniku` przy każdym zapisanym pliku, żeby kontrola
+        # raz, a plik MD obok pliku TXT tej samej treści nie liczy się wcale,
+        # zgodnie ze wzorem w raporcie końcowym. Ustawiana na starcie fazy
+        # pakowania w `zapisz_pliki_wynikowe` i zwiększana w `_stan_wyniku` przy
+        # każdym zapisanym pliku, żeby kontrola
         # z sekcji 18e punkt czwarty CLAUDE.md widziała sloty faktycznie zajęte,
         # a nie liczbę źródeł — ta druga miara nie widzi źródeł już podzielonych
         # na kilka plików we wcześniejszym uruchomieniu.
@@ -1408,7 +1418,7 @@ class _Wykonanie:
             logging.INFO,
             identyfikator,
             f"Znormalizowano źródło {identyfikator}: {znormalizowany.liczba_slow} słów, "
-            f"wersja MD: {'tak' if decyzja.generuj_md else 'nie'}.",
+            f"wyraźna struktura dokumentu: {'tak' if decyzja.generuj_md else 'nie'}.",
         )
 
     def deduplikuj(self) -> None:
@@ -1571,7 +1581,7 @@ class _Wykonanie:
         dzielone na części na granicy jednostki strukturalnej. Małe źródła jednej
         grupy tematycznej nadanej przez użytkownika są łączone w jeden plik.
         Źródło bez grupy, które mieści się w limicie, dostaje jeden plik razem
-        z warunkową wersją Markdown, dokładnie jak przed etapem szóstym.
+        w formatach z konfiguracji (domyślnie sam Markdown), z nagłówkiem metadanych.
 
         Źródła będące obrazami są pakowane osobno: grupa obrazów daje jeden
         tematyczny plik PDF z obrazami, ich opisami i tekstem OCR. Obraz bez
@@ -1590,15 +1600,7 @@ class _Wykonanie:
         grupy jest usuwany po zapisaniu nowych, a raport wymienia zastąpienie.
         """
         self._wycofaj_grupy_z_nowymi_zrodlami()
-        self._sloty_pakowania_zajete = len(
-            {
-                wynik.sciezka_wzgledna
-                for stan in self._checkpoint.zrodla.values()
-                if stan.status == StatusZrodla.SPAKOWANE.value
-                for wynik in stan.wyniki
-                if wynik.format != FormatWynikowy.MD.value
-            }
-        )
+        self._sloty_pakowania_zajete = liczba_slotow_wynikow(self._checkpoint)
         limity = LimityPakowania.z_konfiguracji(
             self._konfiguracja.bezpieczny_limit_slow, self._konfiguracja.bezpieczny_limit_mb
         )
@@ -1881,20 +1883,13 @@ class _Wykonanie:
         self._loguj(logging.ERROR, stan.identyfikator, KOMUNIKAT_BRAK_TEKSTU_POSREDNIEGO)
 
     def _zapisz_zrodlo_niepodzielone(self, stan: StanZrodla, tekst: str) -> None:
-        """Zapisuje jedno źródło mieszczące się w limicie: TXT zawsze, MD warunkowo."""
+        """Zapisuje jedno źródło mieszczące się w limicie: MD i TXT według konfiguracji."""
         identyfikator = stan.identyfikator
         znormalizowany = DokumentZnormalizowany(
             identyfikator_zrodla=identyfikator,
             tekst=tekst,
             liczba_slow=stan.liczba_slow or 0,
             liczba_znakow=stan.liczba_znakow or 0,
-        )
-        # Pole poziomu pewności służy tu tylko odtworzeniu decyzji dla zapisu. Sam
-        # zapis czyta wyłącznie `generuj_md`, a ten jest już rozstrzygnięty.
-        decyzja = regula_md.DecyzjaFormatu(
-            generuj_md=bool(stan.decyzja_md),
-            spelnione_warunki=tuple(stan.uzasadnienie_md),
-            poziom_pewnosci_wystarczajacy=bool(stan.decyzja_md),
         )
         tekst_txt = self._wczytaj_tekst_posredni(identyfikator, _SUFIKS_TEKST_WERSJI_TXT)
 
@@ -1903,7 +1898,6 @@ class _Wykonanie:
             stan.nazwa_bazowa_wyniku or nazwa_pliku_wynikowego(None, identyfikator),
             identyfikator,
             znormalizowany,
-            decyzja,
             formaty_wlaczone=self._konfiguracja.formaty_wynikowe,
             tekst_txt=tekst_txt,
             naglowek=stan.naglowek_metadanych or "",
@@ -1918,8 +1912,8 @@ class _Wykonanie:
         self._loguj(
             logging.INFO,
             identyfikator,
-            f"Zapisano {len(pliki)} plików wynikowych, wersja MD: "
-            f"{'tak' if stan.decyzja_md else 'nie'}.",
+            f"Zapisano {len(pliki)} plików wynikowych: "
+            f"{', '.join(plik.format.value for plik in pliki)}.",
         )
 
     def _zapisz_czesci_zrodla(
@@ -1929,13 +1923,20 @@ class _Wykonanie:
         identyfikator = stan.identyfikator
         liczba = len(czesci)
         nazwa_bazowa = stan.nazwa_bazowa_wyniku or nazwa_pliku_wynikowego(None, identyfikator)
+        ma_struktura = self._zrodlo_ma_strukture(identyfikator)
         wyniki: list[StanWyniku] = []
         for numer, czesc in enumerate(czesci, start=1):
             naglowek = z_oznaczeniem_czesci(stan.naglowek_metadanych or "", numer, liczba)
-            tresc = zloz_plik([(naglowek, czesc)])
             nazwa = nazwa_pliku_czesci(nazwa_bazowa, numer, liczba)
-            plik = zapisz_plik_pakietu(self._uklad.pliki_wynikowe, nazwa, tresc, [identyfikator])
-            wyniki.append(self._stan_wyniku(plik, [identyfikator], numer, liczba))
+            for plik in self._zapisz_pakiet_w_formatach(
+                nazwa,
+                [identyfikator],
+                tresc_txt=zloz_plik([(naglowek, czesc)]),
+                tresc_md=zloz_plik(
+                    [(naglowek, tresc_markdown_zrodla(czesc, ma_struktura=ma_struktura))]
+                ),
+            ):
+                wyniki.append(self._stan_wyniku(plik, [identyfikator], numer, liczba))
 
         stan.wyniki = wyniki
         stan.ostrzezenia_pakowania = list(ostrzezenia)
@@ -2043,7 +2044,22 @@ class _Wykonanie:
                 )
                 for fragment in plan.fragmenty
             ]
-            tresc = zloz_plik(fragmenty_tekstu, oznaczenie_pliku=oznaczenie)
+            tresc_txt = zloz_plik(fragmenty_tekstu, oznaczenie_pliku=oznaczenie)
+            tresc_md = zloz_plik_grupy_markdown(
+                [
+                    FragmentGrupyMarkdown(
+                        naglowek_metadanych=(
+                            po_identyfikatorze[fragment.identyfikator].naglowek_metadanych or ""
+                        ),
+                        tresc_markdown=tresc_markdown_zrodla(
+                            fragment.tekst,
+                            ma_struktura=self._zrodlo_ma_strukture(fragment.identyfikator),
+                        ),
+                    )
+                    for fragment in plan.fragmenty
+                ],
+                tytul_pliku=oznaczenie.rstrip(".") if oznaczenie else f"Grupa „{nazwa_grupy}”",
+            )
         else:
             (fragment,) = plan.fragmenty
             stan = po_identyfikatorze[fragment.identyfikator]
@@ -2053,21 +2069,71 @@ class _Wykonanie:
             naglowek = z_oznaczeniem_czesci(
                 stan.naglowek_metadanych or "", plan.numer_czesci, plan.liczba_czesci
             )
-            tresc = zloz_plik([(naglowek, fragment.tekst)])
+            tresc_txt = zloz_plik([(naglowek, fragment.tekst)])
+            tresc_md = zloz_plik(
+                [
+                    (
+                        naglowek,
+                        tresc_markdown_zrodla(
+                            fragment.tekst,
+                            ma_struktura=self._zrodlo_ma_strukture(fragment.identyfikator),
+                        ),
+                    )
+                ]
+            )
 
         nazwa = (
             nazwa_pliku_czesci(nazwa_bazowa, plan.numer_czesci, plan.liczba_czesci)
             if plan.czy_wieloczesciowy
             else nazwa_bazowa
         )
-        plik = zapisz_plik_pakietu(self._uklad.pliki_wynikowe, nazwa, tresc, identyfikatory)
         numer, liczba = _numery_czesci(plan)
-        wynik = self._stan_wyniku(plik, identyfikatory, numer, liczba)
-        for identyfikator in identyfikatory:
-            po_identyfikatorze[identyfikator].wyniki.append(wynik)
+        for plik in self._zapisz_pakiet_w_formatach(
+            nazwa, identyfikatory, tresc_txt=tresc_txt, tresc_md=tresc_md
+        ):
+            wynik = self._stan_wyniku(plik, identyfikatory, numer, liczba)
+            for identyfikator in identyfikatory:
+                po_identyfikatorze[identyfikator].wyniki.append(wynik)
         for ostrzezenie in plan.ostrzezenia:
             for identyfikator in identyfikatory:
                 po_identyfikatorze[identyfikator].ostrzezenia_pakowania.append(ostrzezenie)
+
+    def _zapisz_pakiet_w_formatach(
+        self, nazwa: str, identyfikatory: list[str], *, tresc_txt: str, tresc_md: str
+    ) -> list[PlikWynikowy]:
+        """Zapisuje plik pakietu w formatach włączonych w konfiguracji, MD przed TXT."""
+        pliki: list[PlikWynikowy] = []
+        formaty = self._konfiguracja.formaty_wynikowe
+        if FORMAT_MD in formaty:
+            pliki.append(
+                zapisz_plik_pakietu(
+                    self._uklad.pliki_wynikowe,
+                    nazwa,
+                    tresc_md,
+                    identyfikatory,
+                    format_pliku=FormatWynikowy.MD,
+                )
+            )
+        if FORMAT_TXT in formaty:
+            pliki.append(
+                zapisz_plik_pakietu(
+                    self._uklad.pliki_wynikowe,
+                    nazwa,
+                    tresc_txt,
+                    identyfikatory,
+                    format_pliku=FormatWynikowy.TXT,
+                )
+            )
+        return pliki
+
+    def _zrodlo_ma_strukture(self, identyfikator: str) -> bool:
+        """Prawda, gdy ekstraktor zwrócił tekst ze znacznikami, czyli już w Markdown.
+
+        Takie źródło ma wynik pośredni z wersją TXT bez znaczników. Jego brak
+        oznacza tekst bez struktury, który w pliku MD staje się akapitami.
+        """
+        cel = self._uklad.wyniki_posrednie / f"{identyfikator}.{_SUFIKS_TEKST_WERSJI_TXT}"
+        return cel.is_file()
 
     def _stan_wyniku(
         self,
@@ -2077,7 +2143,12 @@ class _Wykonanie:
         liczba_czesci: int | None,
     ) -> StanWyniku:
         """Buduje wpis stanu jednego pliku wynikowego z jego rzeczywistej zawartości."""
-        if plik.format != FormatWynikowy.MD:
+        if (
+            plik.format != FormatWynikowy.MD
+            or FORMAT_TXT not in self._konfiguracja.formaty_wynikowe
+        ):
+            # Plik MD obok pliku TXT tej samej treści nie zajmuje drugiego slotu:
+            # do notatnika wgrywa się tylko jeden z nich.
             self._sloty_pakowania_zajete += 1
         return StanWyniku(
             sciezka_wzgledna=plik.sciezka.relative_to(self._uklad.katalog_projektu).as_posix(),
@@ -3381,8 +3452,18 @@ def _zbuduj_podsumowanie(
     liczba_txt = sum(1 for wynik in wyniki if wynik.format == "txt")
     liczba_md = sum(1 for wynik in wyniki if wynik.format == "md")
     liczba_pdf = sum(1 for wynik in wyniki if wynik.format == "pdf")
-    laczna_liczba_slow = sum(
-        wynik.liczba_slow for wynik in wyniki if wynik.format in ("txt", "pdf")
+    # Treść leżąca w dwóch plikach (MD i TXT) jest liczona raz, bo oba mają tę samą
+    # liczbę słów: dla każdej nazwy bez rozszerzenia wybierany jest plik TXT, a gdy go
+    # nie ma, plik MD.
+    tekstowe_po_nazwie: dict[str, StanWyniku] = {}
+    for wynik in wyniki:
+        if wynik.format not in ("md", "txt"):
+            continue
+        klucz = Path(wynik.sciezka_wzgledna).with_suffix("").as_posix()
+        if klucz not in tekstowe_po_nazwie or wynik.format == "txt":
+            tekstowe_po_nazwie[klucz] = wynik
+    laczna_liczba_slow = sum(wynik.liczba_slow for wynik in tekstowe_po_nazwie.values()) + sum(
+        wynik.liczba_slow for wynik in wyniki if wynik.format == "pdf"
     )
     najwiekszy = max(wyniki, key=lambda wynik: wynik.rozmiar_bajtow, default=None)
 
@@ -3408,6 +3489,7 @@ def _zbuduj_podsumowanie(
         najwiekszy_plik_nazwa=(najwiekszy.sciezka_wzgledna if najwiekszy is not None else None),
         najwiekszy_plik_bajtow=najwiekszy.rozmiar_bajtow if najwiekszy is not None else 0,
         laczna_liczba_slow=laczna_liczba_slow,
+        liczba_slotow=liczba_slotow_wynikow(checkpoint),
         czas_pracy_sekundy=czas_pracy_sekundy,
         zrodla_nieprzetworzone=_zrodla_nieprzetworzone(checkpoint),
         materialy_do_sprawdzenia=_materialy_do_sprawdzenia(checkpoint),

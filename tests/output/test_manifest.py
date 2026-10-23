@@ -82,7 +82,7 @@ def test_manifest_txt_jest_czytelny_liniowo_bez_tabel(tmp_path: Path) -> None:
 
     tekst = (tmp_path / "manifest.txt").read_text(encoding="utf-8")
     assert "Źródło: plik_tekstowy-1111" in tekst
-    assert "Wygenerowano wersję MD: tak" in tekst
+    assert "Wyraźna struktura dokumentu (reguła z sekcji ósmej): tak" in tekst
     assert "Komunikat błędu: Plik nie istnieje." in tekst
     assert "|" not in tekst
     assert "---" not in tekst

@@ -19,9 +19,9 @@ elementów nietreściowych i pobranie akapitów. Wchodzi w grę wtedy, gdy
 trafilatura nic nie zwróci, co zdarza się na stronach o nietypowej budowie.
 
 Poziom pewności struktury jest zróżnicowany celowo. Wynik z trafilatury dostaje
-poziom średni, więc dobrze zbudowany artykuł może dostać wersję MD. Wynik
-z mechanizmu zapasowego dostaje poziom niski, więc wersja MD nie powstanie,
-ponieważ struktura nie została rozpoznana, tylko odzyskana z resztek.
+poziom średni, więc struktura artykułu trafia do pliku MD. Wynik z mechanizmu
+zapasowego dostaje poziom niski, więc plik MD zawiera same akapity, ponieważ
+struktura nie została rozpoznana, tylko odzyskana z resztek.
 
 Adresy odnośników nie zostają w środku zdań, ponieważ czynią tekst trudnym do
 odsłuchania czytnikiem ekranu. Nie są jednak gubione: w miejscu odnośnika zostaje
@@ -58,6 +58,7 @@ from lxml import etree, html
 from gnb.core.model import BlokTresci, DokumentWyekstrahowany
 from gnb.core.stale import PoziomPewnosciStruktury, RodzajBloku, TypZrodla
 from gnb.extractors.bloki_markdown import zapisz_bloki_jako_markdown
+from gnb.extractors.escapowanie_markdown import escapuj_tekst_plaski
 
 METODA_GLOWNA = "trafilatura"
 METODA_ZAPASOWA = "lxml_zapasowy"
@@ -181,11 +182,13 @@ class EkstraktorStronyWww:
         akapity, tytul, odnosniki = _akapity_zapasowe(tekst)
         ostrzezenie = (
             "Treść odzyskana mechanizmem zapasowym, bez rozpoznania struktury dokumentu. "
-            "Wersja Markdown nie powstanie."
+            "Plik Markdown zawiera same akapity, bez nagłówków, list i tabel."
         )
         return DokumentWyekstrahowany(
             identyfikator_zrodla=identyfikator_zrodla,
-            tekst=self._z_sekcja_odnosnikow("\n\n".join(akapity), odnosniki),
+            tekst=self._z_sekcja_odnosnikow(
+                "\n\n".join(escapuj_tekst_plaski(akapit) for akapit in akapity), odnosniki
+            ),
             poziom_pewnosci_struktury=PoziomPewnosciStruktury.NISKI,
             metoda_ekstrakcji=METODA_ZAPASOWA,
             tytul=tytul,

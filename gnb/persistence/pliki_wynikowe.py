@@ -34,19 +34,21 @@ POWOD_PLIK_USUNIETY_RECZNIE = "plik wynikowy usunięty ręcznie z dysku"
 class BrakujacyPlik:
     """Plik wynikowy znany checkpointowi, którego nie ma na dysku.
 
-    Plik wersji MD jest dodatkiem do pliku TXT i nie zajmuje slotu notatnika.
-    Jego brak jest zgłaszany, ale nie zmienia statusu źródła, bo treść źródła
-    jest nadal w pliku TXT.
+    Plik MD, obok którego leży plik TXT z tą samą treścią, nie zajmuje slotu
+    notatnika: jego brak jest zgłaszany, ale nie zmienia statusu źródła, bo treść
+    jest nadal w pliku TXT. Gdy MD jest jedynym plikiem tekstowym źródła, jego brak
+    oznacza brak treści, więc źródło zostanie pominięte jak przy braku pliku TXT.
     """
 
     sciezka_wzgledna: str
     format: str
     identyfikatory_zrodel: tuple[str, ...]
+    ma_siostre_txt: bool = False
 
     @property
     def czy_zajmuje_slot(self) -> bool:
         """Prawda dla plików, których brak oznacza brak treści źródła w wynikach."""
-        return self.format != FormatWynikowy.MD.value
+        return self.format != FormatWynikowy.MD.value or not self.ma_siostre_txt
 
     @property
     def nazwa(self) -> str:
@@ -69,11 +71,52 @@ def znajdz_brakujace_pliki(uklad: UkladProjektu, checkpoint: Checkpoint) -> list
             identyfikatory = po_sciezce.setdefault(wynik.sciezka_wzgledna, (wynik.format, []))[1]
             if stan.identyfikator not in identyfikatory:
                 identyfikatory.append(stan.identyfikator)
+    trzony_txt = _trzony_plikow_txt(po_sciezce)
     return [
-        BrakujacyPlik(sciezka, format_pliku, tuple(identyfikatory))
+        BrakujacyPlik(
+            sciezka,
+            format_pliku,
+            tuple(identyfikatory),
+            ma_siostre_txt=_bez_rozszerzenia(sciezka) in trzony_txt,
+        )
         for sciezka, (format_pliku, identyfikatory) in po_sciezce.items()
         if not _sciezka_w_projekcie(uklad, sciezka).is_file()
     ]
+
+
+def liczba_slotow_wynikow(checkpoint: Checkpoint) -> int:
+    """Liczy sloty notatnika zajęte przez pliki wynikowe źródeł spakowanych.
+
+    Plik grupy dzielony przez kilka źródeł liczy się raz. Plik MD, obok którego
+    leży plik TXT z tą samą nazwą, nie liczy się osobno, bo do notatnika
+    wgrywa się tylko jeden z dwóch plików tej samej treści.
+    """
+    po_sciezce: dict[str, tuple[str, list[str]]] = {}
+    for stan in checkpoint.zrodla.values():
+        if stan.status != StatusZrodla.SPAKOWANE.value:
+            continue
+        for wynik in stan.wyniki:
+            po_sciezce.setdefault(wynik.sciezka_wzgledna, (wynik.format, []))
+    trzony_txt = _trzony_plikow_txt(po_sciezce)
+    return sum(
+        1
+        for sciezka, (format_pliku, _) in po_sciezce.items()
+        if not (
+            format_pliku == FormatWynikowy.MD.value and _bez_rozszerzenia(sciezka) in trzony_txt
+        )
+    )
+
+
+def _bez_rozszerzenia(sciezka_wzgledna: str) -> str:
+    return PurePosixPath(sciezka_wzgledna).with_suffix("").as_posix()
+
+
+def _trzony_plikow_txt(po_sciezce: dict[str, tuple[str, list[str]]]) -> set[str]:
+    return {
+        _bez_rozszerzenia(sciezka)
+        for sciezka, (format_pliku, _) in po_sciezce.items()
+        if format_pliku == FormatWynikowy.TXT.value
+    }
 
 
 def usun_plik_wynikowy(uklad: UkladProjektu, sciezka_wzgledna: str) -> bool:

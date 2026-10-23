@@ -45,7 +45,7 @@ def test_male_zrodla_grupy_lacza_sie_w_jeden_plik_bez_utraty_tresci(tmp_path: Pa
 
     wynik = przetworz_projekt(
         _pozycje_grupy("Baza wiedzy", tresci),
-        Konfiguracja(katalog_wynikow=tmp_path / "wyniki"),
+        Konfiguracja(formaty_wynikowe=("txt",), katalog_wynikow=tmp_path / "wyniki"),
         nazwa_projektu="Test łączenia grupy",
         zegar=_zegar_krokowy(),
     )
@@ -89,7 +89,11 @@ def test_grupa_zbyt_liczna_dzieli_sie_na_kolejne_pliki(tmp_path: Path) -> None:
 
     wynik = przetworz_projekt(
         _pozycje_grupy("Duża grupa", tresci),
-        Konfiguracja(katalog_wynikow=tmp_path / "wyniki", bezpieczny_limit_slow=20),
+        Konfiguracja(
+            formaty_wynikowe=("txt",),
+            katalog_wynikow=tmp_path / "wyniki",
+            bezpieczny_limit_slow=20,
+        ),
         nazwa_projektu="Test dużej grupy",
         zegar=_zegar_krokowy(),
     )
@@ -147,7 +151,7 @@ def test_zrodlo_bez_grupy_zostaje_osobnym_plikiem_obok_grupy(tmp_path: Path) -> 
 
     wynik = przetworz_projekt(
         pozycje,
-        Konfiguracja(katalog_wynikow=tmp_path / "wyniki"),
+        Konfiguracja(formaty_wynikowe=("txt",), katalog_wynikow=tmp_path / "wyniki"),
         nazwa_projektu="Test grupy i osobnego",
         zegar=_zegar_krokowy(),
     )

@@ -1,4 +1,4 @@
-# Obsługiwane formaty — stan po etapie piętnastym, część B
+# Obsługiwane formaty — stan po etapie siedemnastym, część B
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
 Etap czternasty dodał formaty biurowe ODT, ODS, ODP, PPTX, XLSX, XLS, RTF, DOC
@@ -172,11 +172,11 @@ zegar systemowy.
 Treść artykułu jest wydobywana biblioteką `trafilatura`, która odrzuca menu,
 banery zgody na pliki cookie, reklamy, ramki boczne i stopkę. Rozpoznane
 nagłówki, listy, tabele, cytaty i bloki kodu trafiają do struktury dokumentu,
-więc dobrze zbudowany artykuł może dostać także wersję MD.
+więc struktura dobrze zbudowanego artykułu trafia do pliku MD.
 
 Gdy trafilatura nic nie zwróci, wchodzi mechanizm zapasowy oparty na `lxml`,
 który odzyskuje same akapity. Zgłasza on niski poziom pewności struktury, więc
-z materiału odzyskanego awaryjnie wersja MD nigdy nie powstanie.
+z materiału odzyskanego awaryjnie plik MD zawiera same akapity.
 
 Pochodzenie całego artykułu jest zapisane w manifeście: adres kanoniczny, adres
 końcowy po przekierowaniach, kod odpowiedzi HTTP, deklarowane kodowanie oraz
@@ -237,36 +237,60 @@ także znaki sterujące inne niż znak nowej linii. Zachowywane są natomiast ł
 nierozdzielający i spoiwo, czyli ZWNJ oraz ZWJ, ponieważ w części pism i w
 sekwencjach emoji zmieniają znaczenie zapisu.
 
-## Wynik: TXT zawsze, MD warunkowo
+## Wynik: MD domyślnie, TXT opcjonalnie
 
-Plik TXT powstaje zawsze. Plik MD powstaje dodatkowo tylko wtedy, gdy spełnione
-są jednocześnie dwa warunki.
+Od etapu siedemnastego, części B (decyzja użytkownika z 23 października 2026),
+domyślnie powstaje wyłącznie plik MD, a plik TXT można włączyć w ustawieniach
+(zakładka „Pliki wynikowe”, pola wyboru „Plik Markdown (MD)” i „Plik tekstowy
+(TXT)”, co najmniej jedno musi być zaznaczone). Powód: nawigacja po nagłówkach
+pliku MD z klawiatury i czytnikiem ekranu jest dla użytkownika łatwiejsza. Przy
+obu formatach każda treść leży w dwóch plikach o tej samej nazwie i do notatnika
+trzeba wgrać tylko jeden z nich; drugi nie zajmuje slotu.
 
-Warunek pierwszy: dokument spełnia co najmniej dwa z czterech warunków
-strukturalnych:
+Gemini Notebook przyjmuje pliki MD jako źródło. Informacja pochodzi z zestawienia
+zewnętrznego z 12 października 2026 (fast.io, „NotebookLM supported file types”),
+nie z oficjalnej pomocy Google. Dlatego po pierwszym użyciu warto wgrać jeden plik
+MD do notatnika i sprawdzić, że się zaimportował.
 
-1. Zawiera co najmniej trzy nagłówki tworzące rzeczywistą hierarchię co najmniej
-   dwupoziomową.
-2. Zawiera co najmniej dwie listy, z których przynajmniej jedna ma co najmniej
-   trzy elementy.
-3. Zawiera co najmniej jedną tabelę, którą da się zapisać bez utraty znaczenia.
-   Tabela o wierszach różnej długości tego warunku nie spełnia: zapis Markdown ma
-   stałą liczbę kolumn wyznaczoną przez nagłówek, więc wiersz o innej liczbie
-   komórek albo straciłby nadmiarowe komórki, albo dostałby puste. Sama pionowa
-   kreska w treści komórki nie przeszkadza, bo przy zapisie jest escapowana.
-4. Zawiera blok kodu lub zapis techniczny, w którym formatowanie niesie
-   znaczenie.
+Plik MD powstaje dla każdego źródła, także takiego bez żadnej struktury. Struktura
+w nim pochodzi wyłącznie z bloków zgłoszonych przez ekstraktor: nagłówki, listy,
+tabele, cytaty i bloki kodu. Tekst bez struktury, na przykład z OCR, transkrypcji
+albo płaskiego pliku TXT, staje się akapitami. Aplikacja nie zgaduje nagłówków
+z płaskiego tekstu. Pogrubienie i kursywa nie są przenoszone, bo ekstraktory nie
+zgłaszają ich jako osobnych bloków.
 
-Warunek drugi, konieczny: poziom pewności struktury zgłoszony przez ekstraktor
-jest co najmniej średni.
+Tekst, który Markdown odczytałby błędnie jako składnię, jest escapowany tam, gdzie
+nie pochodzi z bloku strukturalnego: wiersz zaczynający się krzyżykiem, myślnikiem
+z odstępem, liczbą z kropką, znakiem większości, ogrodzeniem kodu albo samymi
+myślnikami, a także gwiazdki i podkreślenia niebędące częścią słowa, początek
+znacznika HTML i encji. Fałszywy nagłówek w pliku dla czytnika ekranu byłby błędem
+poprawności danych. Plik TXT nie wymaga escapowania.
 
-W etapie pierwszym poziom pewności wysoki mają wyłącznie pliki MD oraz tekst
-wklejony zadeklarowany jako Markdown. Pliki TXT oraz zwykły tekst wklejony mają
-zawsze poziom niski, nawet jeżeli zawierają wiersze wyglądające na nagłówki.
-Dzięki temu z pliku TXT nigdy nie powstaje wersja MD.
+Pliki pakietu, czyli części podzielonego źródła i pliki grup, powstają w tych
+samych formatach. W pliku grupy w wersji MD jest jeden nagłówek pierwszego poziomu
+z nazwą grupy (przy pliku złożonym z kilku części także z numerem części), a każde
+źródło zaczyna się nagłówkiem drugiego poziomu z jego tytułem, pod którym
+nagłówek metadanych źródła stoi jako lista. Nagłówki samego źródła są przesunięte
+tak, że najpłytszy z nich ma poziom trzeci, więc hierarchia pliku jest poprawna,
+a klawisz nagłówka w NVDA przeskakuje między źródłami. Tytuł nagłówka to pole
+„Tytuł” nagłówka metadanych, a gdy go nie ma, „Plik”, „Adres” albo identyfikator
+źródła. Pozostałe pliki MD (pojedyncze źródło, część podzielonego źródła) mają
+nagłówek metadanych jako zwykłe wiersze, tak jak plik TXT.
 
-Decyzja o wygenerowaniu wersji MD wraz z listą spełnionych warunków jest
-zapisywana w manifeście.
+Reguła z sekcji ósmej CLAUDE.md (dwa z czterech warunków strukturalnych i średni
+poziom pewności) już nie decyduje o tym, czy plik MD powstaje. Jest nadal
+oceniana, a jej wynik z listą spełnionych warunków trafia do manifestu w polach
+`decyzja_md` i `uzasadnienie_md`; w manifest.txt widać to jako „Wyraźna struktura
+dokumentu (reguła z sekcji ósmej)”. Znaczenie pola się nie zmieniło („dokument ma
+wyraźną strukturę”), zmieniła się tylko jego rola: jest informacją, a nie
+warunkiem powstania pliku. Dlatego nie podniesiono wersji schematu manifestu.
+
+Projekty już istniejące: pliki wynikowe zapisane wcześniej jako TXT nie są
+przepisywane automatycznie. Wznowienie projektu bez nowych źródeł niczego nie
+zmienia. Źródła dosłane do starego projektu dostają pliki w formatach z aktualnej
+konfiguracji (domyślnie MD). Grupa, do której dochodzi nowe źródło, jest pakowana
+od nowa w aktualnych formatach, a jej stary plik TXT jest usuwany jako zastąpiony.
+Źródło spakowane wcześniej jako TXT, do którego nic nie dosłano, zostaje w TXT.
 
 ## Filmy z serwisu YouTube
 
@@ -418,8 +442,8 @@ najwyżej trzy słowa i nie zawiera znaku końca zdania. Przy wątpliwości nawi
 zostaje, bo utrata treści kosztuje więcej niż zostawiona etykieta dźwięku.
 
 Plik napisów, tak jak transkrypcja YouTube, nie ma struktury dokumentu i nie
-ma tytułu, więc nigdy nie powstaje dla niego wersja MD i nie podlega ocenie
-jakości ekstrakcji.
+ma tytułu, więc plik MD zawiera same akapity, a ocena jakości ekstrakcji go nie
+obejmuje.
 
 ### PDF
 
@@ -463,7 +487,7 @@ deduplikacja, opisana niżej, a nie ekstrakcja.
 PDF nie ma niezawodnie odtwarzalnej struktury dokumentu: format zapisuje tekst
 jako pozycjonowane fragmenty na stronie, a nie jako drzewo nagłówków
 i akapitów. Ekstraktor nie zgaduje nagłówków z wielkości czcionki i nie tworzy
-bloków strukturalnych, więc dla pliku PDF nigdy nie powstaje wersja MD.
+bloków strukturalnych, więc plik MD z pliku PDF zawiera same akapity.
 
 ### DOCX
 
@@ -1326,10 +1350,13 @@ Na początku przebiegu każde źródło brakującego pliku dostaje status „pom
 z powodem „plik wynikowy usunięty ręcznie z dysku” i nazwą pliku, z wpisem
 w `log_wazne.txt`, w logu szczegółowym, w manifeście i w raporcie. Przy pliku
 grupy dotyczy to wszystkich jego źródeł, a raport wymienia je z nazwy. Jeżeli
-źródło ma jeszcze inne pliki na dysku, na przykład wersję MD albo kolejną część,
+źródło ma jeszcze inne pliki na dysku, na przykład wersję TXT albo kolejną część,
 komunikat je wymienia i ostrzega, że zawierają tylko część treści i nie należy
-ich wgrywać do notatnika. Brak samego pliku wersji MD nie zmienia statusu:
-treść źródła jest nadal w pliku TXT, a brak jest tylko odnotowany w logach.
+ich wgrywać do notatnika. Gdy włączone są oba formaty, brak samego pliku MD
+obok pliku TXT nie zmienia statusu: treść źródła jest nadal w pliku TXT, a brak
+jest tylko odnotowany w logach. Gdy MD jest jedynym plikiem tekstowym źródła
+(domyślnie), jego brak oznacza brak treści i źródło zostaje pominięte, tak jak
+przy braku pliku TXT.
 
 Decyzja jest odwracalna. Ponowne dodanie tego samego adresu albo pliku, na
 przykład przez formularz dosyłania, przetwarza źródło od nowa, zamiast
@@ -1458,6 +1485,14 @@ reguły wyboru formatu wymaga rozpoznania tabeli.
 Liczba słów to liczba niepustych fragmentów tekstu po podziale znormalizowanego
 tekstu na dowolnych ciągach białych znaków. Ta sama definicja jest używana
 wszędzie, gdzie projekt odwołuje się do limitu słów notatnika.
+
+Plik MD i plik TXT z tą samą treścią mają tę samą liczbę słów. Słowa pliku MD
+liczy się po zamianie na tekst bez znaczników składni (krzyżyki nagłówków,
+gwiazdki, kreski tabel i ukośniki escapowania nie są słowami), tą samą funkcją
+co dla TXT (`gnb/output/markdown_pliku.py`, `policz_slowa_markdown`). Limit
+notatnika nie zależy więc od wybranego formatu. Kontrola limitu w fazie pakowania
+liczy słowa na tekście pośrednim, który dla źródła ze strukturą zawiera znaczniki,
+więc jest ostrożna: może policzyć odrobinę więcej słów niż plik, nigdy mniej.
 
 Źródło przekraczające bezpieczny limit słów albo bezpieczny limit rozmiaru pliku
 dostaje status „pominiete”, a nie „blad”. Nie jest to awaria, tylko przypadek

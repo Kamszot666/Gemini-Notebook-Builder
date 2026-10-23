@@ -246,7 +246,7 @@ def test_grupa_mieszana_daje_pdf_dla_obrazow_i_txt_dla_tekstu(tmp_path: Path) ->
             przyjmij_plik(KATALOG_DANYCH / "obraz_wykres.png", _MOMENT, grupa="Temat"),
             przyjmij_tekst("Notatka tekstowa w tej samej grupie.", _MOMENT, grupa="Temat"),
         ],
-        Konfiguracja(katalog_wynikow=tmp_path, ocr_wlaczony=False),
+        Konfiguracja(formaty_wynikowe=("txt",), katalog_wynikow=tmp_path, ocr_wlaczony=False),
         nazwa_projektu="Grupa mieszana",
         zegar=_zegar_krokowy(),
     )

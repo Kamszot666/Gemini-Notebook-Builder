@@ -43,7 +43,7 @@ def _zegar_krokowy() -> Callable[[], datetime]:
 
 
 def _konfiguracja(tmp_path: Path) -> Konfiguracja:
-    return Konfiguracja(katalog_wynikow=tmp_path / "wyniki")
+    return Konfiguracja(katalog_wynikow=tmp_path / "wyniki", formaty_wynikowe=("txt",))
 
 
 def _pozycje(*tresci: str, grupa: str | None = None) -> list[PozycjaWejsciowa]:
@@ -195,15 +195,41 @@ def test_brak_pliku_md_nie_zmienia_statusu_zrodla(tmp_path: Path) -> None:
     )
     moment = _MOMENT
     pozycje = [przyjmij_tekst(tresc, moment, format_tekstu="md")]
-    pierwszy = _przetworz(tmp_path, pozycje)
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path / "wyniki", formaty_wynikowe=("md", "txt"))
+
+    def przebieg() -> WynikPrzetwarzania:
+        return przetworz_projekt(
+            pozycje, konfiguracja, nazwa_projektu=_NAZWA, zegar=_zegar_krokowy()
+        )
+
+    pierwszy = przebieg()
     pliki_md = list((pierwszy.katalog_projektu / "pliki_wynikowe").glob("*.md"))
-    assert pliki_md, "przygotowana treść ma spełniać regułę generowania MD"
+    assert pliki_md, "przy obu formatach każde źródło ma plik MD"
     pliki_md[0].unlink()
 
-    drugi = _przetworz(tmp_path, pozycje)
+    drugi = przebieg()
 
     assert set(_statusy(drugi).values()) == {"spakowane"}
     assert "Uwaga, brak pliku wersji MD na dysku:" in _log_wazny(drugi)
+
+
+def test_brak_jedynego_pliku_md_pomija_zrodlo_tak_jak_brak_pliku_txt(tmp_path: Path) -> None:
+    """Przy samym MD (domyślnie) plik MD jest treścią źródła, więc jego brak to pominięcie."""
+    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path / "wyniki")
+
+    def przebieg(*teksty: str) -> WynikPrzetwarzania:
+        return przetworz_projekt(
+            _pozycje(*teksty), konfiguracja, nazwa_projektu=_NAZWA, zegar=_zegar_krokowy()
+        )
+
+    pierwszy = przebieg(_TEKST_A, _TEKST_B)
+    katalog = pierwszy.katalog_projektu / "pliki_wynikowe"
+    plik_a = next(plik for plik in katalog.glob("*.md") if _TEKST_A in plik.read_text("utf-8"))
+    plik_a.unlink()
+
+    drugi = przebieg(_TEKST_B)
+
+    assert sorted(_statusy(drugi).values()) == ["pominiete", "spakowane"]
 
 
 # --- przepakowanie grupy -------------------------------------------------------

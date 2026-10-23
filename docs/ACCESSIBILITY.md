@@ -1,4 +1,4 @@
-# Dostępność interfejsu WWW — stan po etapie siedemnastym, część A
+# Dostępność interfejsu WWW — stan po etapie siedemnastym, część B
 
 Ten dokument opisuje, jak obsługiwać interfejs Gemini Notebook Builder
 z klawiatury i z czytnikiem ekranu, oraz co interfejs ogłasza i jak często.
@@ -276,6 +276,12 @@ dopiero początek następnego przebiegu przetwarzania, opisany w `FORMATS.md`.
 
 Strona `/ustawienia` jest dostępna odnośnikiem „Ustawienia” (element `a`) na
 stronie głównej i na stronie każdego projektu.
+
+W zakładce „Pliki wynikowe” pole „Formaty plików dla notatnika” to grupa
+(`fieldset` z legendą) z dwoma polami wyboru: „Plik Markdown (MD)” i „Plik
+tekstowy (TXT)”, każde ze zwykłą etykietą. Domyślnie zaznaczony jest tylko
+Markdown, bo nawigacja klawiszem nagłówka w czytniku ekranu działa na plikach MD.
+Zapis bez żadnego zaznaczonego formatu jest odrzucany z błędem przy polu.
 
 1. Zakładki według wzorca WAI-ARIA Authoring Practices „Tabs”: lista zakładek
    z rolą `tablist` i nazwą „Zakładki ustawień”, każda zakładka to przycisk

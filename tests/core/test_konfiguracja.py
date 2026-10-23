@@ -21,7 +21,7 @@ def test_brak_pliku_daje_wartosci_domyslne(tmp_path: Path) -> None:
     konfiguracja = wczytaj_konfiguracje(tmp_path / "nie_ma.toml", srodowisko={})
     assert konfiguracja.limit_zrodel == DOMYSLNY_LIMIT_ZRODEL
     assert konfiguracja.bezpieczny_limit_slow == DOMYSLNY_BEZPIECZNY_LIMIT_SLOW
-    assert konfiguracja.formaty_wynikowe == ("txt", "md")
+    assert konfiguracja.formaty_wynikowe == ("md",)
 
 
 def test_wartosci_z_pliku_toml_sa_wczytywane(tmp_path: Path) -> None:
@@ -380,3 +380,37 @@ def test_limit_adresow_z_pliku_ma_domyslnie_dwiescie_i_zmienna_srodowiskowa_go_n
     assert wczytaj_konfiguracje(plik).limit_adresow_z_pliku == 50
     nadpisany = wczytaj_konfiguracje(plik, srodowisko={"GNB_LIMIT_ADRESOW_Z_PLIKU": "7"})
     assert nadpisany.limit_adresow_z_pliku == 7
+
+
+def test_formaty_wynikowe_z_samym_md_sa_poprawne_i_nie_dostaja_txt(tmp_path: Path) -> None:
+    plik = tmp_path / "konfiguracja.toml"
+    plik.write_text('formaty_wynikowe = ["md"]\n', encoding="utf-8")
+
+    assert wczytaj_konfiguracje(plik, srodowisko={}).formaty_wynikowe == ("md",)
+
+
+def test_formaty_wynikowe_md_i_txt_zachowuja_kolejnosc_i_pomijaja_powtorzenia(
+    tmp_path: Path,
+) -> None:
+    plik = tmp_path / "konfiguracja.toml"
+    plik.write_text('formaty_wynikowe = ["txt", "md", "TXT"]\n', encoding="utf-8")
+
+    assert wczytaj_konfiguracje(plik, srodowisko={}).formaty_wynikowe == ("txt", "md")
+
+
+def test_pusta_lista_formatow_wynikowych_daje_blad_trwaly_po_polsku(tmp_path: Path) -> None:
+    plik = tmp_path / "konfiguracja.toml"
+    plik.write_text("formaty_wynikowe = []\n", encoding="utf-8")
+
+    with pytest.raises(BladTrwaly) as blad:
+        wczytaj_konfiguracje(plik, srodowisko={})
+
+    assert "co najmniej jeden format" in blad.value.komunikat
+
+
+def test_zmienna_srodowiskowa_formatow_przyjmuje_liste_po_przecinku(tmp_path: Path) -> None:
+    konfiguracja = wczytaj_konfiguracje(
+        tmp_path / "nie_ma.toml", srodowisko={"GNB_FORMATY_WYNIKOWE": "txt, md"}
+    )
+
+    assert konfiguracja.formaty_wynikowe == ("txt", "md")

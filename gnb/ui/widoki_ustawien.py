@@ -319,13 +319,11 @@ def _pole(
     if pole.rodzaj is Rodzaj.SKROT:
         return _pole_skrotu(pole, aktualna, wpisane, opisany, opis, komunikat_bledu)
 
-    if pole.rodzaj in (Rodzaj.LOGICZNE, Rodzaj.FORMATY):
-        if wpisane:
-            zaznaczone = pole.nazwa in wpisane
-        elif pole.rodzaj is Rodzaj.FORMATY:
-            zaznaczone = "md" in aktualna
-        else:
-            zaznaczone = bool(aktualna)
+    if pole.rodzaj is Rodzaj.FORMATY:
+        return _pole_formatow(pole, aktualna, wpisane, opisany, opis, komunikat_bledu)
+
+    if pole.rodzaj is Rodzaj.LOGICZNE:
+        zaznaczone = pole.nazwa in wpisane if wpisane else bool(aktualna)
         return (
             f'<div class="pole-wyboru"><input type="checkbox" id="{identyfikator}" '
             f'name="{nazwa}" value="1"{" checked" if zaznaczone else ""}{opisany}>'
@@ -367,6 +365,46 @@ _ETYKIETY_MODYFIKATOROW_SKROTU = (
     ("shift", "Shift"),
     ("windows", "Windows"),
 )
+
+
+_ETYKIETY_FORMATOW_WYNIKOWYCH = (
+    ("md", "Plik Markdown (MD)"),
+    ("txt", "Plik tekstowy (TXT)"),
+)
+
+
+def _pole_formatow(
+    pole: PoleUstawien,
+    aktualna: object,
+    wpisane: Mapping[str, str],
+    opisany: str,
+    opis: str,
+    komunikat_bledu: str,
+) -> str:
+    """Pole formatów wynikowych: dwa pola wyboru w grupie z nazwą pola jako legendą.
+
+    Każde pole wyboru ma zwykłą etykietę ``label for``, a opis pola jest
+    przypięty do ``fieldset``, tak jak przy kombinacji skrótu.
+    """
+    identyfikator = f"pole-{escapuj(pole.nazwa)}"
+    aktualne = (
+        {str(wartosc) for wartosc in aktualna} if isinstance(aktualna, (tuple, list)) else set()
+    )
+    pola_wyboru: list[str] = []
+    for klucz, etykieta in _ETYKIETY_FORMATOW_WYNIKOWYCH:
+        nazwa_kontrolki = f"{pole.nazwa}_{klucz}"
+        zaznaczone = nazwa_kontrolki in wpisane if wpisane else klucz in aktualne
+        pola_wyboru.append(
+            f'<div class="pole-wyboru"><input type="checkbox" id="{identyfikator}-{klucz}" '
+            f'name="{escapuj(nazwa_kontrolki)}" value="1"{" checked" if zaznaczone else ""}>'
+            f'<label for="{identyfikator}-{klucz}">{etykieta}</label></div>'
+        )
+    wnetrze = "\n".join(pola_wyboru)
+    return (
+        f'<fieldset id="{identyfikator}" tabindex="-1"{opisany}>\n'
+        f"<legend>{escapuj(pole.etykieta)}</legend>\n{wnetrze}\n</fieldset>\n"
+        f"{opis}{komunikat_bledu}"
+    )
 
 
 def _pole_skrotu(

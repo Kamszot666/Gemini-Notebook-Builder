@@ -169,6 +169,9 @@ class PodsumowanieProjektu:
     zastapione_pliki: tuple[ZastapionyPlik, ...] = ()
     nieudane_zastapienia: tuple[ZastapienieNieudane, ...] = ()
     archiwa: tuple[ArchiwumWRaporcie, ...] = ()
+    # Liczba slotów notatnika zajętych przez pliki do wgrania. Gdy brak wartości,
+    # raport liczy pliki TXT i PDF, jak przed etapem siedemnastym.
+    liczba_slotow: int | None = None
 
 
 def zbuduj_raport(nazwa_projektu: str, podsumowanie: PodsumowanieProjektu) -> str:
@@ -176,9 +179,13 @@ def zbuduj_raport(nazwa_projektu: str, podsumowanie: PodsumowanieProjektu) -> st
     # Limit źródeł notatnika dotyczy plików do wgrania, a nie odrębnych materiałów
     # źródłowych: jedno źródło podzielone na trzy części zajmuje trzy sloty, a plik
     # grupy łączący pięć źródeł zajmuje jeden. Miarą jest więc liczba plików do
-    # wgrania: TXT dla źródeł tekstowych oraz PDF dla grup obrazów. Pliki MD są
-    # dodatkiem do plików TXT i nie zajmują osobnego slotu.
-    liczba_slotow = podsumowanie.liczba_plikow_txt + podsumowanie.liczba_plikow_pdf
+    # wgrania: MD albo TXT dla źródeł tekstowych oraz PDF dla grup obrazów. Plik MD
+    # obok pliku TXT tej samej treści nie zajmuje osobnego slotu.
+    liczba_slotow = (
+        podsumowanie.liczba_slotow
+        if podsumowanie.liczba_slotow is not None
+        else podsumowanie.liczba_plikow_txt + podsumowanie.liczba_plikow_pdf
+    )
     procent_limitu = _procent_wykorzystania_limitu(liczba_slotow, podsumowanie.limit_zrodel)
     najwiekszy_plik = (
         f"{podsumowanie.najwiekszy_plik_nazwa}, {podsumowanie.najwiekszy_plik_bajtow} bajtów"

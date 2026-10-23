@@ -166,7 +166,7 @@ Najczęściej zmieniane rzeczy:
 1. `katalog_wynikow`: gdzie mają lądować projekty. Domyślnie podkatalog `Gemini Notebook Builder` w Dokumentach.
 2. `limit_zrodel`: ile źródeł masz w notatniku. Domyślnie 100 (plan Plus). Wpisz 50, 300, 500 albo 600 dla innych planów.
 3. `bezpieczny_limit_slow` i `bezpieczny_limit_mb`: domyślnie 480 000 słów i 190 MB, z zapasem wobec limitów Google.
-4. `formaty_wynikowe`: `["txt", "md"]` włącza Markdown tam, gdzie ma sens. TXT powstaje zawsze.
+4. `formaty_wynikowe`: domyślnie `["md"]`, czyli powstaje wyłącznie plik Markdown, po którym łatwo nawigować klawiszem nagłówka. `["md", "txt"]` dodaje plik TXT obok (do notatnika wgrywasz wtedy tylko jeden z nich). Projekty utworzone wcześniej mają pliki TXT i nie są przepisywane: źródła dosłane do takiego projektu dostają pliki w aktualnym formacie, a plik grupy z nowym źródłem jest pakowany od nowa.
 5. `zachowuj_oryginaly`: czy trzymać kopie oryginałów. Domyślnie tak.
 6. `respektuj_robots` i `wyjatek_robots_dla_zrodel_jawnych`: jak program traktuje robots.txt.
 7. Progi usuwania powtórek, ustawienia OCR i zamiany mowy na tekst, ścieżki do narzędzi i limity dla archiwów ZIP.

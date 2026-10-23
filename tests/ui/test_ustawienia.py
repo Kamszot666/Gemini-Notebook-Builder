@@ -23,6 +23,7 @@ from gnb.ui.serwer import zbuduj_serwer
 from gnb.ui.ustawienia import (
     MODELE_TRANSKRYPCJI,
     ZAKLADKI,
+    BladWartosciUstawienia,
     Rodzaj,
     odczytaj_zakladke,
     pola_bez_zakladki,
@@ -158,6 +159,14 @@ def test_kazde_pole_ma_dokladnie_jedna_kontrolke_z_etykieta_i_opisem() -> None:
             identyfikator = f"pole-{pole.nazwa}"
             if pole.rodzaj is Rodzaj.TYLKO_ODCZYT:
                 assert f'id="{identyfikator}-opis"' in strona
+                continue
+            if pole.rodzaj is Rodzaj.FORMATY:
+                # Pole formatów ma fieldset z opisem i dwa pola wyboru z własnymi etykietami.
+                assert strona.count(f'id="{identyfikator}"') == 1, pole.nazwa
+                assert f'aria-describedby="{identyfikator}-opis"' in strona, pole.nazwa
+                for przyrostek in ("md", "txt"):
+                    assert strona.count(f'for="{identyfikator}-{przyrostek}"') == 1, przyrostek
+                    assert strona.count(f'id="{identyfikator}-{przyrostek}"') == 1, przyrostek
                 continue
             if pole.rodzaj is Rodzaj.SKROT:
                 # Pole kombinacji ma fieldset z opisem i pięć kontrolek z własnymi etykietami.
@@ -384,8 +393,8 @@ def _formularz_zakladki(identyfikator: str, **nadpisania: str) -> dict[str, str]
             if wartosc:
                 pola[pole.nazwa] = "1"
         elif pole.rodzaj is Rodzaj.FORMATY:
-            if "md" in wartosc:
-                pola[pole.nazwa] = "1"
+            for format_pliku in wartosc:
+                pola[f"{pole.nazwa}_{format_pliku}"] = "1"
         elif isinstance(wartosc, (tuple, list)):
             pola[pole.nazwa] = ", ".join(wartosc)
         else:
@@ -1187,3 +1196,80 @@ def test_bez_dzialajacego_skrotu_kombinacja_trafia_do_pliku_z_wyjasnieniem(
     assert 'globalny_skrot_kombinacja = "Control+Alt+F11"' in plik.read_text(encoding="utf-8")
     _, strona = klient.get(odpowiedz.getheader("Location") or "")
     assert "zacznie działać po włączeniu skrótu i ponownym uruchomieniu serwera" in strona
+
+
+# --- formaty plików wynikowych ------------------------------------------------
+
+
+def _formularz_formatow(**zaznaczone: bool) -> dict[str, str]:
+    """Pełny formularz zakładki „Pliki wynikowe” z wybranymi formatami."""
+    formularz = {
+        nazwa: wartosc
+        for nazwa, wartosc in _formularz_zakladki("wyniki").items()
+        if not nazwa.startswith("formaty_wynikowe_")
+    }
+    for format_pliku, wlaczony in zaznaczone.items():
+        if wlaczony:
+            formularz[f"formaty_wynikowe_{format_pliku}"] = "1"
+    return formularz
+
+
+def _odczytaj_formaty(**zaznaczone: bool) -> tuple[dict[str, object], list[BladWartosciUstawienia]]:
+    zakladka = zakladka_o_identyfikatorze("wyniki")
+    assert zakladka is not None
+    wartosci, bledy = odczytaj_zakladke(zakladka, _formularz_formatow(**zaznaczone), frozenset())
+    return wartosci, list(bledy)
+
+
+def test_formaty_wynikowe_odczytane_z_dwoch_pol_wyboru() -> None:
+    assert _odczytaj_formaty(md=True, txt=False)[0]["formaty_wynikowe"] == ("md",)
+    assert _odczytaj_formaty(md=False, txt=True)[0]["formaty_wynikowe"] == ("txt",)
+    assert _odczytaj_formaty(md=True, txt=True)[0]["formaty_wynikowe"] == ("md", "txt")
+
+
+def test_brak_zaznaczonego_formatu_jest_bledem_przy_polu_formatow() -> None:
+    _wartosci, bledy = _odczytaj_formaty(md=False, txt=False)
+
+    assert [blad.pole for blad in bledy] == ["formaty_wynikowe"]
+    assert "co najmniej jeden format" in bledy[0].komunikat
+
+
+def test_strona_domyslnie_zaznacza_markdown_a_nie_tekst() -> None:
+    strona = _strona()
+
+    assert re.search(r'<input type="checkbox" id="pole-formaty_wynikowe-md"[^>]* checked', strona)
+    assert not re.search(
+        r'<input type="checkbox" id="pole-formaty_wynikowe-txt"[^>]* checked', strona
+    )
+    assert "Przy obu formatach każda treść leży w dwóch plikach" in strona
+
+
+def test_strona_zaznacza_oba_formaty_gdy_oba_sa_wlaczone() -> None:
+    strona = _strona(konfiguracja=Konfiguracja(formaty_wynikowe=("md", "txt")))
+
+    assert re.search(r'id="pole-formaty_wynikowe-md"[^>]* checked', strona)
+    assert re.search(r'id="pole-formaty_wynikowe-txt"[^>]* checked', strona)
+
+
+def test_zapis_samego_txt_trafia_do_pliku_konfiguracji(
+    srodowisko: tuple[_Klient, Path, RejestrZadan, object],
+) -> None:
+    klient, plik, _rejestr, _instancja = srodowisko
+
+    odpowiedz, _ = klient.post("/ustawienia/zapisz", _formularz_formatow(txt=True))
+
+    assert odpowiedz.status == 303
+    assert wczytaj_konfiguracje(plik, srodowisko={}).formaty_wynikowe == ("txt",)
+
+
+def test_zapis_bez_zadnego_formatu_jest_odrzucony_i_nie_zmienia_pliku(
+    srodowisko: tuple[_Klient, Path, RejestrZadan, object],
+) -> None:
+    klient, plik, _rejestr, _instancja = srodowisko
+    przed = plik.read_text(encoding="utf-8")
+
+    odpowiedz, strona = klient.post("/ustawienia/zapisz", _formularz_formatow())
+
+    assert odpowiedz.status == 400
+    assert plik.read_text(encoding="utf-8") == przed
+    assert "Zaznacz co najmniej jeden format" in strona

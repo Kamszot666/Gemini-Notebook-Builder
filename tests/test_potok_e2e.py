@@ -60,7 +60,8 @@ def _tresc_po_naglowku(tresc_pliku: str) -> str:
     return tresc
 
 
-def test_potok_przetwarza_rozne_zrodla_i_stosuje_regule_md(tmp_path: Path) -> None:
+def test_domyslnie_kazde_zrodlo_dostaje_plik_md_a_pliku_txt_nie_ma(tmp_path: Path) -> None:
+    """Decyzja z 23 października 2026: MD jest domyślny i powstaje dla każdego źródła."""
     konfiguracja = Konfiguracja(katalog_wynikow=tmp_path)
     wynik = przetworz_projekt(
         _pozycje(), konfiguracja, nazwa_projektu="Test etapu 1", zegar=_zegar_krokowy()
@@ -70,18 +71,29 @@ def test_potok_przetwarza_rozne_zrodla_i_stosuje_regule_md(tmp_path: Path) -> No
     assert wynik.liczba_bledow == 0
 
     katalog_wynikow = wynik.katalog_projektu / "pliki_wynikowe"
-    pliki = {p.name for p in katalog_wynikow.iterdir()}
+    nazwy = sorted(p.name for p in katalog_wynikow.iterdir())
 
-    trzon = "jak_przygotować_bazę_wiedzy_dla_asystenta_ai"
-    assert len(list(katalog_wynikow.glob(f"{trzon}_*.txt"))) == 1
-    assert len(list(katalog_wynikow.glob(f"{trzon}_*.md"))) == 1
+    assert len(nazwy) == 4
+    assert all(nazwa.endswith(".md") for nazwa in nazwy)
 
-    liczba_md = sum(1 for nazwa in pliki if nazwa.endswith(".md"))
-    assert liczba_md == 1, "wersję MD dostaje tylko dokument_strukturalny.md"
+
+def test_po_wlaczeniu_txt_kazde_zrodlo_ma_dwa_pliki_o_tej_samej_nazwie(tmp_path: Path) -> None:
+    konfiguracja = Konfiguracja(formaty_wynikowe=("md", "txt"), katalog_wynikow=tmp_path)
+    wynik = przetworz_projekt(
+        _pozycje(), konfiguracja, nazwa_projektu="Test dwóch formatów", zegar=_zegar_krokowy()
+    )
+
+    katalog_wynikow = wynik.katalog_projektu / "pliki_wynikowe"
+    pliki = list(katalog_wynikow.iterdir())
+
+    assert len(pliki) == 8
+    assert {p.stem for p in pliki if p.suffix == ".md"} == {
+        p.stem for p in pliki if p.suffix == ".txt"
+    }
 
 
 def test_wersja_txt_zrodla_markdown_nie_jest_kopia_wersji_md(tmp_path: Path) -> None:
-    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path)
+    konfiguracja = Konfiguracja(formaty_wynikowe=("md", "txt"), katalog_wynikow=tmp_path)
     wynik = przetworz_projekt(
         _pozycje(), konfiguracja, nazwa_projektu="Test wersji TXT", zegar=_zegar_krokowy()
     )
@@ -119,7 +131,7 @@ def test_nazwa_pliku_wynikowego_wiaze_plik_ze_zrodlem_z_manifestu(tmp_path: Path
 
 
 def test_plik_windows1250_jest_odczytany_bez_utraty_polskich_znakow(tmp_path: Path) -> None:
-    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path)
+    konfiguracja = Konfiguracja(formaty_wynikowe=("txt",), katalog_wynikow=tmp_path)
     wynik = przetworz_projekt(
         _pozycje(), konfiguracja, nazwa_projektu="Test kodowania", zegar=_zegar_krokowy()
     )
@@ -227,7 +239,9 @@ def _tresc_bez_naglowka(sciezka: Path) -> str:
 def test_zrodlo_ponad_limit_slow_jest_dzielone_na_czesci_bez_utraty_tresci(
     tmp_path: Path,
 ) -> None:
-    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path, bezpieczny_limit_slow=5)
+    konfiguracja = Konfiguracja(
+        formaty_wynikowe=("txt",), katalog_wynikow=tmp_path, bezpieczny_limit_slow=5
+    )
     moment = datetime(2026, 8, 26, 9, 0, tzinfo=UTC)
     akapit = "Pierwsze zdanie jest krótkie. Drugie zdanie też jest krótkie. Trzecie kończy akapit."
     duzy_tekst = f"{akapit}\n\n{akapit}\n\n{akapit}"
@@ -345,7 +359,11 @@ def test_plik_tekstowy_ponad_bezpieczny_limit_rozmiaru_jest_dzielony_a_nie_pomij
     akapit = "Zdanie pierwsze akapitu. Zdanie drugie akapitu. Zdanie trzecie akapitu."
     duzy_plik.write_text("\n\n".join([akapit] * 40), encoding="utf-8")
 
-    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path / "wyniki", bezpieczny_limit_slow=25)
+    konfiguracja = Konfiguracja(
+        formaty_wynikowe=("txt",),
+        katalog_wynikow=tmp_path / "wyniki",
+        bezpieczny_limit_slow=25,
+    )
     pozycje = [przyjmij_plik(duzy_plik, datetime(2026, 8, 26, 9, 0, tzinfo=UTC))]
 
     wynik = przetworz_projekt(
@@ -391,7 +409,7 @@ def _naglowek_pliku(sciezka: Path) -> str:
 
 
 def test_naglowek_metadanych_jest_na_poczatku_pliku_zrodla_plikowego(tmp_path: Path) -> None:
-    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path)
+    konfiguracja = Konfiguracja(formaty_wynikowe=("txt",), katalog_wynikow=tmp_path)
     wynik = przetworz_projekt(
         [
             przyjmij_plik(
@@ -414,7 +432,7 @@ def test_naglowek_metadanych_jest_na_poczatku_pliku_zrodla_plikowego(tmp_path: P
 
 
 def test_naglowek_jest_identyczny_w_wersji_txt_i_md(tmp_path: Path) -> None:
-    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path)
+    konfiguracja = Konfiguracja(formaty_wynikowe=("md", "txt"), katalog_wynikow=tmp_path)
     wynik = przetworz_projekt(
         [
             przyjmij_plik(
@@ -435,7 +453,7 @@ def test_naglowek_jest_identyczny_w_wersji_txt_i_md(tmp_path: Path) -> None:
 
 
 def test_tekst_wklejony_nie_ma_ani_adresu_ani_pliku_w_naglowku(tmp_path: Path) -> None:
-    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path)
+    konfiguracja = Konfiguracja(formaty_wynikowe=("txt",), katalog_wynikow=tmp_path)
     wynik = przetworz_projekt(
         [
             przyjmij_tekst(
@@ -459,7 +477,9 @@ def test_limit_slow_jest_liczony_bez_naglowka_metadanych(tmp_path: Path) -> None
     """Nagłówek jest informacją o źródle, nie jego treścią, więc nie wchodzi do limitu."""
     tresc = "Zdanie z dokładnie dziesięcioma słowami, policzonymi bez nagłówka metadanych."
     liczba_slow = len(tresc.split())
-    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path, bezpieczny_limit_slow=liczba_slow)
+    konfiguracja = Konfiguracja(
+        formaty_wynikowe=("txt",), katalog_wynikow=tmp_path, bezpieczny_limit_slow=liczba_slow
+    )
 
     wynik = przetworz_projekt(
         [przyjmij_tekst(tresc, datetime(2026, 8, 26, tzinfo=UTC))],

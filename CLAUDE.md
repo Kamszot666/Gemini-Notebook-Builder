@@ -8,7 +8,7 @@ Język pracy: polski. Dotyczy to kodu (komentarze, docstringi), interfejsu, komu
 
 Gemini Notebook Builder to lokalna aplikacja na Windows 11, która zbiera materiały z wielu źródeł, wydobywa z nich treść, normalizuje ją, deduplikuje i pakuje w pliki gotowe do wgrania jako źródła w Gemini Notebook (dawniej NotebookLM).
 
-Podstawowym formatem wynikowym jest TXT. Markdown powstaje tylko warunkowo, według reguły opisanej w sekcji 8.
+Podstawowym formatem wynikowym jest Markdown (decyzja użytkownika z 23 października 2026, odwracająca wcześniejsze „TXT zawsze, MD warunkowo”; pełna sekwencja w `docs/DECYZJE_I_ZAGADNIENIA.md`). TXT można włączyć w ustawieniach obok niego.
 
 Aplikacja jest narzędziem produkcyjnym, modularnym i testowalnym. Nie jest skryptem demonstracyjnym ani prototypem.
 
@@ -196,16 +196,16 @@ Kolejność etapów jest stała:
 
 Deduplikacja zawsze poprzedza pakowanie. Nigdy odwrotnie.
 
-Reguła generowania Markdown musi być deterministyczna i przetestowana, a nie oparta na wyczuciu. TXT powstaje zawsze. MD powstaje dodatkowo tylko wtedy, gdy dokument spełnia co najmniej dwa z poniższych warunków:
+Format wynikowy wybiera konfiguracja: domyślnie powstaje wyłącznie MD dla każdego źródła, TXT można włączyć obok. Struktura w MD pochodzi wyłącznie z bloków zgłoszonych przez ekstraktor, a tekst bez struktury staje się akapitami, z escapowaniem składni. Poniższa reguła jest nadal oceniana deterministycznie i zapisywana w manifeście jako informacja, czy dokument ma wyraźną strukturę, ale nie decyduje już o powstaniu pliku. Dokument ma wyraźną strukturę, gdy spełnia co najmniej dwa z poniższych warunków:
 
 1. Zawiera co najmniej trzy nagłówki tworzące rzeczywistą hierarchię co najmniej dwupoziomową.
 2. Zawiera co najmniej dwie listy, z których przynajmniej jedna ma co najmniej trzy elementy.
 3. Zawiera co najmniej jedną tabelę, którą da się zapisać bez utraty znaczenia.
 4. Zawiera bloki kodu lub zapis techniczny, w którym formatowanie niesie znaczenie.
 
-Dodatkowy warunek konieczny: ekstraktor musi zgłosić poziom pewności struktury co najmniej średni. Jeżeli struktura została zgadnięta heurystycznie z płaskiego tekstu, MD nie powstaje.
+Dodatkowy warunek konieczny wyraźnej struktury: ekstraktor musi zgłosić poziom pewności struktury co najmniej średni. Struktury zgadniętej heurystycznie z płaskiego tekstu nigdy nie dodawaj do pliku MD: ten warunek rozstrzyga o dodawaniu struktury, a nie o powstaniu pliku.
 
-Decyzję o wygenerowaniu MD zapisuj w manifeście wraz z uzasadnieniem, czyli listą spełnionych warunków.
+Wynik tej oceny (`decyzja_md`) zapisuj w manifeście wraz z uzasadnieniem, czyli listą spełnionych warunków.
 
 ## 9. Limity Notebooka
 

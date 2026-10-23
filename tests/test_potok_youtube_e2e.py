@@ -49,6 +49,7 @@ def _zegar_krokowy() -> Callable[[], datetime]:
 
 def _konfiguracja(tmp_path: Path, **nadpisania: object) -> Konfiguracja:
     domyslne: dict[str, object] = {
+        "formaty_wynikowe": ("txt",),
         "katalog_wynikow": tmp_path / "wyniki",
         "sciezka_cache": tmp_path / "cache.sqlite3",
         "uzywaj_cache": False,

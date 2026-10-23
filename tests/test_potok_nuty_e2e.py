@@ -39,6 +39,7 @@ def _zegar_krokowy() -> Callable[[], datetime]:
 
 def _bez_deduplikacji(tmp_path: Path, **reszta: object) -> Konfiguracja:
     return Konfiguracja(
+        formaty_wynikowe=("txt",),
         katalog_wynikow=tmp_path,
         deduplikacja_hash_wlaczona=False,
         deduplikacja_kosmetyczna_wlaczona=False,

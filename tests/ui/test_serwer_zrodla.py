@@ -89,7 +89,9 @@ class _Klient:
 
 @pytest.fixture
 def srodowisko(tmp_path: Path) -> Iterator[tuple[_Klient, RejestrZadan, Konfiguracja]]:
-    konfiguracja = Konfiguracja(katalog_wynikow=tmp_path / "wyniki", port_nasluchu=0)
+    konfiguracja = Konfiguracja(
+        katalog_wynikow=tmp_path / "wyniki", port_nasluchu=0, formaty_wynikowe=("txt",)
+    )
     rejestr = RejestrZadan()
     instancja = zbuduj_serwer(konfiguracja, rejestr)
     watek = threading.Thread(target=instancja.serve_forever, daemon=True)

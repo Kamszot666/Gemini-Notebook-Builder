@@ -177,10 +177,54 @@ struktura dobrze zbudowanego artykułu trafia do pliku MD.
 Trafilatura jest wywoływana dwa razy. Tryb precyzji rozstrzyga tylko, czy
 strona ma artykuł, a treść pochodzi z trybu domyślnego. Powód: na dużych
 portalach tryb precyzji odcinał prawie cały artykuł (z przepisu 61 słów zamiast
-417, z komentarza 80 zamiast 1156). Skutek uboczny trybu domyślnego: w tekście
-zostaje drobny szum, na przykład podpisy zdjęć, przyciski udostępniania
-i powtórzony tytuł. Reklamy i bloki „Czytaj także” mogą więc trafić do wyniku;
-ich filtr jest świadomie odłożony (zagadnienie otwarte 13 w CLAUDE.md).
+417, z komentarza 80 zamiast 1156). Odnośnik, który trafilatura zwraca luzem
+obok akapitu, w środku zdania, jest wsuwany do tego akapitu, żeby nie ginął
+tekst odnośnika ani reszta zdania za nim.
+
+#### Filtr elementów strony
+
+Tryb domyślny zachowuje całą treść, ale razem z nią elementy strony. Dlatego po
+trafilaturze działa deterministyczny filtr (`gnb/extractors/filtr_elementow_strony.py`),
+który usuwa:
+
+1. Wiersze „REKLAMA” (bez względu na wielkość liter).
+2. Wiersz „WIDEO” razem z następnym krótkim wierszem, który jest tytułem filmu.
+3. Przyciski udostępniania („Udostępnij na Facebooku”, „Kopiuj link”).
+4. Podpisy zdjęć z nazwą agencji (na przykład „… / East News”) oraz wiersze
+   „Źródło zdjęć:”, „Źródło wideo:”, „Źródło artykułu:”.
+5. Blok newslettera od wiersza zaczynającego się od „Newsletter” do przycisku
+   „Zapisz mnie”, razem z krótkim nagłówkiem wielkimi literami tuż przed nim.
+6. Notki o autorze (nazwisko z metadanych strony z rolą, wiersz „Dziennikarz …”),
+   biogram stojący bezpośrednio po takiej notce, licznik komentarzy.
+7. Bloki „Czytaj także”, „Zobacz także”, „Polecane” razem z następującymi po nich
+   akapitami złożonymi głównie z odnośników, oraz serie co najmniej trzech takich
+   akapitów bez nagłówka.
+
+Zasady bezpieczeństwa filtra:
+
+1. Żaden fragment nie znika po cichu. Każdy usunięty fragment trafia z powodem do
+   pliku `IDENTYFIKATOR.usuniete-fragmenty.txt` w katalogu wyników pośrednich, a liczba
+   usuniętych fragmentów do manifestu (metadane źródła, klucz
+   `liczba_usunietych_fragmentow`).
+2. Gdy filtr usunąłby więcej niż 35 procent słów strony, nie usuwa nic i zgłasza
+   ostrzeżenie, które dociera do logu, manifestu i raportu, bo tak duży odsetek
+   oznacza błąd filtra, a nie reklamy. Plik z usuniętymi fragmentami wymienia wtedy,
+   co filtr chciał usunąć.
+3. Akapit rozcięty usuniętym blokiem jest łączony z następnym tylko wtedy, gdy
+   pierwszy nie kończy się znakiem końca zdania, a drugi zaczyna się od małej litery.
+4. Adresy z usuniętych bloków nie trafiają do wykazu odnośników.
+5. Pojedynczy akapit będący w całości odnośnikiem zostaje: bywa zdaniem artykułu.
+
+Filtr nie usuwa wszystkiego: powtórzony tytuł na początku artykułu i drobne wiersze,
+których wzorców jeszcze nie ma na liście, zostają. Listę zwrotów rozszerza się na
+początku modułu. Filtr wyłącza ustawienie `filtr_elementow_strony` w zakładce
+„Pobieranie stron”.
+
+Nagłówki w pliku MD: przeskok poziomu o więcej niż jeden (na przykład po poziomie
+trzecim od razu piąty) jest zamieniany na kolejny poziom, z zachowaniem względnego
+położenia, żeby nawigacja klawiszem poziomu nagłówka nie gubiła miejsca. W pliku
+grupy sekcja „Odnośniki wymienione w artykule” ma zawsze trzeci poziom, czyli o
+jeden pod tytułem źródła.
 
 Gdy trafilatura nic nie zwróci, wchodzi mechanizm zapasowy oparty na `lxml`,
 który odzyskuje same akapity. Zgłasza on niski poziom pewności struktury, więc

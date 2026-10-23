@@ -36,15 +36,15 @@ def test_lista_klawiszy_ma_f1_do_f24_litery_i_cyfry_bez_klawiszy_stanu() -> None
 
 @pytest.mark.parametrize(
     ("napis", "kod"),
-    [("Control+F1", 0x70), ("Control+F12", 0x7B), ("Control+F24", 0x87)],
+    [("Control+Shift+F1", 0x70), ("Control+Shift+F12", 0x7B), ("Control+Shift+F24", 0x87)],
 )
 def test_kody_klawiszy_funkcyjnych(napis: str, kod: int) -> None:
     assert rozbierz_kombinacje(napis).kod_klawisza_win32() == kod
 
 
 def test_kody_liter_i_cyfr_to_kody_ascii() -> None:
-    assert rozbierz_kombinacje("Control+Alt+Q").kod_klawisza_win32() == ord("Q")
-    assert rozbierz_kombinacje("Control+Alt+7").kod_klawisza_win32() == ord("7")
+    assert rozbierz_kombinacje("Control+Shift+Q").kod_klawisza_win32() == ord("Q")
+    assert rozbierz_kombinacje("Control+Shift+7").kod_klawisza_win32() == ord("7")
 
 
 def test_rozbior_ignoruje_wielkosc_liter_odstepy_i_kolejnosc_i_normalizuje() -> None:
@@ -67,12 +67,12 @@ def test_napis_i_slowa_podaja_modyfikatory_w_stalej_kolejnosci() -> None:
     [
         "Control+Shift+F12",
         "Control+Alt+F11",
-        "Alt+F1",
-        "Shift+F5",
-        "Windows+F1",
         "Control+Shift+Q",
-        "Control+Alt+9",
+        "Alt+Shift+Q",
+        "Windows+F1",
         "Windows+Q",
+        "Shift+Windows+F5",
+        "Control+Alt+Shift+F9",
     ],
 )
 def test_dozwolone_kombinacje_przechodza(napis: str) -> None:
@@ -84,11 +84,18 @@ def test_dozwolone_kombinacje_przechodza(napis: str) -> None:
     [
         ("F12", "co najmniej jeden klawisz modyfikujący"),
         ("Q", "co najmniej jeden klawisz modyfikujący"),
-        ("Shift+Q", "Sam Shift"),
-        ("Shift+5", "Sam Shift"),
+        # Reguła pierwsza: pojedynczy modyfikator nie wystarcza nawet dla F1 do F24.
+        ("Alt+F4", "co najmniej dwóch modyfikatorów"),
+        ("Shift+F10", "co najmniej dwóch modyfikatorów"),
+        ("Control+F4", "co najmniej dwóch modyfikatorów"),
+        ("Shift+Q", "co najmniej dwóch modyfikatorów"),
         ("Control+C", "co najmniej dwóch modyfikatorów"),
         ("Alt+X", "co najmniej dwóch modyfikatorów"),
         ("Control+7", "co najmniej dwóch modyfikatorów"),
+        # Reguła druga: Control plus Alt z literą albo cyfrą to AltGr.
+        ("Control+Alt+Q", "prawy Alt"),
+        ("Control+Alt+9", "prawy Alt"),
+        ("Control+Alt+Shift+A", "prawy Alt"),
     ],
 )
 def test_niedozwolone_kombinacje_dostaja_polski_komunikat(
@@ -98,6 +105,11 @@ def test_niedozwolone_kombinacje_dostaja_polski_komunikat(
         rozbierz_kombinacje(napis)
 
     assert fragment_komunikatu in blad.value.komunikat
+
+
+def test_kombinacja_zapisana_wczesniej_przez_uzytkownika_jest_nadal_dozwolona() -> None:
+    """Control plus Alt plus F11 ma dwa modyfikatory i klawisz funkcyjny, więc przechodzi."""
+    assert rozbierz_kombinacje("Control+Alt+F11").jako_napis() == "Control+Alt+F11"
 
 
 @pytest.mark.parametrize(

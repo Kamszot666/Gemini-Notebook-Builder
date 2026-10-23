@@ -1001,6 +1001,22 @@ class _Handler(BaseHTTPRequestHandler):
             return "Obecnie żadna kombinacja skrótu nie jest zarejestrowana."
         return f"Działa kombinacja: {rozbierz_kombinacje(dziala).jako_slowa()}."
 
+    def _komunikat_odrzuconej_kombinacji(self, pole: str, komunikat: str) -> str:
+        """Dopisuje do błędu pola kombinacji, że nic nie zapisano i co nadal działa.
+
+        Strona po odrzuceniu pokazuje wpisane wartości, żeby dało się je poprawić,
+        więc bez tego zdania wyglądałaby jak zapisana. Błędy innych pól bez zmian.
+        """
+        if pole != NAZWA_POLA_KOMBINACJI:
+            return komunikat
+        obsluga = self._serwer.obsluga_skrotu
+        dziala = obsluga.kombinacja_dzialajaca() if obsluga is not None else None
+        if dziala is None:
+            nadal = "Obecnie żadna kombinacja nie jest zarejestrowana."
+        else:
+            nadal = f"Nadal działa kombinacja: {rozbierz_kombinacje(dziala).jako_slowa()}."
+        return f"Nie zapisano kombinacji. {komunikat} {nadal}"
+
     def _nowa_kombinacja_skrotu(
         self,
         zakladka: Zakladka,
@@ -1055,7 +1071,13 @@ class _Handler(BaseHTTPRequestHandler):
             if bledy_typu:
                 self._pokaz_ustawienia(
                     kod=400,
-                    bledy=[BladPola(blad.pole, blad.komunikat) for blad in bledy_typu],
+                    bledy=[
+                        BladPola(
+                            blad.pole,
+                            self._komunikat_odrzuconej_kombinacji(blad.pole, blad.komunikat),
+                        )
+                        for blad in bledy_typu
+                    ],
                     wpisane=formularz,
                     zakladka_z_bledami=zakladka.identyfikator,
                 )

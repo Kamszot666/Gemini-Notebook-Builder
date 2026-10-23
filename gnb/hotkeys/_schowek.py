@@ -105,6 +105,12 @@ if sys.platform == "win32":
     _VK_SHIFT = 0x10
     _VK_CONTROL = 0x11
     _VK_ALT = 0x12
+    _VK_LEWY_SHIFT = 0xA0
+    _VK_PRAWY_SHIFT = 0xA1
+    _VK_LEWY_CONTROL = 0xA2
+    _VK_PRAWY_CONTROL = 0xA3
+    _VK_LEWY_ALT = 0xA4
+    _VK_PRAWY_ALT = 0xA5
     _VK_LEWY_WINDOWS = 0x5B
     _VK_PRAWY_WINDOWS = 0x5C
     _VK_C = 0x43
@@ -114,6 +120,10 @@ if sys.platform == "win32":
 
     _LIMIT_ROZMIARU_MIGAWKI_BAJTOW = 64 * 1024 * 1024
     _ODSTEP_SPRAWDZANIA_S = 0.015
+    # Klawisze muszą pozostać puszczone tak długo bez przerwy. Prawy Alt (AltGr
+    # na klawiaturze polskiej) wysyła do systemu sztuczny lewy Control i prawy
+    # Alt, a sztuczny Control bywa puszczany chwilę po fizycznym klawiszu.
+    _OKNO_STABILNEGO_PUSZCZENIA_S = 0.08
     _PROBY_OTWARCIA_SCHOWKA = 10
     _PRZERWA_MIEDZY_PROBAMI_S = 0.02
 
@@ -283,30 +293,45 @@ if sys.platform == "win32":
                 _kernel32.GlobalUnlock(uchwyt)
 
     def klawisze_kombinacji(kombinacja: KombinacjaSkrotu) -> tuple[int, ...]:
-        """Kody klawiszy wirtualnych, które trzeba puścić po naciśnięciu tej kombinacji."""
+        """Kody klawiszy wirtualnych, które trzeba puścić po naciśnięciu tej kombinacji.
+
+        Dla Control i Alt sprawdzane są kody ogólne oraz lewy i prawy, bo prawy
+        Alt wysyła także sztuczny lewy Control. Dla Windows sprawdzane są oba
+        klawisze Windows.
+        """
         klawisze: list[int] = []
-        if kombinacja.control:
-            klawisze.append(_VK_CONTROL)
-        if kombinacja.alt:
-            klawisze.append(_VK_ALT)
+        if kombinacja.control or kombinacja.alt:
+            klawisze.extend((_VK_CONTROL, _VK_LEWY_CONTROL, _VK_PRAWY_CONTROL))
+            klawisze.extend((_VK_ALT, _VK_LEWY_ALT, _VK_PRAWY_ALT))
         if kombinacja.shift:
-            klawisze.append(_VK_SHIFT)
+            klawisze.extend((_VK_SHIFT, _VK_LEWY_SHIFT, _VK_PRAWY_SHIFT))
         if kombinacja.windows:
             klawisze.extend((_VK_LEWY_WINDOWS, _VK_PRAWY_WINDOWS))
         klawisze.append(kombinacja.kod_klawisza_win32())
         return tuple(klawisze)
 
     def poczekaj_na_puszczenie_klawiszy(kombinacja: KombinacjaSkrotu, limit_s: float) -> bool:
-        """Czeka, aż modyfikatory i klawisz tej kombinacji zostaną puszczone.
+        """Czeka, aż klawisze tej kombinacji zostaną puszczone i pozostaną puszczone.
 
         Zwraca fałsz po limicie. Sprawdzane są wyłącznie klawisze wybranej
-        kombinacji, a nie stałe Control, Shift i F12.
+        kombinacji (z lewymi i prawymi odpowiednikami modyfikatorów), a nie
+        stałe Control, Shift i F12. Puszczenie musi trwać nieprzerwanie przez
+        ``_OKNO_STABILNEGO_PUSZCZENIA_S``, żeby chwilowa luka między
+        fizycznym klawiszem a jego sztucznym odpowiednikiem nie wpuściła
+        Control plus C w trwającą kombinację.
         """
         klawisze = klawisze_kombinacji(kombinacja)
         koniec = time.monotonic() + limit_s
+        puszczone_od: float | None = None
         while time.monotonic() < koniec:
-            if not any(_user32.GetAsyncKeyState(klawisz) & 0x8000 for klawisz in klawisze):
-                return True
+            if any(_user32.GetAsyncKeyState(klawisz) & 0x8000 for klawisz in klawisze):
+                puszczone_od = None
+            else:
+                teraz = time.monotonic()
+                if puszczone_od is None:
+                    puszczone_od = teraz
+                if teraz - puszczone_od >= _OKNO_STABILNEGO_PUSZCZENIA_S:
+                    return True
             time.sleep(_ODSTEP_SPRAWDZANIA_S)
         return False
 

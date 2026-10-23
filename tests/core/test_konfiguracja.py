@@ -122,7 +122,10 @@ def test_zmienna_srodowiskowa_kombinacji_skrotu_ma_pierwszenstwo_przed_plikiem(
     assert konfiguracja.globalny_skrot_kombinacja == "Windows+F5"
 
 
-@pytest.mark.parametrize("napis", ["F12", "Shift+Q", "Control+C", "Control+Caps Lock", "Super+F1"])
+@pytest.mark.parametrize(
+    "napis",
+    ["F12", "Shift+Q", "Control+C", "Alt+F4", "Control+Alt+Q", "Control+Caps Lock", "Super+F1"],
+)
 def test_niedozwolona_kombinacja_skrotu_w_pliku_daje_blad_trwaly_po_polsku(
     tmp_path: Path, napis: str
 ) -> None:

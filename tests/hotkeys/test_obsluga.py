@@ -628,8 +628,9 @@ def test_odmowa_zajetej_kombinacji_podaje_powod_i_kombinacje_ktora_nadal_dziala(
 
     assert wynik.udalo_sie is False
     assert wynik.dziala_teraz == "Control+Shift+F12"
+    assert wynik.komunikat.startswith("Nie zapisano kombinacji.")
     assert "zajęta przez inny program" in wynik.komunikat
-    assert "Nadal działa poprzednia kombinacja: Control plus Shift plus F12." in wynik.komunikat
+    assert "Nadal działa kombinacja: Control plus Shift plus F12." in wynik.komunikat
 
 
 def test_odmowa_gdy_zadna_kombinacja_nie_jest_zarejestrowana_mowi_o_tym(

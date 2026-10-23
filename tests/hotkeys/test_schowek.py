@@ -270,7 +270,15 @@ def test_kopiowanie_jest_wysylane_dopiero_po_puszczeniu_klawiszy(
 def test_czekanie_obejmuje_modyfikatory_i_klawisz_wybranej_kombinacji() -> None:
     kombinacja = rozbierz_kombinacje("Control+Alt+F11")
 
-    assert set(_schowek.klawisze_kombinacji(kombinacja)) == {_VK_CONTROL, _VK_ALT, _VK_F11}
+    assert set(_schowek.klawisze_kombinacji(kombinacja)) == {
+        _VK_CONTROL,
+        _VK_ALT,
+        _VK_F11,
+        0xA2,
+        0xA3,
+        0xA4,
+        0xA5,
+    }
     windows = rozbierz_kombinacje("Windows+F5")
     assert set(_schowek.klawisze_kombinacji(windows)) == {0x5B, 0x5C, 0x74}
 
@@ -287,9 +295,48 @@ def test_czekanie_ignoruje_klawisze_spoza_kombinacji_i_czeka_na_jej_klawisze(
 
     monkeypatch.setattr(_schowek._user32, "GetAsyncKeyState", falszywy_stan_klawisza)
 
-    assert _PRAWDZIWE_CZEKANIE(kombinacja, 0.05) is True
+    assert _PRAWDZIWE_CZEKANIE(kombinacja, 0.5) is True
     wcisniete.add(_VK_F11)
     assert _PRAWDZIWE_CZEKANIE(kombinacja, 0.05) is False
     wcisniete.discard(_VK_F11)
     wcisniete.add(_VK_ALT)
     assert _PRAWDZIWE_CZEKANIE(kombinacja, 0.05) is False
+
+
+def test_czekanie_obejmuje_sztuczny_lewy_control_prawego_alt_i_luke_miedzy_klawiszami(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Prawy Alt zostawia wciśnięty lewy Control, więc samo puszczenie Alt nie wystarcza."""
+    kombinacja = rozbierz_kombinacje("Control+Alt+F11")
+    wcisniete: set[int] = {0xA2}  # sam sztuczny lewy Control
+
+    def falszywy_stan_klawisza(klawisz: int) -> int:
+        return 0x8000 if klawisz in wcisniete else 0
+
+    monkeypatch.setattr(_schowek._user32, "GetAsyncKeyState", falszywy_stan_klawisza)
+
+    assert _PRAWDZIWE_CZEKANIE(kombinacja, 0.15) is False
+    wcisniete.clear()
+    assert _PRAWDZIWE_CZEKANIE(kombinacja, 0.5) is True
+
+
+def test_czekanie_wymaga_nieprzerwanego_puszczenia_przez_okno_stabilizacji(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Klawisz wciśnięty znowu w trakcie okna zeruje odliczanie."""
+    kombinacja = rozbierz_kombinacje("Control+Alt+F11")
+    odczyty = {"liczba": 0}
+
+    def falszywy_stan_klawisza(klawisz: int) -> int:
+        if klawisz != 0xA2:
+            return 0
+        odczyty["liczba"] += 1
+        # Lewy Control wraca na chwilę tuż po pierwszym puszczeniu.
+        return 0x8000 if odczyty["liczba"] in (1, 3, 4) else 0
+
+    monkeypatch.setattr(_schowek._user32, "GetAsyncKeyState", falszywy_stan_klawisza)
+    start = _schowek.time.monotonic()
+
+    assert _PRAWDZIWE_CZEKANIE(kombinacja, 2.0) is True
+    # Bez zerowania odliczania wynik przyszedłby po około 0,1 s od początku.
+    assert _schowek.time.monotonic() - start >= 0.13

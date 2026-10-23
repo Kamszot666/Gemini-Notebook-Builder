@@ -952,8 +952,8 @@ class _FalszywaObslugaSkrotu:
         if napis in self.odrzucane:
             return WynikZmianySkrotu(
                 False,
-                f"Nie zmieniono skrótu na {kombinacja.jako_slowa()}. Kombinacja jest już zajęta "
-                "przez inny program. Nadal działa poprzednia kombinacja: "
+                f"Nie zapisano kombinacji. Kombinacja {kombinacja.jako_slowa()} jest już zajęta "
+                "przez inny program. Nadal działa kombinacja: "
                 f"{rozbierz_kombinacje(self.dziala).jako_slowa()}.",
                 self.dziala,
             )
@@ -986,7 +986,8 @@ def test_odczyt_zakladki_skrotu_sklada_kombinacje_z_pol_wyboru_i_listy() -> None
 @pytest.mark.parametrize(
     ("napis", "fragment"),
     [
-        ("Shift+Q", "Sam Shift"),
+        ("Shift+Q", "co najmniej dwóch modyfikatorów"),
+        ("Control+Alt+Q", "prawy Alt"),
         ("Control+C", "co najmniej dwóch modyfikatorów"),
     ],
 )
@@ -1074,8 +1075,9 @@ def test_odmowa_windows_zostawia_stara_kombinacje_i_nie_zapisuje_pliku(
     assert odpowiedz.status == 400
     assert plik.read_text(encoding="utf-8") == przed
     assert "globalny_skrot_kombinacja" not in przed
-    assert "Nie zmieniono skrótu na Control plus Alt plus F11" in strona
-    assert "Nadal działa poprzednia kombinacja: Control plus Shift plus F12." in strona
+    assert "Nie zapisano kombinacji." in strona
+    assert "Control plus Alt plus F11 jest już zajęta" in strona
+    assert "Nadal działa kombinacja: Control plus Shift plus F12." in strona
     assert 'href="#pole-globalny_skrot_kombinacja"' in strona
     assert falszywa.dziala == "Control+Shift+F12"
     # Strona pokazuje zapisaną kombinację, a nie odrzuconą.
@@ -1097,6 +1099,9 @@ def test_niedozwolona_kombinacja_nie_dociera_do_windows_ani_do_pliku(
     assert falszywa.proby == []
     assert plik.read_text(encoding="utf-8") == przed
     assert "co najmniej dwóch modyfikatorów" in strona
+    # Strona pokazuje wpisane wartości, więc komunikat musi mówić, że nic nie zapisano.
+    assert "Nie zapisano kombinacji." in strona
+    assert "Nadal działa kombinacja: Control plus Shift plus F12." in strona
 
 
 def test_przywrocenie_domyslnej_rejestruje_domyslna_kombinacje_i_usuwa_klucz(
@@ -1129,7 +1134,7 @@ def test_odmowa_przy_przywracaniu_domyslnej_zostawia_plik_i_dzialajaca_kombinacj
     assert odpowiedz.status == 400
     assert plik.read_text(encoding="utf-8") == przed
     assert falszywa.dziala == "Control+Alt+F11"
-    assert "Nadal działa poprzednia kombinacja: Control plus Alt plus F11." in strona
+    assert "Nadal działa kombinacja: Control plus Alt plus F11." in strona
 
 
 def test_zapis_bez_zmiany_kombinacji_nie_dotyka_windows(

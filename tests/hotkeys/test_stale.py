@@ -31,7 +31,7 @@ def test_domyslna_kombinacja_zawiera_control_i_shift() -> None:
 
 
 @pytest.mark.parametrize(
-    "napis", ["Control+Shift+F12", "Control+Alt+F11", "Windows+F5", "Alt+Shift+Q", "Shift+F1"]
+    "napis", ["Control+Shift+F12", "Control+Alt+F11", "Windows+F5", "Alt+Shift+Q", "Shift+Alt+F1"]
 )
 def test_kazda_kombinacja_ma_mod_norepeat(napis: str) -> None:
     """Bez tej flagi przytrzymanie skrótu dodałoby to samo źródło wiele razy."""

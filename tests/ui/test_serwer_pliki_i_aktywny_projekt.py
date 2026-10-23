@@ -22,6 +22,7 @@ import pytest
 from gnb.core.konfiguracja import Konfiguracja
 from gnb.persistence.projekt import UkladProjektu, ustal_uklad
 from gnb.ui import serwer
+from gnb.ui.podglad_markdown import NAGLOWEK_POLITYKI_PODGLADU
 from gnb.ui.serwer import zbuduj_serwer
 from gnb.ui.zadania import RejestrZadan
 
@@ -426,7 +427,7 @@ def test_przycisk_przy_nowym_projekcie_nic_nie_zmienia_i_mowi_dlaczego(
 
     assert odpowiedz.status == 400
     assert _aktywny(instancja) == _INNY
-    assert "Wybierz istniejący projekt, żeby ustawić go jako aktywny." in strona
+    assert "Najpierw wybierz istniejący projekt z listy Projekt." in strona
 
 
 def test_przycisk_aktywnego_projektu_wymaga_tokenu_csrf(
@@ -480,3 +481,174 @@ def test_postep_po_zakonczeniu_mowi_o_przejsciu_do_wynikow(
 
     assert odpowiedz.status == 200
     assert json.loads(tresc)["komunikat"] == "Przetwarzanie zakończone. Przechodzę do wyników."
+
+
+# --- podgląd pliku MD jako strona -------------------------------------------------
+
+_PLIK_MD = (
+    "# Tytuł grupy\n\n"
+    "## Sekcja pierwsza\n\nAkapit z [odnośnikiem](https://a.example/b).\n\n"
+    "- punkt\n\n1. numer\n\n> cytat\n\n```\nkod\n```\n\n"
+    "| Kolumna | Druga |\n| --- | --- |\n| 1 | 2 |\n"
+)
+
+
+def _adres_strony(plik: Path, nazwa: str = _NAZWA) -> str:
+    return f"{_adres('strona', nazwa)}/{quote(plik.name, safe='')}"
+
+
+def test_podglad_jako_strona_zamienia_plik_md_na_html_z_nagludkami(
+    srodowisko: tuple[_Klient, RejestrZadan, Konfiguracja, ThreadingHTTPServer],
+) -> None:
+    klient, rejestr, konfiguracja, _ = srodowisko
+    _utworz_projekt(klient, rejestr)
+    plik = _plik_wynikowy(konfiguracja)
+    plik.write_text(_PLIK_MD, encoding="utf-8")
+
+    odpowiedz, strona = klient.get(_adres_strony(plik))
+
+    assert odpowiedz.status == 200
+    assert odpowiedz.getheader("Content-Type") == "text/html; charset=utf-8"
+    assert f"<title>Podgląd pliku {plik.name}</title>" in strona
+    assert "<h1>Tytuł grupy</h1>" in strona
+    assert "<h2>Sekcja pierwsza</h2>" in strona
+    assert "<ul>" in strona and "<ol>" in strona
+    assert "<th>Kolumna</th>" in strona
+    assert "<blockquote>" in strona
+    assert "<pre><code>kod" in strona
+    assert 'rel="noopener noreferrer"' in strona
+    assert f'<a href="{_adres("").rstrip("/")}">Wróć do projektu</a>' in strona
+
+
+def test_strona_podgladu_ma_naglowki_bezpieczenstwa_i_nie_ma_skryptu(
+    srodowisko: tuple[_Klient, RejestrZadan, Konfiguracja, ThreadingHTTPServer],
+) -> None:
+    klient, rejestr, konfiguracja, _ = srodowisko
+    _utworz_projekt(klient, rejestr)
+    plik = _plik_wynikowy(konfiguracja)
+    plik.write_text(_PLIK_MD, encoding="utf-8")
+
+    odpowiedz, strona = klient.get(_adres_strony(plik))
+
+    assert odpowiedz.getheader("Content-Security-Policy") == NAGLOWEK_POLITYKI_PODGLADU
+    assert odpowiedz.getheader("X-Content-Type-Options") == "nosniff"
+    assert odpowiedz.getheader("Referrer-Policy") == "no-referrer"
+    assert odpowiedz.getheader("X-Frame-Options") == "DENY"
+    assert "<script" not in strona
+
+
+@pytest.mark.parametrize(
+    "tresc",
+    [
+        '# Nagłówek\n\n<script>alert("x")</script>\n',
+        "# Nagłówek\n\n<img src=x onerror=alert(1)>\n",
+        "# Nagłówek\n\n[klik](javascript:alert(1))\n",
+        "# Nagłówek <script>alert(1)</script>\n",
+        "| a | b |\n| --- | --- |\n| <img src=x onerror=alert(1)> | ok |\n",
+    ],
+)
+def test_proba_wstrzykniecia_w_pliku_md_konczy_sie_tekstem_a_nie_znacznikiem(
+    srodowisko: tuple[_Klient, RejestrZadan, Konfiguracja, ThreadingHTTPServer],
+    tresc: str,
+) -> None:
+    klient, rejestr, konfiguracja, _ = srodowisko
+    _utworz_projekt(klient, rejestr)
+    plik = _plik_wynikowy(konfiguracja)
+    plik.write_text(tresc, encoding="utf-8")
+
+    _, strona = klient.get(_adres_strony(plik))
+
+    assert "<script" not in strona
+    assert "<img" not in strona
+    assert "onerror=alert(1)>" not in strona
+    assert 'href="javascript' not in strona
+
+
+@pytest.mark.parametrize(
+    "fragment",
+    ["checkpoint.json", "..%2Fcheckpoint.json", "..%5Ccheckpoint.json", "nie_ma.md", "%2e%2e"],
+)
+def test_podglad_jako_strona_odrzuca_nazwy_spoza_wykazu(
+    srodowisko: tuple[_Klient, RejestrZadan, Konfiguracja, ThreadingHTTPServer],
+    fragment: str,
+) -> None:
+    klient, rejestr, _konfiguracja, _ = srodowisko
+    _utworz_projekt(klient, rejestr)
+
+    odpowiedz, tresc = klient.get_bajty(f"{_adres('strona')}/{fragment}")
+
+    assert odpowiedz.status == 404
+    assert b"proj-" not in tresc
+
+
+def test_podglad_jako_strona_nie_dziala_dla_pliku_innego_projektu(
+    srodowisko: tuple[_Klient, RejestrZadan, Konfiguracja, ThreadingHTTPServer],
+) -> None:
+    klient, rejestr, konfiguracja, _ = srodowisko
+    _utworz_projekt(klient, rejestr)
+    _utworz_projekt(klient, rejestr, _INNY, "Inna treść drugiego projektu o ubezpieczeniach.")
+    (plik_innego,) = _uklad(konfiguracja, _INNY).pliki_wynikowe.iterdir()
+
+    odpowiedz, _ = klient.get(_adres_strony(plik_innego, _NAZWA))
+
+    assert odpowiedz.status == 404
+
+
+def test_podglad_jako_strona_w_nieistniejacym_projekcie_daje_404(
+    srodowisko: tuple[_Klient, RejestrZadan, Konfiguracja, ThreadingHTTPServer],
+) -> None:
+    klient, *_ = srodowisko
+
+    odpowiedz, _ = klient.get(f"{_adres('strona', 'Nie ma takiego')}/plik.md")
+
+    assert odpowiedz.status == 404
+
+
+def test_podglad_jako_strona_odrzuca_plik_txt(
+    srodowisko: tuple[_Klient, RejestrZadan, Konfiguracja, ThreadingHTTPServer],
+) -> None:
+    klient, rejestr, konfiguracja, _ = srodowisko
+    _utworz_projekt(klient, rejestr)
+    plik_md = _plik_wynikowy(konfiguracja)
+    plik_txt = plik_md.with_suffix(".txt")
+    plik_txt.write_text("Zwykły tekst.", encoding="utf-8")
+    checkpoint = _uklad(konfiguracja).checkpoint
+    checkpoint.write_text(
+        checkpoint.read_text(encoding="utf-8").replace(plik_md.name, plik_txt.name),
+        encoding="utf-8",
+    )
+
+    odpowiedz, _ = klient.get(_adres_strony(plik_txt))
+
+    assert odpowiedz.status == 404
+
+
+def test_zbyt_duzy_plik_nie_jest_zamieniany_na_strone(
+    srodowisko: tuple[_Klient, RejestrZadan, Konfiguracja, ThreadingHTTPServer],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    klient, rejestr, konfiguracja, _ = srodowisko
+    _utworz_projekt(klient, rejestr)
+    plik = _plik_wynikowy(konfiguracja)
+    monkeypatch.setattr(serwer, "MAKSYMALNY_ROZMIAR_PODGLADU_STRONY", 10)
+
+    odpowiedz, tresc = klient.get(_adres_strony(plik))
+
+    assert odpowiedz.status == 413
+    assert "podglądu jako tekst" in tresc
+
+
+def test_strona_projektu_ma_przy_pliku_md_trzy_sposoby_otwarcia(
+    srodowisko: tuple[_Klient, RejestrZadan, Konfiguracja, ThreadingHTTPServer],
+) -> None:
+    klient, rejestr, konfiguracja, _ = srodowisko
+    _utworz_projekt(klient, rejestr)
+    plik = _plik_wynikowy(konfiguracja)
+
+    _, strona = klient.get(_adres(""))
+
+    assert f"Otwórz plik {plik.name}</button>" in strona
+    assert f"Podgląd pliku {plik.name} jako strona</a>" in strona
+    assert f"Podgląd pliku {plik.name} jako tekst</a>" in strona
+    assert strona.index("jako strona</a>") < strona.index("jako tekst</a>")
+    assert f'href="{_adres("strona")}/{quote(plik.name, safe="")}"' in strona

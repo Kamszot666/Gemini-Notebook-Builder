@@ -1,4 +1,4 @@
-# Rozwiązywanie problemów — stan po etapie siedemnastym, część E, z naprawą odczytu pewności
+# Rozwiązywanie problemów — stan po etapie siedemnastym, część E, z obrotem strony
 
 Ten dokument opisuje problemy, które wystąpiły w rzeczywistej pracy z aplikacją,
 oraz te, które wynikają wprost z jej budowy. Każdy przypadek ma tę samą budowę:
@@ -858,3 +858,26 @@ pojawił się mimo to, sprawdź ustawienie „sciezka_tessdata” i zmienną `TE
 oraz uruchom `python -m gnb.cli diagnostyka`: język `pol` musi być na liście. Strony,
 które w wersji sprzed naprawy dostały zdanie o braku odczytu, przetwórz od nowa: usuń
 je ze strony projektu i dodaj ponownie.
+
+## 39. Większość skanów jest nieczytelna dla OCR, choć to wydruki
+
+Naprawione w naprawie `naprawa-obrot-stron-ocr` po części E etapu siedemnastego.
+
+Objaw. Czytelne wydruki sfotografowane telefonem na statywie dostają w pliku wynikowym
+zdanie „Prawdopodobnie pismo odręczne albo zdjęcie nieczytelne dla OCR. Treść nie
+została odczytana.”, a ich średnia pewność w raporcie wynosi od około 37 do 46. W teście
+użytkownika dotyczyło to siedmiu z dziesięciu kartek, a odrzucony odczyt był
+bełkotem.
+
+Przyczyna. Kartki leżały pod statywem obrócone o 90, 180 albo 270 stopni. Znacznik EXIF
+telefonu tego nie pokazuje, bo telefon stał prosto, a wersja sprzed naprawy prostowała
+tylko przechył do pięciu stopni.
+
+Co zrobić. Zaktualizuj aplikację do wersji z naprawą: przy słabym pierwszym odczycie
+aplikacja wykrywa obrót strony i czyta obróconą stronę. W pliku grupy każdy skan ma
+wiersz „Obrót strony przed odczytem”. Zdjęcia przetworzone w starej wersji mają utrwalone
+zdanie o braku odczytu; przetwórz je od nowa w nowym projekcie. Sprawdź też
+`python -m gnb.cli diagnostyka`: jeśli wiersz danych językowych mówi o braku danych
+orientacji „osd”, dograj plik `osd.traineddata` obok `pol.traineddata` (docs/INSTALL.md,
+sekcja 7). Bez niego aplikacja sprawdza obroty po kolei, tylko dla stron o pewności poniżej
+progu nieczytelności, więc jest wolniejsza, a przy źródle pojawia się ostrzeżenie.

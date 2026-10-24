@@ -353,7 +353,16 @@ def _wiersz_jezykow_ocr() -> str:
             f"Dane językowe OCR: {wykaz}. UWAGA: brak języka „pol”. OCR polskiego "
             "tekstu będzie systematycznie błędny — dograj plik pol.traineddata."
         )
-    return f"Dane językowe OCR: {wykaz}. Polski („pol”) jest zainstalowany."
+    if "osd" not in jezyki:
+        return (
+            f"Dane językowe OCR: {wykaz}. Polski („pol”) jest zainstalowany. UWAGA: brak "
+            "danych orientacji „osd”. Strony obrócone o 90, 180 i 270 stopni będą "
+            "odczytywane wolniej, metodą prób — dograj plik osd.traineddata."
+        )
+    return (
+        f"Dane językowe OCR: {wykaz}. Polski („pol”) jest zainstalowany. "
+        "Dane orientacji („osd”) są zainstalowane."
+    )
 
 
 def _wiersz_globalnego_skrotu() -> str:

@@ -1,4 +1,4 @@
-# Obsługiwane formaty — stan po etapie siedemnastym, część E, z progiem ostrzeżenia
+# Obsługiwane formaty — stan po etapie siedemnastym, część E, z obrotem strony
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
 Etap czternasty dodał formaty biurowe ODT, ODS, ODP, PPTX, XLSX, XLS, RTF, DOC
@@ -664,6 +664,40 @@ sumą pewności słów. Ustawienie „ocr_przygotowanie_obrazu” wyłącza drug
 Przygotowanie nie jest stosowane zawsze, bo pomiar na obrazach syntetycznych
 pokazał, że bywa szkodliwe dla drobnego, ostrego druku — liczby są w
 `docs/CONFIGURATION.md`.
+
+#### Obrót strony przed odczytem
+
+Kartka położona pod statywem bywa obrócona o 90, 180 albo 270 stopni, a znacznik EXIF
+telefonu tego nie pokazuje, bo telefon stał prosto. Przygotowanie obrazu prostuje
+tylko przechył do pięciu stopni, więc odczyt obróconej strony jest bełkotem o
+pewności około 40. Test użytkownika na dziesięciu prawdziwych zdjęciach kartek: siedem
+miało pewność od 37 do 46, a po obrocie strony pewność wzrastała do ponad 90 przy tej
+samej liczbie słów (bez żadnych szczegółów o treści).
+
+Gdy pierwszy odczyt ma średnią pewność poniżej 85 albo żadnego słowa, aplikacja:
+
+1. Pyta Tesseracta o orientację strony (tryb wykrywania orientacji, dane
+   `osd.traineddata`) i dodaje odczyt obróconego obrazu do kandydatów. Obrót jest
+   zgodny z ruchem wskazówek zegara o kąt, który wskazuje Tesseract.
+2. Gdy orientacji nie da się wykryć (za mało tekstu, błąd albo brak pliku
+   `osd.traineddata`), a pierwszy odczyt jest poniżej progu nieczytelności
+   (`ocr_prog_pewnosci`), sprawdza po kolei obroty o 90, 180 i 270 stopni. Brak
+   `osd.traineddata` jest zapisywany jako ostrzeżenie ekstrakcji przy źródle (trafia
+   do logu szczegółowego, manifestu i raportu) i wyświetlany przez `diagnostyka`.
+3. Do obrazu już obróconego stosuje przygotowanie, jeśli jest włączone.
+
+Zostaje kandydat z największą sumą pewności słów, więc błędna podpowiedź orientacji nie
+pogorszy wyniku. Strony, których pierwszy odczyt jest dobry, nie płacą za nic więcej.
+Pomiar na dziesięciu syntetycznych stronach (połowa obrócona): przed zmianą 43,6
+sekundy, najniższa pewność 52,3 i średnia 81,4; po zmianie 55,4 sekundy, najniższa
+pewność 92,7 i średnia 93,9. Tesseract 5.4 sam odczytuje stronę obróconą zgodnie z
+zegarem o 90 stopni, dlatego przy tym kierunku obrót bywa niepotrzebny, a zastosowany
+obrót wynosi wtedy 0.
+
+Zastosowany obrót jest w metadanych źródła (`obrot_strony_stopnie`: 0, 90, 180 albo
+270, stopnie zgodnie z zegarem zastosowane przed odczytem) i w liście metadanych skanu
+w pliku MD grupy: „Obrót strony przed odczytem: 180 stopni”. Pole jest addytywne;
+starszy projekt nie ma tego wiersza.
 
 #### Zdjęcia kartek akt: skany w pliku grupy
 

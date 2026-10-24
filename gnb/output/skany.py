@@ -33,6 +33,7 @@ ETYKIETA_NUMER_SKANU = "Numer skanu w grupie"
 ETYKIETA_OCENA_OCR = "Ocena OCR"
 ETYKIETA_PEWNOSC = "Średnia pewność słów"
 ETYKIETA_DOPISKI = "Dopiski odręczne"
+ETYKIETA_OBROT = "Obrót strony przed odczytem"
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +47,9 @@ class SkanDoPliku:
     ma_dopiski: bool
     tresc_ocr: str
     dopiski: str
+    # Obrót strony zastosowany przed odczytem, w stopniach, jako napis. Pusty
+    # napis (starszy projekt) oznacza brak informacji i brak wiersza w metadanych.
+    obrot_stopni: str = ""
 
 
 def polacz_tresc_skanu(tresc_ocr: str, dopiski: str) -> str:
@@ -77,6 +81,8 @@ def _metadane_skanu(skan: SkanDoPliku) -> str:
         dodatkowe.append(f"{ETYKIETA_OCENA_OCR}: {skan.ocena_ocr}")
     if skan.srednia_pewnosc:
         dodatkowe.append(f"{ETYKIETA_PEWNOSC}: {skan.srednia_pewnosc}")
+    if skan.obrot_stopni:
+        dodatkowe.append(f"{ETYKIETA_OBROT}: {skan.obrot_stopni} stopni")
     dodatkowe.append(f"{ETYKIETA_DOPISKI}: {'tak' if skan.ma_dopiski else 'nie'}")
     wiersze = [wiersz for wiersz in (skan.naglowek_metadanych, *dodatkowe) if wiersz]
     return "\n".join(wiersze)

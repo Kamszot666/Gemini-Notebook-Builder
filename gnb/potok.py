@@ -52,6 +52,7 @@ from gnb.core.model import (
     Zrodlo,
 )
 from gnb.core.nazwy import (
+    klucz_porzadku_naturalnego,
     nazwa_pliku_czesci,
     nazwa_pliku_grupy,
     nazwa_pliku_wynikowego,
@@ -227,7 +228,6 @@ from gnb.output.raport import (
 )
 from gnb.output.skany import (
     SkanDoPliku,
-    klucz_porzadku_naturalnego,
     nazwa_pliku_skanu,
     polacz_tresc_skanu,
     rozdziel_tresc_skanu,

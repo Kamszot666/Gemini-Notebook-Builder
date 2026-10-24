@@ -18,9 +18,10 @@ import unicodedata
 from collections.abc import Sequence
 from pathlib import Path
 
+from gnb.core.nazwy import klucz_porzadku_naturalnego
 from gnb.core.stale import TypWejscia
 from gnb.extractors.plik_obraz import FORMATY_OBRAZOW
-from gnb.ingestion.wejscie import PozycjaWejsciowa
+from gnb.ingestion.wejscie import FORMATY_PLIKOW, PozycjaWejsciowa
 from gnb.normalization.kodowanie import zdekoduj
 
 SUFIKS_NAZWY_DOPISKOW = "_dopiski"
@@ -91,6 +92,33 @@ def odfiltruj_pliki_dopiskow(
         else:
             pozostale.append(pozycja)
     return pozostale, dopiski
+
+
+def pliki_z_folderu(folder: Path) -> tuple[list[Path], list[str]]:
+    """Zwraca pliki folderu do przetworzenia i nazwy plików pominiętych z powodu formatu.
+
+    Folder jest czytany bez podfolderów. Pliki ukryte (nazwa od kropki) są
+    pomijane bez komunikatu, bo to ślady systemu, a nie materiały użytkownika.
+    Pliki w formacie, którego aplikacja nie obsługuje, nie są przetwarzane,
+    ale ich nazwy wracają do wołającego, żeby mógł je wypisać zamiast pominąć
+    po cichu. Kolejność jest naturalna według nazw, więc skan 2 stoi przed 10.
+    Pliki dopisków są zwracane razem ze zdjęciami: potok sam je wyłącza z listy
+    źródeł i dołącza do skanów.
+
+    Zgłasza `NotADirectoryError`, gdy ścieżka nie jest folderem.
+    """
+    if not folder.is_dir():
+        raise NotADirectoryError(str(folder))
+    obslugiwane: list[Path] = []
+    nieobslugiwane: list[str] = []
+    for plik in sorted(folder.iterdir(), key=lambda p: klucz_porzadku_naturalnego(p.name)):
+        if not plik.is_file() or plik.name.startswith("."):
+            continue
+        if plik.suffix.lower().lstrip(".") in FORMATY_PLIKOW:
+            obslugiwane.append(plik)
+        else:
+            nieobslugiwane.append(plik.name)
+    return obslugiwane, nieobslugiwane
 
 
 def dopiski_bez_skanu(pliki_dopiskow: Sequence[Path]) -> list[Path]:

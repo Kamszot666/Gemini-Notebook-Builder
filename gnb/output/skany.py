@@ -14,7 +14,6 @@ Treść skanu i dopisków dostaje gotową.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -69,17 +68,6 @@ def nazwa_pliku_skanu(naglowek_metadanych: str) -> str:
         if separator and etykieta == ETYKIETA_PLIK and wartosc.strip():
             return wartosc.strip()
     return ""
-
-
-def klucz_porzadku_naturalnego(nazwa: str) -> tuple[tuple[int, int | str], ...]:
-    """Klucz sortowania naturalnego nazw plików: kolejność liczb, a nie znaków.
-
-    Dzięki temu skan o numerze 2 stoi przed skanem o numerze 10, a wielkość liter
-    nie ma znaczenia. Każdy człon dostaje znacznik rodzaju, żeby liczby i napisy
-    nigdy nie były porównywane ze sobą bezpośrednio.
-    """
-    czlony = re.split(r"(\d+)", nazwa.lower())
-    return tuple((0, int(czlon)) if czlon.isdigit() else (1, czlon) for czlon in czlony if czlon)
 
 
 def _metadane_skanu(skan: SkanDoPliku) -> str:

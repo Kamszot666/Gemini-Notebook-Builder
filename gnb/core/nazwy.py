@@ -195,3 +195,14 @@ def skrot_z_identyfikatora(identyfikator_zrodla: str) -> str:
     czlon = identyfikator_zrodla.rsplit("-", 1)[-1].strip()
     skrot = (czlon if czlon else identyfikator_zrodla.strip())[:DLUGOSC_SKROTU_W_NAZWIE_PLIKU]
     return skrot if skrot else _NAZWA_AWARYJNA_ZRODLA
+
+
+def klucz_porzadku_naturalnego(nazwa: str) -> tuple[tuple[int, int | str], ...]:
+    """Klucz sortowania naturalnego nazw plików: kolejność liczb, a nie znaków.
+
+    Dzięki temu plik o numerze 2 stoi przed plikiem o numerze 10, a wielkość liter
+    nie ma znaczenia. Każdy człon dostaje znacznik rodzaju, żeby liczby i napisy
+    nigdy nie były porównywane ze sobą bezpośrednio.
+    """
+    czlony = re.split(r"(\d+)", nazwa.lower())
+    return tuple((0, int(czlon)) if czlon.isdigit() else (1, czlon) for czlon in czlony if czlon)

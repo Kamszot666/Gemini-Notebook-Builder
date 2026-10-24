@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from gnb.core.nazwy import klucz_porzadku_naturalnego
 from gnb.output.skany import (
     SkanDoPliku,
-    klucz_porzadku_naturalnego,
     nazwa_pliku_skanu,
     polacz_tresc_skanu,
     rozdziel_tresc_skanu,

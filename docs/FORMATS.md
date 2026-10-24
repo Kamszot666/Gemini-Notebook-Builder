@@ -1,4 +1,4 @@
-# Obsługiwane formaty — stan po etapie siedemnastym, część D
+# Obsługiwane formaty — stan po etapie siedemnastym, część E
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
 Etap czternasty dodał formaty biurowe ODT, ODS, ODP, PPTX, XLSX, XLS, RTF, DOC
@@ -637,7 +637,86 @@ kończy się błędem `FormatNieobslugiwany`, a nie awarią programu.
 
 Pliki obrazów nie są zapisywane jako TXT: cała grupa obrazów trafia do jednego
 tematycznego pliku PDF, opisanego w sekcji „Pakowanie i podział plików
-wynikowych”.
+wynikowych”. Wyjątkiem jest tryb zdjęć kartek, opisany niżej.
+
+#### Odczyt pewności i zdjęcia nieczytelne dla OCR
+
+Od części E etapu siedemnastego OCR obrazu zwraca nie tylko tekst, ale też
+średnią pewność słów według Tesseracta, liczbę od 0 do 100. Odczyt, który jest
+pusty, podejrzany albo ma średnią pewność niższą od progu z ustawienia
+„ocr_prog_pewnosci” (domyślnie 50), dostaje stan „nieczytelne dla OCR”. Tesseract
+nie obsługuje pisma odręcznego, a rozmazany wydruk i pismo odręczne wyglądają
+dla programu tak samo, więc aplikacja nie odróżnia ich na pewno.
+
+Rozpoznany bełkot takiego zdjęcia nie trafia do pliku wynikowego. Zostaje w wynikach
+pośrednich, w pliku o końcówce `ocr_nieczytelny.txt`. W pliku wynikowym stoi
+zamiast niego zdanie: „Prawdopodobnie pismo odręczne albo zdjęcie nieczytelne dla
+OCR. Treść nie została odczytana.” Dzięki temu czytelnik pliku wie, że taka strona
+istnieje. Źródło ma w manifeście pola „ocena_ocr”, „srednia_pewnosc_ocr”
+i „nieczytelne_dla_ocr”. Skany nieczytelne nie biorą udziału w deduplikacji, bo ich
+tekst jest wspólnym zdaniem i każde dwa zostałyby uznane za duplikaty.
+
+Pierwszy odczyt idzie zawsze z surowego zdjęcia. Gdy jego średnia pewność jest niższa
+od 85 albo nic nie rozpoznano, aplikacja robi drugą próbę na zdjęciu przygotowanym
+(odcienie szarości, filtr medianowy, wyrównanie kontrastu, wyprostowanie do pięciu
+stopni, powiększenie do dłuższego boku 2000 punktów) i zostawia odczyt z większą
+sumą pewności słów. Ustawienie „ocr_przygotowanie_obrazu” wyłącza drugą próbę.
+Przygotowanie nie jest stosowane zawsze, bo pomiar na obrazach syntetycznych
+pokazał, że bywa szkodliwe dla drobnego, ostrego druku — liczby są w
+`docs/CONFIGURATION.md`.
+
+#### Zdjęcia kartek akt: skany w pliku grupy
+
+Przy ustawieniu „grupy_obrazow_jako_skany” (domyślnie wyłączone) grupa obrazów daje
+plik MD, a po włączeniu TXT także plik TXT, zamiast pliku PDF z obrazami. Zdjęcia nie
+dostają wtedy opisu obrazu, tylko tekst z OCR. Plik grupy zawiera:
+
+1. Nagłówek pierwszego poziomu z nazwą grupy.
+2. Dla każdego skanu nagłówek drugiego poziomu z dokładną nazwą pliku z rozszerzeniem,
+   na przykład „017.jpg”.
+3. Pod nim listę metadanych: typ źródła, plik, data importu, identyfikator, numer
+   skanu w grupie, ocena OCR, średnia pewność słów jako liczba i informacja
+   „Dopiski odręczne: tak” albo „nie”.
+4. Dalej tekst z OCR jako zwykłe akapity, z escapowaniem składni Markdown.
+5. Jeżeli skan ma dopiski, nagłówek trzeciego poziomu „Dopiski odręczne przepisane
+   przez osobę widzącą” i pod nim ich tekst. Dopiski nigdy nie są mieszane z wynikiem OCR.
+
+Kolejność skanów wyznaczają nazwy plików z sortowaniem naturalnym: „IMG_2” stoi przed
+„IMG_10”, wielkość liter nie ma znaczenia, a kolejność podania wejść nie ma wpływu.
+Numer skanu to pozycja w tej kolejności wśród skanów, które trafiły do pliku;
+duplikat usunięty przez deduplikację nie zajmuje numeru, więc numery zawsze są
+ciągłe, a stałym odniesieniem do kartki jest nazwa pliku.
+
+Plik grupy skanów dzieli się na kolejne pliki, gdy treść przekroczy bezpieczny limit
+słów albo 28 megabajtów. Tyle jest limitem pliku w bazie wiedzy projektu Claude (30
+megabajtów); dwa megabajty zapasu pokrywają metadane skanów, które nie są liczone do
+treści. Podział następuje między skanami, nigdy w środku skanu, a kolejność przechodzi
+z pliku do pliku.
+
+##### Dopiski odręczne przepisane przez osobę widzącą
+
+Obok zdjęcia `NAZWA.jpg` w tym samym folderze może leżeć plik `NAZWA_dopiski.txt`
+albo `NAZWA_dopiski.md` z przepisanymi dopiskami. Wielkość liter w nazwie nie ma
+znaczenia, a gdy istnieją oba pliki, pierwszeństwo ma TXT. Kodowanie jest wykrywane
+jak w pozostałych plikach tekstowych, więc Notatnik może zapisać UTF-8 ze znacznikiem
+kolejności bajtów. Treść pliku jest zawsze zwykłym tekstem, nawet gdy plik ma
+końcówkę MD.
+
+Plik dopisków nie jest źródłem i nie zajmuje slotu. Plik dopisków bez pasującego
+zdjęcia jest wymieniony w raporcie w sekcji „Dopiski bez pasującego skanu” i w
+checkpoincie, a adresy w treści dopisków nie są wyszukiwane. Dopiski są wczytywane
+razem ze zdjęciem, w chwili jego przetwarzania. Dopisanie albo zmiana pliku dopisków
+po przetworzeniu zdjęcia nie odświeża gotowego skanu: ponowne podanie tego samego
+zdjęcia jest rozpoznawane jako źródło już obecne w projekcie. Żeby dopiski zostały
+dołączone, usuń to źródło ze strony projektu i dodaj zdjęcie jeszcze raz. Dlatego
+dopiski przepisuj przed przetworzeniem.
+
+W raporcie końcowym sekcja „Skany z niską pewnością odczytu” wymienia nazwy plików ze
+średnią pewnością, posortowane od najniższej. Wpada do niej każdy skan o pewności
+poniżej 75 oraz każdy nieczytelny, a skan nieczytelny jest oznaczony zdaniem o braku
+odczytu.
+
+Wiersz poleceń przyjmuje cały folder opcją `--folder SCIEZKA`, patrz `README.md`.
 
 ### Poziom pewności struktury plików dokumentowych
 

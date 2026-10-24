@@ -1,4 +1,4 @@
-# Konfiguracja — stan po etapie siedemnastym, część D
+# Konfiguracja — stan po etapie siedemnastym, część E
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
 obsługuje po etapie trzynastym. Z listy w sekcji jedenastej a pliku
@@ -321,7 +321,85 @@ tekstu, z ostrzeżeniem.
    zmiennej PATH oraz w znanych miejscach instalacji na Windows.
 7. `sciezka_tessdata`, zmienna `GNB_SCIEZKA_TESSDATA`. Katalog danych językowych
    Tesseracta. Domyślnie pusty, co oznacza katalog wskazany przez samo narzędzie.
-   Wskazanie nieistniejącego katalogu jest błędem konfiguracji.
+   Wskazanie nieistniejącego katalogu jest błędem konfiguracji. W interfejsie
+   pole nazywa się „Katalog danych językowych Tesseracta” i leży w zakładce
+   „OCR i obrazy”. Zob. niżej, jak pobrać dokładniejsze dane polskiego języka.
+8. `ocr_prog_pewnosci`, zmienna `GNB_OCR_PROG_PEWNOSCI`. Liczba od 0 do 100,
+   domyślnie 50. Tesseract podaje dla każdego rozpoznanego słowa pewność od 0 do
+   100. Gdy średnia pewność słów zdjęcia jest niższa od tego progu, zdjęcie jest
+   „nieczytelne dla OCR”: jego rozpoznany tekst nie trafia do pliku wynikowego,
+   a w jego miejscu stoi zdanie o braku odczytu (patrz `docs/FORMATS.md`, sekcja
+   „Obrazy”). Zero wyłącza ocenę po pewności, zostaje tylko ocena odczytu pustego
+   i podejrzanego. Sposób doboru progu jest niżej.
+9. `ocr_przygotowanie_obrazu`, zmienna `GNB_OCR_PRZYGOTOWANIE_OBRAZU`. Wartość
+   logiczna, domyślnie prawda. Gdy pierwszy odczyt zdjęcia ma średnią pewność
+   niższą od 85 albo nic nie rozpoznano, aplikacja robi drugą próbę na zdjęciu
+   przygotowanym i zostawia lepszy odczyt. Fałsz zostawia tylko pierwszy odczyt.
+10. `grupy_obrazow_jako_skany`, zmienna `GNB_GRUPY_OBRAZOW_JAKO_SKANY`. Wartość
+    logiczna, domyślnie fałsz. Prawda sprawia, że grupa obrazów daje plik MD (i TXT,
+    jeśli jest włączony) z sekcją każdego skanu, zamiast pliku PDF z obrazami.
+    Przeznaczone dla zdjęć kartek akt wgrywanych do asystenta pracującego na
+    tekście. W interfejsie pole „Grupy obrazów jako pliki tekstowe ze skanami”.
+
+### Dobór progu pewności i przygotowania zdjęcia
+
+Liczby pochodzą z pomiaru na obrazach syntetycznych, wykonanego 24 października
+2026 na komputerze deweloperskim z Tesseractem 5 i danymi `pol` z instalatora.
+Strona A4 o rozmiarze 1700 na 2300 punktów, 28 wierszy tekstu krojem DejaVu Sans,
+uśrednione z dwóch różnych tekstów. „Zgodność” to podobieństwo ciągu słów odczytu
+do wzorca, od 0 do 1.
+
+Pewność średnia, bez przygotowania i z przygotowaniem przed każdym odczytem:
+
+1. Czysty druk: 96,3 i 96,3, zgodność 1,000 w obu.
+2. Czysty druk przechylony o 2 stopnie: 96,1 i 96,3, zgodność 1,000 w obu.
+3. Czysty druk przechylony o 4 stopnie: brak odczytu bez przygotowania, 96,3 z nim.
+4. Druk o niskim kontraście z szumem: brak odczytu bez przygotowania, 94,5 z nim.
+5. Druk rozmazany filtrem o promieniu 2: 96,3 w obu.
+6. Druk rozmazany filtrem o promieniu 5: 25 w obu, zgodność 0,02. To jest bełkot.
+7. Druk rozmazany filtrem o promieniu 8: jedno „słowo” o pewności 59, zgodność 0.
+8. Poziome bazgroły imitujące pismo odręczne: 35 w obu.
+9. Drobny druk (kształt liter dwudziestu punktów): bez przygotowania 96,4 i zgodność
+   0,989, z przygotowaniem 95,7 i zgodność 0,845.
+10. Drobny druk pomniejszony: bez przygotowania 95,5 i zgodność 0,967, z przygotowaniem
+    68,4 i zgodność 0,134.
+
+Wnioski. Czytelny druk daje około 95, rozmazany i odręczny poniżej 40, więc próg 50
+leży w pustej przestrzeni między nimi. Próg niski jest bezpieczny dla treści, bo
+zdjęcie powyżej progu zachowuje cały tekst; zdjęcie poniżej progu traci tekst z pliku
+wynikowego (nie z wyników pośrednich), więc próg wyżej niż 50 ryzykuje utratę
+czytelnych, ale słabych skanów. Dla słabszych, ale czytelnych skanów raport ma osobny,
+wyższy próg ostrzeżenia 75, który niczego nie usuwa z pliku wynikowego.
+
+Przygotowanie pogarsza odczyt drobnego, ostrego druku (filtr medianowy zjada cienkie
+kreski), dlatego nie jest stosowane zawsze. Jest drugą próbą przy słabym pierwszym
+odczycie, a lepszy z dwóch odczytów (większa suma pewności słów) wygrywa. Liczby to
+pomiar na obrazach syntetycznych, nie na prawdziwych zdjęciach z telefonu; prawdziwe
+zdjęcia mogą mieć inny rozkład pewności, dlatego próg jest ustawieniem. Pomiar
+na dwóch stronach nieczytelnych i ośmiu stronach druku A4 w 300 punktach na cal
+(2480 na 3508) dał średnio 5,5 sekundy na stronę, łącznie z powtórną próbą przy
+bazgrołach.
+
+### Dokładniejsze dane polskiego języka Tesseracta
+
+Instalator Tesseracta niesie szybkie dane języka. Dokładniejsze dane `pol.traineddata`
+(około 12 megabajtów) są w repozytorium `tesseract-ocr/tessdata_best` na GitHubie.
+Nie sprawdzałem adresu pobierania w tej sesji, więc znajdź plik na stronie
+repozytorium. Kroki:
+
+1. Utwórz nowy, pusty folder na dane, na przykład na dysku C: folder „tessdata_best”.
+2. Pobierz do niego plik `pol.traineddata`. Nie nadpisuj plików w folderze instalacji
+   Tesseracta.
+3. W interfejsie otwórz Ustawienia, zakładka „OCR i obrazy”, pole „Katalog danych
+   językowych Tesseracta”, wpisz pełną ścieżkę tego folderu i zapisz. Albo ustaw
+   zmienną `GNB_SCIEZKA_TESSDATA`.
+4. Uruchom `python -m gnb.cli diagnostyka` i sprawdź, że język `pol` jest na liście.
+
+Folder musi zawierać tylko dane, które mają być używane: Tesseract szuka tam
+wszystkich wymaganych języków, więc przy `ocr_jezyk = "pol+eng"` potrzebny jest
+w nim też plik `eng.traineddata`. Czy dokładniejsze dane poprawią odczyt skanów
+Twoich akt, rozstrzyga porównanie na kilku prawdziwych kartkach; ich czas
+przetwarzania bywa dłuższy.
 
 ## Pola materiałów nutowych
 
@@ -604,6 +682,9 @@ ocr_jezyk = "pol"
 ocr_psm = 3
 ocr_rozdzielczosc_pdf_dpi = 300
 ocr_liczba_procesow = 0
+ocr_prog_pewnosci = 50.0
+ocr_przygotowanie_obrazu = true
+grupy_obrazow_jako_skany = false
 sciezka_tesseract = ""
 sciezka_tessdata = ""
 

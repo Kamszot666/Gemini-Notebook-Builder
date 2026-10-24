@@ -43,9 +43,11 @@ from gnb.core.skrot import (
 from gnb.core.wyjatki import BladGnb, BladTrwaly
 from gnb.core.zapis_konfiguracji import zapisz_ustawienia
 from gnb.ingestion.adresy_z_plikow import dolacz_adresy_znalezione, przyjmij_plik_z_adresami
+from gnb.ingestion.dopiski import czy_plik_dopiskow
 from gnb.ingestion.lista_url import AdresWejsciowy
 from gnb.ingestion.wejscie import (
     PozycjaWejsciowa,
+    przyjmij_plik,
     przyjmij_tekst,
     przyjmij_url,
 )
@@ -902,6 +904,11 @@ class _Handler(BaseHTTPRequestHandler):
         znalezione: list[AdresWejsciowy] = []
         for plik in pliki:
             sciezka = self._zapisz_plik_wejsciowy(uklad.pliki_wejsciowe, plik)
+            if konfiguracja.grupy_obrazow_jako_skany and czy_plik_dopiskow(sciezka):
+                # Dopiski odręczne są częścią sekcji skanu, więc adresy z ich treści
+                # nie są wyszukiwane.
+                pozycje.append(przyjmij_plik(sciezka, moment, grupa=grupa))
+                continue
             przyjecie = przyjmij_plik_z_adresami(sciezka, moment, konfiguracja, grupa=grupa)
             pozycje.extend(przyjecie.pozycje)
             znalezione.extend(przyjecie.adresy_znalezione)

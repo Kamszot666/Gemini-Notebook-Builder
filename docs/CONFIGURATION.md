@@ -1,4 +1,4 @@
-# Konfiguracja — stan po etapie siedemnastym, część E
+# Konfiguracja — stan po etapie siedemnastym, część E, z progiem ostrzeżenia
 
 Ten dokument opisuje wyłącznie pola konfiguracji, które aplikacja faktycznie
 obsługuje po etapie trzynastym. Z listy w sekcji jedenastej a pliku
@@ -340,6 +340,16 @@ tekstu, z ostrzeżeniem.
     jeśli jest włączony) z sekcją każdego skanu, zamiast pliku PDF z obrazami.
     Przeznaczone dla zdjęć kartek akt wgrywanych do asystenta pracującego na
     tekście. W interfejsie pole „Grupy obrazów jako pliki tekstowe ze skanami”.
+11. `ocr_prog_ostrzezenia`, zmienna `GNB_OCR_PROG_OSTRZEZENIA`. Liczba od 0 do 100,
+    domyślnie 75, ta sama walidacja co `ocr_prog_pewnosci`. Skan o średniej pewności
+    słów poniżej tego progu trafia do sekcji raportu „Skany z niską pewnością odczytu”,
+    ale jego tekst zostaje w pliku wynikowym. Nie może być niższy niż
+    `ocr_prog_pewnosci`: skan poniżej progu nieczytelności musi mieć też ostrzeżenie.
+    Konfiguracja z niższym progiem ostrzeżenia kończy się komunikatem z nazwami obu
+    ustawień, przy wczytaniu pliku i przy zapisie z formularza. Uwaga: podniesienie
+    `ocr_prog_pewnosci` powyżej 75 wymaga jednoczesnego podniesienia tego progu.
+    W interfejsie pole „Próg ostrzeżenia o niskiej pewności odczytu (od 0 do 100)”
+    w zakładce „OCR i obrazy”, zaraz po progu pewności odczytu.
 
 ### Dobór progu pewności i przygotowania zdjęcia
 
@@ -369,7 +379,8 @@ leży w pustej przestrzeni między nimi. Próg niski jest bezpieczny dla treści
 zdjęcie powyżej progu zachowuje cały tekst; zdjęcie poniżej progu traci tekst z pliku
 wynikowego (nie z wyników pośrednich), więc próg wyżej niż 50 ryzykuje utratę
 czytelnych, ale słabych skanów. Dla słabszych, ale czytelnych skanów raport ma osobny,
-wyższy próg ostrzeżenia 75, który niczego nie usuwa z pliku wynikowego.
+wyższy próg ostrzeżenia (`ocr_prog_ostrzezenia`, domyślnie 75), który niczego nie usuwa
+z pliku wynikowego.
 
 Przygotowanie pogarsza odczyt drobnego, ostrego druku (filtr medianowy zjada cienkie
 kreski), dlatego nie jest stosowane zawsze. Jest drugą próbą przy słabym pierwszym
@@ -683,6 +694,7 @@ ocr_psm = 3
 ocr_rozdzielczosc_pdf_dpi = 300
 ocr_liczba_procesow = 0
 ocr_prog_pewnosci = 50.0
+ocr_prog_ostrzezenia = 75.0
 ocr_przygotowanie_obrazu = true
 grupy_obrazow_jako_skany = false
 sciezka_tesseract = ""

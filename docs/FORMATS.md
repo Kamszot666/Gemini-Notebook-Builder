@@ -1,4 +1,4 @@
-# Obsługiwane formaty — stan po etapie siedemnastym, część E
+# Obsługiwane formaty — stan po etapie siedemnastym, część E, z progiem ostrzeżenia
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
 Etap czternasty dodał formaty biurowe ODT, ODS, ODP, PPTX, XLSX, XLS, RTF, DOC
@@ -713,7 +713,7 @@ dopiski przepisuj przed przetworzeniem.
 
 W raporcie końcowym sekcja „Skany z niską pewnością odczytu” wymienia nazwy plików ze
 średnią pewnością, posortowane od najniższej. Wpada do niej każdy skan o pewności
-poniżej 75 oraz każdy nieczytelny, a skan nieczytelny jest oznaczony zdaniem o braku
+poniżej progu ostrzeżenia (ustawienie `ocr_prog_ostrzezenia`, domyślnie 75) oraz każdy nieczytelny, a skan nieczytelny jest oznaczony zdaniem o braku
 odczytu.
 
 Wiersz poleceń przyjmuje cały folder opcją `--folder SCIEZKA`, patrz `README.md`.

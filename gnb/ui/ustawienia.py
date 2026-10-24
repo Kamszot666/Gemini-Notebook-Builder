@@ -407,6 +407,15 @@ ZAKLADKI: tuple[Zakladka, ...] = (
                 minimum=0,
                 maksimum=100,
             ),
+            _rzeczywista(
+                "ocr_prog_ostrzezenia",
+                "Próg ostrzeżenia o niskiej pewności odczytu (od 0 do 100)",
+                "Skany o średniej pewności poniżej tego progu trafiają do sekcji raportu "
+                "„Skany z niską pewnością odczytu”, ale ich tekst zostaje w pliku wynikowym. "
+                "Nie może być niższy niż próg pewności odczytu.",
+                minimum=0,
+                maksimum=100,
+            ),
             _logiczne(
                 "ocr_przygotowanie_obrazu",
                 "Przygotuj zdjęcie przy słabym odczycie",

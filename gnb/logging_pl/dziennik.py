@@ -54,6 +54,7 @@ ZDARZENIE_KOLEJKA_SKROTU_UTRACONA = "Uwaga, zamknięcie serwera utraciło pozycj
 ZDARZENIE_ZRODLO_JUZ_W_PROJEKCIE = "Źródło już obecne w projekcie"
 ZDARZENIE_PLIK_WYNIKOWY_USUNIETY = "Uwaga, plik wynikowy usunięty ręcznie z dysku"
 ZDARZENIE_PLIK_MD_BRAKUJE = "Uwaga, brak pliku wersji MD na dysku"
+ZDARZENIE_DOPISKI_BEZ_SKANU = "Uwaga, plik dopisków odręcznych bez pasującego skanu"
 ZDARZENIE_GRUPA_PRZEPAKOWANA = "Grupa źródeł przepakowana od nowa"
 ZDARZENIE_PLIK_GRUPY_ZASTAPIONY = "Plik grupy zastąpiony"
 ZDARZENIE_ZRODLO_ZWERYFIKOWANE = "Źródło zweryfikowane ręcznie"

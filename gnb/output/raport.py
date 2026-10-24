@@ -139,6 +139,36 @@ class ArchiwumWRaporcie:
     ostrzezenia: tuple[str, ...] = ()
 
 
+NAGLOWEK_SKANOW_Z_NISKA_PEWNOSCIA = "Skany z niską pewnością odczytu"
+OPIS_SKANOW_Z_NISKA_PEWNOSCIA = (
+    "Przy tych skanach program odczytał tekst z niską pewnością albo wcale. Lista jest "
+    "posortowana od najniższej pewności. Pewność jest średnią z pewności słów, liczbą "
+    "od 0 do 100. Skan oznaczony jako nieczytelny ma w pliku wynikowym tylko zdanie "
+    "o braku odczytu, a rozpoznany bełkot zostaje w wynikach pośrednich. Warto obejrzeć "
+    "te kartki samemu."
+)
+NAGLOWEK_DOPISKOW_BEZ_SKANU = "Dopiski bez pasującego skanu"
+OPIS_DOPISKOW_BEZ_SKANU = (
+    "Tych plików dopisków nie dołączono do żadnego skanu, bo obok nie ma zdjęcia o pasującej "
+    "nazwie. Sprawdź, czy nazwa pliku dopisków to nazwa zdjęcia, znak podkreślenia i słowo "
+    "dopiski, na przykład 017_dopiski.txt dla zdjęcia 017.jpg."
+)
+
+
+@dataclass(frozen=True, slots=True)
+class SkanZNiskaPewnoscia:
+    """Skan, którego odczyt OCR ma niską średnią pewność słów.
+
+    Pole `nieczytelny` mówi, że pewność jest poniżej progu nieczytelności
+    i tekst skanu nie trafił do pliku wynikowego.
+    """
+
+    nazwa_pliku: str
+    srednia_pewnosc: float
+    nieczytelny: bool
+    zdanie_o_braku_odczytu: str = ""
+
+
 @dataclass(frozen=True, slots=True)
 class PodsumowanieProjektu:
     """Zestaw liczb i wykaz źródeł nieprzetworzonych, potrzebne do raportu końcowego."""
@@ -172,6 +202,10 @@ class PodsumowanieProjektu:
     # Liczba slotów notatnika zajętych przez pliki do wgrania. Gdy brak wartości,
     # raport liczy pliki TXT i PDF, jak przed etapem siedemnastym.
     liczba_slotow: int | None = None
+    # Skany z niską pewnością odczytu, już posortowane od najniższej pewności,
+    # oraz nazwy plików dopisków odręcznych bez pasującego skanu.
+    skany_niska_pewnosc: tuple[SkanZNiskaPewnoscia, ...] = ()
+    dopiski_bez_skanu: tuple[str, ...] = ()
 
 
 def zbuduj_raport(nazwa_projektu: str, podsumowanie: PodsumowanieProjektu) -> str:
@@ -222,8 +256,45 @@ def zbuduj_raport(nazwa_projektu: str, podsumowanie: PodsumowanieProjektu) -> st
     wiersze.extend(_wiersze_zastapionych_plikow(podsumowanie.zastapione_pliki))
     wiersze.extend(_wiersze_nieudanych_zastapien(podsumowanie.nieudane_zastapienia))
     wiersze.extend(_wiersze_zrodel_zweryfikowanych(podsumowanie.zrodla_zweryfikowane))
+    wiersze.extend(_wiersze_skanow_z_niska_pewnoscia(podsumowanie.skany_niska_pewnosc))
+    wiersze.extend(_wiersze_dopiskow_bez_skanu(podsumowanie.dopiski_bez_skanu))
     wiersze.extend(_wiersze_materialow_do_sprawdzenia(podsumowanie.materialy_do_sprawdzenia))
     return "\n".join(wiersze) + "\n"
+
+
+def _wiersze_skanow_z_niska_pewnoscia(skany: tuple[SkanZNiskaPewnoscia, ...]) -> list[str]:
+    """Buduje wykaz skanów z niską pewnością odczytu, od najniższej pewności."""
+    if not skany:
+        return []
+    wiersze = [
+        "",
+        f"{NAGLOWEK_SKANOW_Z_NISKA_PEWNOSCIA}, liczba: {len(skany)}",
+        "",
+        OPIS_SKANOW_Z_NISKA_PEWNOSCIA,
+        "",
+    ]
+    for skan in skany:
+        wiersze.append(f"Plik: {skan.nazwa_pliku}")
+        wiersze.append(f"  Średnia pewność słów: {skan.srednia_pewnosc:.1f} na 100")
+        if skan.nieczytelny and skan.zdanie_o_braku_odczytu:
+            wiersze.append(f"  {skan.zdanie_o_braku_odczytu}")
+        wiersze.append("")
+    return wiersze[:-1]
+
+
+def _wiersze_dopiskow_bez_skanu(nazwy: tuple[str, ...]) -> list[str]:
+    """Buduje wykaz plików dopisków, które nie znalazły swojego skanu."""
+    if not nazwy:
+        return []
+    wiersze = [
+        "",
+        f"{NAGLOWEK_DOPISKOW_BEZ_SKANU}, liczba: {len(nazwy)}",
+        "",
+        OPIS_DOPISKOW_BEZ_SKANU,
+        "",
+    ]
+    wiersze.extend(f"Plik: {nazwa}" for nazwa in nazwy)
+    return wiersze
 
 
 def _wiersze_zrodel_nieprzetworzonych(

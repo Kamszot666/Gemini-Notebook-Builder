@@ -27,6 +27,7 @@ from gnb.packing.pakowanie import (
     ZrodloDoPakowania,
     rozplanuj_grupe,
     rozplanuj_pojedyncze_zrodlo,
+    rozplanuj_skany,
 )
 from gnb.packing.podzial import WynikPodzialu, podziel_na_czesci
 
@@ -42,4 +43,5 @@ __all__ = [
     "przekracza_limit",
     "rozplanuj_grupe",
     "rozplanuj_pojedyncze_zrodlo",
+    "rozplanuj_skany",
 ]

@@ -131,6 +131,22 @@ def rozplanuj_grupe(
     return plany
 
 
+def rozplanuj_skany(
+    nazwa_grupy: str,
+    zrodla: Sequence[ZrodloDoPakowania],
+    limity: LimityPakowania,
+) -> list[PlanPliku]:
+    """Planuje pliki grupy skanów, zachowując podaną kolejność źródeł.
+
+    W odróżnieniu od `rozplanuj_grupe` nie porządkuje źródeł po identyfikatorze
+    i nie wydziela dużych na części: strony akt mają kolejność, którą wyznacza
+    wołający (sortowanie naturalne nazw plików), a pojedynczy skan nie przekracza
+    limitu. Kolejne skany trafiają do bieżącego pliku, dopóki się mieści, potem
+    zaczyna się następny.
+    """
+    return _polacz_male(nazwa_grupy, zrodla, limity)
+
+
 def _polacz_male(
     nazwa_grupy: str,
     zrodla: Sequence[ZrodloDoPakowania],

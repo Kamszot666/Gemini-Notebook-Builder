@@ -82,6 +82,7 @@ from gnb.extractors.dane_strukturalne import (
     odczytaj_json_ld,
     scal_metadane,
 )
+from gnb.extractors.plik_obraz import ZDANIE_NIECZYTELNE_DLA_OCR
 from gnb.extractors.strona_www import KOMUNIKAT_WYMAGA_SKRYPTOW, czy_wymaga_skryptow
 from gnb.extractors.youtube import KOMUNIKAT_NAPISY_BEZ_TRESCI
 from gnb.extractors.youtube import zbuduj_dokument as zbuduj_dokument_z_napisow
@@ -96,6 +97,12 @@ from gnb.ingestion.archiwum import (
     WynikRozwiniecia,
     czy_archiwum,
     rozwin_archiwum,
+)
+from gnb.ingestion.dopiski import (
+    dopiski_bez_skanu,
+    odfiltruj_pliki_dopiskow,
+    wczytaj_dopiski,
+    znajdz_plik_dopiskow,
 )
 from gnb.ingestion.lista_url import ostrzezenie_o_limicie_adresow
 from gnb.ingestion.pobieranie import (
@@ -138,6 +145,7 @@ from gnb.logging_pl.dziennik import (
     ZDARZENIE_ARCHIWUM_SLOTY,
     ZDARZENIE_CHECKPOINT_ZAPISANY,
     ZDARZENIE_DEDUPLIKACJA_ZAKONCZONA,
+    ZDARZENIE_DOPISKI_BEZ_SKANU,
     ZDARZENIE_GRUPA_PRZEPAKOWANA,
     ZDARZENIE_GRUPA_SPAKOWANA,
     ZDARZENIE_JAKOSC_PODEJRZANA,
@@ -208,6 +216,7 @@ from gnb.output.raport import (
     ArchiwumWRaporcie,
     MaterialDoSprawdzenia,
     PodsumowanieProjektu,
+    SkanZNiskaPewnoscia,
     ZastapienieNieudane,
     ZastapionyPlik,
     ZrodloJuzWProjekcie,
@@ -215,6 +224,15 @@ from gnb.output.raport import (
     ZrodloZweryfikowane,
     zapisz_raport,
     zbuduj_raport,
+)
+from gnb.output.skany import (
+    SkanDoPliku,
+    klucz_porzadku_naturalnego,
+    nazwa_pliku_skanu,
+    polacz_tresc_skanu,
+    rozdziel_tresc_skanu,
+    zloz_skany_markdown,
+    zloz_skany_txt,
 )
 from gnb.output.skladanie import oznaczenie_pliku_grupy, zloz_plik
 from gnb.output.tekst_bez_znacznikow import zamien_markdown_na_tekst
@@ -232,6 +250,7 @@ from gnb.packing import (
     ZrodloDoPakowania,
     podziel_na_czesci,
     rozplanuj_grupe,
+    rozplanuj_skany,
 )
 from gnb.persistence.cache import PamiecPodreczna, WpisCache, otworz, teraz_utc
 from gnb.persistence.checkpoint import WERSJA_SCHEMATU as WERSJA_SCHEMATU_CHECKPOINTU
@@ -285,6 +304,17 @@ _SUFIKS_TEKST_WERSJI_TXT = "wersja-txt.txt"
 # konfiguracja każe zachowywać oryginały źródeł, oraz żeby wznowienie po
 # przerwaniu przed pakowaniem miało z czego zbudować PDF.
 _SUFIKS_OBRAZ_ZRODLOWY = "obraz-zrodlowy.bin"
+# Przepisane dopiski odręczne skanu, zapisane obok wyników pośrednich.
+_SUFIKS_DOPISKI = "dopiski.txt"
+# Największy rozmiar treści pliku ze skanami, w megabajtach. Tyle wynosi limit
+# pliku w bazie wiedzy projektu Claude, do której trafiają akta. Treść jest
+# liczona bez nagłówków, więc limit jest o dwa megabajty niższy od 30, żeby
+# metadane skanów zmieściły się z zapasem pod granicą.
+_LIMIT_PLIKU_SKANOW_MB = 28
+# Średnia pewność słów, poniżej której skan trafia do raportu jako odczytany
+# niepewnie, choć jego tekst zostaje w pliku wynikowym.
+_PROG_NISKIEJ_PEWNOSCI_SKANU = 75.0
+_MEGABAJT = 1024 * 1024
 
 # Prefiks nazwy grupy nadawanej automatycznie obrazom, które podano bez opcji
 # --grupa. Zestaw obrazów z jednego wywołania polecenia jest słabym, ale
@@ -478,6 +508,11 @@ def _teraz_utc() -> datetime:
     return datetime.now(UTC)
 
 
+def _czy_skan_nieczytelny(stan: StanZrodla) -> bool:
+    """Prawda, gdy OCR uznał zdjęcie za nieczytelne i jego tekst to tylko zdanie o braku odczytu."""
+    return stan.metadane.get("nieczytelne_dla_ocr") == "tak"
+
+
 def _czy_pozycja_jest_obrazem(pozycja: PozycjaWejsciowa) -> bool:
     """Zwraca prawdę, gdy wejście jest plikiem obrazu.
 
@@ -647,6 +682,9 @@ def przetworz_projekt(
         nuty_zapis_dzwiekow_wlaczony=konfiguracja.nuty_zapis_dzwiekow_wlaczony,
         sciezka_libreoffice=konfiguracja.sciezka_libreoffice,
         filtruj_elementy_strony=konfiguracja.filtr_elementow_strony,
+        ocr_przygotowanie_obrazu=konfiguracja.ocr_przygotowanie_obrazu,
+        ocr_prog_pewnosci=konfiguracja.ocr_prog_pewnosci,
+        obrazy_jako_skany=konfiguracja.grupy_obrazow_jako_skany,
     )
     czas_startu = zegar()
 
@@ -681,6 +719,8 @@ def przetworz_projekt(
         pozycje, rozwiniete_archiwa = _rozwin_archiwa(
             pozycje, uklad, konfiguracja, checkpoint, zegar(), dziennik_wazny, log
         )
+        if konfiguracja.grupy_obrazow_jako_skany:
+            pozycje = _wylacz_pliki_dopiskow(pozycje, checkpoint, dziennik_wazny, log)
         pozycje = _przypisz_domyslna_grupe_obrazow(pozycje, checkpoint)
         _zapamietaj_wejscia(checkpoint, pozycje)
 
@@ -1296,6 +1336,13 @@ class _Wykonanie:
         if zrodlo.typ_zrodla is TypZrodla.PLIK_AUDIO:
             self._odnotuj_atrape_av()
 
+        metadane = dict(dokument.metadane)
+        if (
+            zrodlo.typ_zrodla is TypZrodla.PLIK_OBRAZ
+            and self._konfiguracja.grupy_obrazow_jako_skany
+        ):
+            metadane["dopiski_odreczne"] = self._wczytaj_dopiski_skanu(pozycja, dokument)
+
         return _PrzygotowanyDokument(
             dokument=dokument,
             suma_kontrolna=zrodlo.checksum or "",
@@ -1303,10 +1350,37 @@ class _Wykonanie:
                 ekstraktor.tekst_zawiera_znaczniki, dokument.tekst
             ),
             stan_pobrania=None,
-            metadane=dict(dokument.metadane),
+            metadane=metadane,
             tekst_zrodla=None,
             tresc_porownawcza=None,
         )
+
+    def _wczytaj_dopiski_skanu(
+        self, pozycja: PozycjaWejsciowa, dokument: DokumentWyekstrahowany
+    ) -> str:
+        """Odczytuje dopiski odręczne leżące obok skanu i zwraca „tak” albo „nie”.
+
+        Treść trafia do wyników pośrednich, skąd pobiera ją pakowanie. Błąd
+        odczytu pliku dopisków nie zatrzymuje skanu: staje się ostrzeżeniem,
+        które przechodzi tę samą drogę co ostrzeżenie ekstraktora.
+        """
+        identyfikator = dokument.identyfikator_zrodla
+        plik = znajdz_plik_dopiskow(Path(pozycja.wejscie.wartosc))
+        if plik is None:
+            return "nie"
+        try:
+            tresc = wczytaj_dopiski(plik)
+        except (OSError, BladGnb) as blad:
+            dokument.ostrzezenia.append(
+                f"Nie udało się odczytać pliku dopisków {plik.name}: {blad}. Dopiski pominięto."
+            )
+            return "nie"
+        if not tresc:
+            dokument.ostrzezenia.append(f"Plik dopisków {plik.name} jest pusty.")
+            return "nie"
+        self._zapisz_tekst_posredni(identyfikator, _SUFIKS_DOPISKI, tresc)
+        self._loguj(logging.INFO, identyfikator, f"Dopiski odręczne z pliku {plik.name}.")
+        return "tak"
 
     def _odnotuj_rozbieznosc(self, identyfikator: str, metadane: dict[str, str]) -> None:
         """Zapisuje w logu szczegółowym rozbieżność metadanych, o ile wystąpiła.
@@ -1443,11 +1517,16 @@ class _Wykonanie:
         """
         stan_dedup = self._checkpoint.deduplikacja
         porownane = set(stan_dedup.porownane)
+        # Skan nieczytelny dla OCR ma w tekście tylko wspólne zdanie o braku
+        # odczytu, więc porównanie uznałoby wszystkie takie skany za duplikaty
+        # i usunęło kartki. Nie biorą udziału w deduplikacji ani jako kandydaci,
+        # ani jako wzorzec.
         nowe = [
             stan
             for stan in self._checkpoint.zrodla.values()
             if stan.status == StatusZrodla.ZNORMALIZOWANE.value
             and stan.identyfikator not in porownane
+            and not _czy_skan_nieczytelny(stan)
         ]
         if not nowe:
             self._loguj(logging.INFO, "-", "Brak nowych źródeł do deduplikacji, pomijam.")
@@ -1456,9 +1535,13 @@ class _Wykonanie:
         bazowe = [
             self._zrodlo_do_deduplikacji(stan)
             for stan in self._checkpoint.zrodla.values()
-            if stan.status == StatusZrodla.SPAKOWANE.value
-            or (
-                stan.status == StatusZrodla.ZNORMALIZOWANE.value and stan.identyfikator in porownane
+            if not _czy_skan_nieczytelny(stan)
+            and (
+                stan.status == StatusZrodla.SPAKOWANE.value
+                or (
+                    stan.status == StatusZrodla.ZNORMALIZOWANE.value
+                    and stan.identyfikator in porownane
+                )
             )
         ]
         kandydaci = [self._zrodlo_do_deduplikacji(stan) for stan in nowe]
@@ -1640,8 +1723,24 @@ class _Wykonanie:
         for stan in obrazy:
             nazwa = stan.grupa_pakowania or DOMYSLNA_GRUPA_OBRAZOW
             grupy_obrazow.setdefault(nazwa, []).append(stan)
+        limity_skanow = LimityPakowania(
+            limit_slow=self._konfiguracja.bezpieczny_limit_slow,
+            limit_bajtow=min(self._konfiguracja.bezpieczny_limit_mb, _LIMIT_PLIKU_SKANOW_MB)
+            * _MEGABAJT,
+        )
         for nazwa_grupy, stany in grupy_obrazow.items():
-            self._spakuj_grupe_obrazow(nazwa_grupy, stany)
+            if self._konfiguracja.grupy_obrazow_jako_skany:
+                # Strony akt mają kolejność wyznaczoną nazwami plików, z sortowaniem
+                # naturalnym: skan 2 stoi przed skanem 10.
+                uporzadkowane = sorted(
+                    stany,
+                    key=lambda stan: klucz_porzadku_naturalnego(
+                        nazwa_pliku_skanu(stan.naglowek_metadanych or "") or stan.identyfikator
+                    ),
+                )
+                self._spakuj_grupe(nazwa_grupy, uporzadkowane, limity_skanow, skany=True)
+            else:
+                self._spakuj_grupe_obrazow(nazwa_grupy, stany)
 
         self._zamknij_zastapione_pliki()
 
@@ -1964,13 +2063,22 @@ class _Wykonanie:
         )
 
     def _spakuj_grupe(
-        self, nazwa_grupy: str, stany: list[StanZrodla], limity: LimityPakowania
+        self,
+        nazwa_grupy: str,
+        stany: list[StanZrodla],
+        limity: LimityPakowania,
+        *,
+        skany: bool = False,
     ) -> None:
         """Pakuje jedną grupę tematyczną: dzieli źródła duże i łączy małe w jak najmniej plików.
 
         Wszystkie źródła grupy dostają status „spakowane” w jednym zapisie
         checkpointu. Przerwanie pracy przed tym zapisem zostawia je jako
         „znormalizowane”, więc wznowienie planuje grupę od nowa, nadpisując pliki.
+
+        Przy `skany` grupa jest grupą zdjęć kartek: źródła są pakowane w kolejności
+        podanej przez wołającego, każde jako osobna sekcja z nazwą pliku, a do
+        wyniku OCR dołączane są przepisane dopiski odręczne.
         """
         zrodla_do_pakowania: list[ZrodloDoPakowania] = []
         po_identyfikatorze: dict[str, StanZrodla] = {}
@@ -1978,6 +2086,15 @@ class _Wykonanie:
             tekst = self._wczytaj_tekst_posredni(stan.identyfikator, _SUFIKS_TEKST_ZNORMALIZOWANY)
             if tekst is None:
                 self._oznacz_brak_tekstu_posredniego(stan)
+                continue
+            if skany:
+                dopiski = self._wczytaj_tekst_posredni(stan.identyfikator, _SUFIKS_DOPISKI) or ""
+                po_identyfikatorze[stan.identyfikator] = stan
+                zrodla_do_pakowania.append(
+                    ZrodloDoPakowania(
+                        stan.identyfikator, polacz_tresc_skanu(tekst, dopiski), grupa=nazwa_grupy
+                    )
+                )
                 continue
             # Sprawdzenie tego samego podziału, który `rozplanuj_grupe` policzy
             # jeszcze raz chwilę niżej: tu decydujemy, czy źródło w ogóle wejdzie
@@ -2005,8 +2122,18 @@ class _Wykonanie:
             stan.wyniki = []
             stan.ostrzezenia_pakowania = []
 
-        for plan in rozplanuj_grupe(nazwa_grupy, zrodla_do_pakowania, limity):
-            self._zapisz_plan_grupy(nazwa_grupy, plan, po_identyfikatorze)
+        numery_skanow = (
+            {zrodlo.identyfikator: numer for numer, zrodlo in enumerate(zrodla_do_pakowania, 1)}
+            if skany
+            else None
+        )
+        plany = (
+            rozplanuj_skany(nazwa_grupy, zrodla_do_pakowania, limity)
+            if skany
+            else rozplanuj_grupe(nazwa_grupy, zrodla_do_pakowania, limity)
+        )
+        for plan in plany:
+            self._zapisz_plan_grupy(nazwa_grupy, plan, po_identyfikatorze, numery_skanow)
 
         for stan in po_identyfikatorze.values():
             if stan.wyniki:
@@ -2032,7 +2159,11 @@ class _Wykonanie:
         )
 
     def _zapisz_plan_grupy(
-        self, nazwa_grupy: str, plan: PlanPliku, po_identyfikatorze: dict[str, StanZrodla]
+        self,
+        nazwa_grupy: str,
+        plan: PlanPliku,
+        po_identyfikatorze: dict[str, StanZrodla],
+        numery_skanow: dict[str, int] | None = None,
     ) -> None:
         """Zapisuje jeden plik zaplanowany dla grupy i dopisuje go do stanu jego źródeł."""
         identyfikatory = [fragment.identyfikator for fragment in plan.fragmenty]
@@ -2051,22 +2182,37 @@ class _Wykonanie:
                 )
                 for fragment in plan.fragmenty
             ]
-            tresc_txt = zloz_plik(fragmenty_tekstu, oznaczenie_pliku=oznaczenie)
-            tresc_md = zloz_plik_grupy_markdown(
-                [
-                    FragmentGrupyMarkdown(
-                        naglowek_metadanych=(
-                            po_identyfikatorze[fragment.identyfikator].naglowek_metadanych or ""
-                        ),
-                        tresc_markdown=tresc_markdown_zrodla(
-                            fragment.tekst,
-                            ma_struktura=self._zrodlo_ma_strukture(fragment.identyfikator),
-                        ),
+            if numery_skanow is not None:
+                skany = [
+                    self._skan_do_pliku(
+                        po_identyfikatorze[fragment.identyfikator],
+                        numery_skanow[fragment.identyfikator],
+                        fragment.tekst,
                     )
                     for fragment in plan.fragmenty
-                ],
-                tytul_pliku=oznaczenie.rstrip(".") if oznaczenie else f"Grupa „{nazwa_grupy}”",
-            )
+                ]
+                tresc_txt = zloz_skany_txt(skany, oznaczenie_pliku=oznaczenie)
+                tresc_md = zloz_skany_markdown(
+                    skany,
+                    tytul_pliku=oznaczenie.rstrip(".") if oznaczenie else f"Grupa „{nazwa_grupy}”",
+                )
+            else:
+                tresc_txt = zloz_plik(fragmenty_tekstu, oznaczenie_pliku=oznaczenie)
+                tresc_md = zloz_plik_grupy_markdown(
+                    [
+                        FragmentGrupyMarkdown(
+                            naglowek_metadanych=(
+                                po_identyfikatorze[fragment.identyfikator].naglowek_metadanych or ""
+                            ),
+                            tresc_markdown=tresc_markdown_zrodla(
+                                fragment.tekst,
+                                ma_struktura=self._zrodlo_ma_strukture(fragment.identyfikator),
+                            ),
+                        )
+                        for fragment in plan.fragmenty
+                    ],
+                    tytul_pliku=oznaczenie.rstrip(".") if oznaczenie else f"Grupa „{nazwa_grupy}”",
+                )
         else:
             (fragment,) = plan.fragmenty
             stan = po_identyfikatorze[fragment.identyfikator]
@@ -2104,6 +2250,19 @@ class _Wykonanie:
         for ostrzezenie in plan.ostrzezenia:
             for identyfikator in identyfikatory:
                 po_identyfikatorze[identyfikator].ostrzezenia_pakowania.append(ostrzezenie)
+
+    def _skan_do_pliku(self, stan: StanZrodla, numer: int, tekst: str) -> SkanDoPliku:
+        """Buduje opis jednego skanu do pliku grupy: metadane, wynik OCR i dopiski."""
+        tresc_ocr, dopiski = rozdziel_tresc_skanu(tekst)
+        return SkanDoPliku(
+            naglowek_metadanych=stan.naglowek_metadanych or "",
+            numer=numer,
+            ocena_ocr=stan.metadane.get("ocena_ocr", ""),
+            srednia_pewnosc=stan.metadane.get("srednia_pewnosc_ocr", ""),
+            ma_dopiski=bool(dopiski),
+            tresc_ocr=tresc_ocr,
+            dopiski=dopiski,
+        )
 
     def _zapisz_pakiet_w_formatach(
         self, nazwa: str, identyfikatory: list[str], *, tresc_txt: str, tresc_md: str
@@ -3074,6 +3233,38 @@ def _odnotuj_rozwiniecie_archiwum(
         )
 
 
+def _wylacz_pliki_dopiskow(
+    pozycje: Sequence[PozycjaWejsciowa],
+    checkpoint: Checkpoint,
+    dziennik_wazny: DziennikWazny,
+    log: logging.Logger,
+) -> list[PozycjaWejsciowa]:
+    """Usuwa pliki dopisków z listy źródeł i odnotowuje te bez pasującego skanu.
+
+    Plik dopisków nie jest źródłem, tylko częścią sekcji swojego skanu. Plik bez
+    zdjęcia o pasującej nazwie nie jest pomijany po cichu: jego nazwa trafia do
+    checkpointu, a stąd do raportu. Zapis w checkpoincie przeżywa wznowienie,
+    a wpis znika, gdy zdjęcie o pasującej nazwie pojawi się w katalogu.
+    """
+    pozostale, pliki_dopiskow = odfiltruj_pliki_dopiskow(pozycje)
+    nowe_osierocone = {str(sciezka) for sciezka in dopiski_bez_skanu(pliki_dopiskow)}
+    wszystkie = {*checkpoint.dopiski_bez_skanu, *nowe_osierocone}
+    nadal_osierocone = {
+        sciezka
+        for sciezka in wszystkie
+        if Path(sciezka).is_file() and dopiski_bez_skanu([Path(sciezka)])
+    }
+    checkpoint.dopiski_bez_skanu = sorted(nadal_osierocone)
+    for sciezka in sorted(nowe_osierocone):
+        dziennik_wazny.zapisz(_wpis_wazny(ZDARZENIE_DOPISKI_BEZ_SKANU, Path(sciezka).name))
+        log.warning(
+            "Plik dopisków %s nie ma pasującego skanu.",
+            Path(sciezka).name,
+            extra={"identyfikator_zrodla": "-"},
+        )
+    return pozostale
+
+
 def _odnotuj_brakujace_pliki(
     uklad: UkladProjektu,
     checkpoint: Checkpoint,
@@ -3504,6 +3695,8 @@ def _zbuduj_podsumowanie(
         zrodla_juz_w_projekcie=zrodla_juz_w_projekcie,
         liczba_nut_poza_grupami=nut_poza_grupami,
         zrodla_zweryfikowane=_zrodla_zweryfikowane(checkpoint),
+        skany_niska_pewnosc=_skany_z_niska_pewnoscia(checkpoint),
+        dopiski_bez_skanu=tuple(Path(sciezka).name for sciezka in checkpoint.dopiski_bez_skanu),
         zastapione_pliki=tuple(
             ZastapionyPlik(
                 stara_nazwa=Path(wpis.stara_nazwa).name,
@@ -3532,6 +3725,37 @@ def _zbuduj_podsumowanie(
             for archiwum in checkpoint.archiwa
         ),
     )
+
+
+def _skany_z_niska_pewnoscia(checkpoint: Checkpoint) -> tuple[SkanZNiskaPewnoscia, ...]:
+    """Zbiera zdjęcia odczytane z niską pewnością, od najniższej średniej pewności słów.
+
+    Wchodzi tu każde źródło, któremu OCR przypisał średnią pewność poniżej progu
+    ostrzeżenia, także to, którego tekst zostaje w pliku wynikowym. Skan uznany za
+    nieczytelny jest oznaczony zdaniem o braku odczytu. Źródło oznaczone ręcznie
+    jako sprawdzone zostaje w wykazie, bo sama pewność odczytu się nie zmienia.
+    """
+    skany: list[SkanZNiskaPewnoscia] = []
+    for stan in checkpoint.zrodla.values():
+        tekst_pewnosci = stan.metadane.get("srednia_pewnosc_ocr")
+        if tekst_pewnosci is None:
+            continue
+        try:
+            pewnosc = float(tekst_pewnosci)
+        except ValueError:
+            continue
+        nieczytelny = stan.metadane.get("nieczytelne_dla_ocr") == "tak"
+        if pewnosc >= _PROG_NISKIEJ_PEWNOSCI_SKANU and not nieczytelny:
+            continue
+        skany.append(
+            SkanZNiskaPewnoscia(
+                nazwa_pliku=nazwa_pliku_skanu(stan.naglowek_metadanych or "") or stan.pochodzenie,
+                srednia_pewnosc=pewnosc,
+                nieczytelny=nieczytelny,
+                zdanie_o_braku_odczytu=ZDANIE_NIECZYTELNE_DLA_OCR if nieczytelny else "",
+            )
+        )
+    return tuple(sorted(skany, key=lambda skan: (skan.srednia_pewnosc, skan.nazwa_pliku)))
 
 
 def _zrodla_zweryfikowane(checkpoint: Checkpoint) -> tuple[ZrodloZweryfikowane, ...]:

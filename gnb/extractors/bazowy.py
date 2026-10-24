@@ -138,6 +138,9 @@ def domyslny_rejestr_binarny(
     nuty_zapis_dzwiekow_wlaczony: bool = True,
     sciezka_libreoffice: str = "",
     filtruj_elementy_strony: bool = True,
+    ocr_przygotowanie_obrazu: bool = True,
+    ocr_prog_pewnosci: float | None = None,
+    obrazy_jako_skany: bool = False,
 ) -> RejestrEkstraktorowBinarnych:
     """Buduje rejestr ekstraktorów formatów binarnych.
 
@@ -161,6 +164,11 @@ def domyslny_rejestr_binarny(
     w PATH i w znanych miejscach instalacji. Wszystkie te wartości pochodzą
     z konfiguracji projektu i z opcji wiersza poleceń. Gdy nie podano ustawień,
     OCR i transkrypcja są wyłączone.
+
+    Trzy ostatnie argumenty dotyczą odczytu zdjęć stron: przygotowanie obrazu
+    przy słabym odczycie, próg pewności, poniżej którego zdjęcie jest
+    nieczytelne dla OCR, oraz tryb skanu, w którym obraz daje sam rozpoznany
+    tekst zamiast opisu obrazu.
     """
     from gnb.audio.transkrypcja import UstawieniaTranskrypcji
     from gnb.extractors.plik_audio import EkstraktorAudio
@@ -179,6 +187,7 @@ def domyslny_rejestr_binarny(
     from gnb.extractors.plik_rtf import EkstraktorRtf
     from gnb.extractors.plik_xls import EkstraktorXls
     from gnb.extractors.plik_xlsx import EkstraktorXlsx
+    from gnb.images.ocena_ocr import DOMYSLNY_PROG_PEWNOSCI_OCR
     from gnb.images.tesseract import UstawieniaOcr
 
     ustawienia = ustawienia_ocr if isinstance(ustawienia_ocr, UstawieniaOcr) else UstawieniaOcr()
@@ -202,7 +211,17 @@ def domyslny_rejestr_binarny(
             EkstraktorMhtml(filtruj_elementy=filtruj_elementy_strony),
             EkstraktorDoc(sciezka_libreoffice),
             EkstraktorPpt(sciezka_libreoffice),
-            EkstraktorObrazu(ustawienia, ocr_wlaczony=ocr_wlaczony),
+            EkstraktorObrazu(
+                ustawienia,
+                ocr_wlaczony=ocr_wlaczony,
+                przygotowanie_wlaczone=ocr_przygotowanie_obrazu,
+                prog_pewnosci=(
+                    ocr_prog_pewnosci
+                    if ocr_prog_pewnosci is not None
+                    else DOMYSLNY_PROG_PEWNOSCI_OCR
+                ),
+                tryb_skanu=obrazy_jako_skany,
+            ),
             EkstraktorAudio(
                 ustawienia_audio,
                 transkrypcja_wlaczona=transkrypcja_wlaczona,

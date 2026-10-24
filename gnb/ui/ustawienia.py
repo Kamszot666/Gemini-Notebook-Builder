@@ -397,6 +397,30 @@ ZAKLADKI: tuple[Zakladka, ...] = (
                 "Zero oznacza dobór automatyczny.",
                 minimum=0,
             ),
+            _rzeczywista(
+                "ocr_prog_pewnosci",
+                "Próg pewności odczytu",
+                "Liczba od 0 do 100. Zdjęcie, na którym średnia pewność rozpoznanych słów jest "
+                "niższa, jest oznaczone jako nieczytelne dla OCR, a rozpoznany tekst nie trafia "
+                "do pliku wynikowego. Wartość 50 odróżnia czysty druk od pisma odręcznego i "
+                "rozmazanego zdjęcia. Zero wyłącza tę ocenę.",
+                minimum=0,
+                maksimum=100,
+            ),
+            _logiczne(
+                "ocr_przygotowanie_obrazu",
+                "Przygotuj zdjęcie przy słabym odczycie",
+                "Gdy pierwszy odczyt zdjęcia ma niską pewność, aplikacja robi drugą próbę na "
+                "zdjęciu w odcieniach szarości, z wyrównanym kontrastem, wyprostowanym i "
+                "powiększonym, i zostawia lepszy odczyt.",
+            ),
+            _logiczne(
+                "grupy_obrazow_jako_skany",
+                "Grupy obrazów jako pliki tekstowe ze skanami",
+                "Gdy włączone, grupa obrazów daje plik tekstowy z osobną sekcją każdego "
+                "skanu, w kolejności nazw plików, zamiast pliku PDF z obrazami. "
+                "Przeznaczone dla zdjęć kartek z aktami.",
+            ),
             _tekst(
                 "sciezka_tesseract",
                 "Plik programu Tesseract",
@@ -405,7 +429,9 @@ ZAKLADKI: tuple[Zakladka, ...] = (
             _tekst(
                 "sciezka_tessdata",
                 "Katalog danych językowych Tesseracta",
-                "Pełna ścieżka katalogu. Puste oznacza miejsce domyślne.",
+                "Pełna ścieżka katalogu. Puste oznacza miejsce domyślne. Dokładniejsze dane "
+                "polskiego języka, plik pol.traineddata z repozytorium tessdata_best, opisuje "
+                "dokumentacja konfiguracji.",
             ),
         ),
     ),

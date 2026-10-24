@@ -559,7 +559,7 @@ przez ekstraktory i przez fazę pakowania.
   wyjściem. `rozpoznaj_wiele` uruchamia procesy Tesseracta równolegle, zachowując
   kolejność wejścia i zgłaszając postęp po każdym gotowym obrazie. Każdy OCR to
   osobny proces systemowy, zgodnie z sekcją piętnastą `CLAUDE.md`.
-  `rozpoznaj_z_pewnoscia` pyta Tesseracta o format TSV i zwraca tekst odtworzony ze
+  `rozpoznaj_z_pewnoscia` pyta Tesseracta o format TSV ustawieniem `-c tessedit_create_tsv=1` (niezależnym od podkatalogu `configs`; wynik bez nagłówka TSV to błąd trwały) i zwraca tekst odtworzony ze
   słów razem ze średnią pewnością słów.
 - `gnb/images/rasteryzacja.py` — renderowanie stron pliku PDF do obrazów PNG
   przez `pypdfium2`, w rozdzielczości z konfiguracji. Strony renderowane po

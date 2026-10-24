@@ -1,4 +1,4 @@
-# Rozwiązywanie problemów — stan po etapie siedemnastym, część D
+# Rozwiązywanie problemów — stan po etapie siedemnastym, część E, z naprawą odczytu pewności
 
 Ten dokument opisuje problemy, które wystąpiły w rzeczywistej pracy z aplikacją,
 oraz te, które wynikają wprost z jej budowy. Każdy przypadek ma tę samą budowę:
@@ -833,3 +833,28 @@ Co zrobić. Wybierz inną kombinację, na przykład domyślną Control plus Shif
 Ustawienia, zakładka „Skrót klawiszowy”, przycisk „Przywróć ustawienia domyślne tej
 zakładki”. Użytkownik nie korzysta z tej kombinacji, więc nie jest planowany osobny
 etap. Opis techniczny jest w `gnb/hotkeys/CLAUDE.md`, punkt 18.
+
+## 38. Wszystkie skany są oznaczone jako nieczytelne dla OCR albo pojawia się komunikat o braku danych o pewności odczytu
+
+Naprawione w naprawie `naprawa-tsv-bez-configs` po części E etapu siedemnastego.
+
+Objaw. Dwa możliwe. Pierwszy: źródło zdjęcia dostaje błąd z komunikatem „Tesseract nie
+zwrócił danych o pewności odczytu, tylko zwykły tekst, więc nie da się ocenić
+czytelności strony.” Drugi, w wersji sprzed naprawy: każda strona, także czysty druk,
+ma w pliku wynikowym zdanie „Prawdopodobnie pismo odręczne albo zdjęcie nieczytelne dla
+OCR. Treść nie została odczytana.”, bez żadnego błędu.
+
+Przyczyna. Odczyt pewności prosił Tesseracta o TSV słowem „tsv” na końcu polecenia,
+które Tesseract czyta jako nazwę pliku ustawień i szuka go w podkatalogu `configs`
+katalogu danych językowych. Katalog wskazany ustawieniem „sciezka_tessdata” albo zmienną
+`TESSDATA_PREFIX`, który zawiera same pliki `*.traineddata`, takiego podkatalogu nie
+ma, więc Tesseract wypisywał ostrzeżenie „read_params_file: Can't open tsv”, kończył
+się kodem zero i oddawał zwykły tekst. Dotyczy to na przykład folderu z dokładniejszymi
+danymi `pol.traineddata` z `tessdata_best`.
+
+Co zrobić. Zaktualizuj aplikację do wersji z naprawą: odczyt pewności prosi o TSV
+ustawieniem `-c tessedit_create_tsv=1`, które nie zależy od `configs`. Gdyby komunikat
+pojawił się mimo to, sprawdź ustawienie „sciezka_tessdata” i zmienną `TESSDATA_PREFIX`
+oraz uruchom `python -m gnb.cli diagnostyka`: język `pol` musi być na liście. Strony,
+które w wersji sprzed naprawy dostały zdanie o braku odczytu, przetwórz od nowa: usuń
+je ze strony projektu i dodaj ponownie.

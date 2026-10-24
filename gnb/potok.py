@@ -43,7 +43,7 @@ import httpx
 
 from gnb.audio.transkrypcja import UstawieniaTranskrypcji, powod_atrapy_av
 from gnb.core.identyfikatory import suma_kontrolna_bajtow
-from gnb.core.konfiguracja import Konfiguracja
+from gnb.core.konfiguracja import DOMYSLNY_OCR_PROG_OSTRZEZENIA, Konfiguracja
 from gnb.core.liczenie_slow import policz_slowa
 from gnb.core.model import (
     DokumentWyekstrahowany,
@@ -311,9 +311,6 @@ _SUFIKS_DOPISKI = "dopiski.txt"
 # liczona bez nagłówków, więc limit jest o dwa megabajty niższy od 30, żeby
 # metadane skanów zmieściły się z zapasem pod granicą.
 _LIMIT_PLIKU_SKANOW_MB = 28
-# Średnia pewność słów, poniżej której skan trafia do raportu jako odczytany
-# niepewnie, choć jego tekst zostaje w pliku wynikowym.
-_PROG_NISKIEJ_PEWNOSCI_SKANU = 75.0
 _MEGABAJT = 1024 * 1024
 
 # Prefiks nazwy grupy nadawanej automatycznie obrazom, które podano bez opcji
@@ -800,6 +797,7 @@ def przetworz_projekt(
             czas_pracy_sekundy=(zegar() - czas_startu).total_seconds(),
             zrodla_juz_w_projekcie=tuple(wykonanie.zrodla_juz_w_projekcie),
             nieudane_zastapienia=tuple(wykonanie.nieudane_zastapienia),
+            prog_ostrzezenia_skanow=konfiguracja.ocr_prog_ostrzezenia,
         )
         zapisz_raport(uklad.raport, zbuduj_raport(uklad.nazwa_projektu, podsumowanie))
         dziennik_wazny.zapisz(ZDARZENIE_PROJEKT_ZAKONCZONY)
@@ -3491,6 +3489,7 @@ def odbuduj_manifest_i_raport(
         checkpoint=checkpoint,
         limit_zrodel=konfiguracja.limit_zrodel,
         czas_pracy_sekundy=None,
+        prog_ostrzezenia_skanow=konfiguracja.ocr_prog_ostrzezenia,
     )
     zapisz_raport(uklad.raport, zbuduj_raport(uklad.nazwa_projektu, podsumowanie))
 
@@ -3632,6 +3631,7 @@ def _zbuduj_podsumowanie(
     czas_pracy_sekundy: float | None,
     zrodla_juz_w_projekcie: tuple[ZrodloJuzWProjekcie, ...] = (),
     nieudane_zastapienia: tuple[ZastapienieNieudane, ...] = (),
+    prog_ostrzezenia_skanow: float = DOMYSLNY_OCR_PROG_OSTRZEZENIA,
 ) -> PodsumowanieProjektu:
     poprawne = _policz_status(checkpoint, StatusZrodla.SPAKOWANE)
     pominiete = _policz_status(checkpoint, StatusZrodla.POMINIETE)
@@ -3695,7 +3695,7 @@ def _zbuduj_podsumowanie(
         zrodla_juz_w_projekcie=zrodla_juz_w_projekcie,
         liczba_nut_poza_grupami=nut_poza_grupami,
         zrodla_zweryfikowane=_zrodla_zweryfikowane(checkpoint),
-        skany_niska_pewnosc=_skany_z_niska_pewnoscia(checkpoint),
+        skany_niska_pewnosc=_skany_z_niska_pewnoscia(checkpoint, prog_ostrzezenia_skanow),
         dopiski_bez_skanu=tuple(Path(sciezka).name for sciezka in checkpoint.dopiski_bez_skanu),
         zastapione_pliki=tuple(
             ZastapionyPlik(
@@ -3727,13 +3727,16 @@ def _zbuduj_podsumowanie(
     )
 
 
-def _skany_z_niska_pewnoscia(checkpoint: Checkpoint) -> tuple[SkanZNiskaPewnoscia, ...]:
+def _skany_z_niska_pewnoscia(
+    checkpoint: Checkpoint, prog_ostrzezenia: float
+) -> tuple[SkanZNiskaPewnoscia, ...]:
     """Zbiera zdjęcia odczytane z niską pewnością, od najniższej średniej pewności słów.
 
     Wchodzi tu każde źródło, któremu OCR przypisał średnią pewność poniżej progu
-    ostrzeżenia, także to, którego tekst zostaje w pliku wynikowym. Skan uznany za
-    nieczytelny jest oznaczony zdaniem o braku odczytu. Źródło oznaczone ręcznie
-    jako sprawdzone zostaje w wykazie, bo sama pewność odczytu się nie zmienia.
+    ostrzeżenia z ustawienia `ocr_prog_ostrzezenia`, także to, którego tekst zostaje
+    w pliku wynikowym. Skan uznany za nieczytelny jest oznaczony zdaniem o braku
+    odczytu. Źródło oznaczone ręcznie jako sprawdzone zostaje w wykazie, bo sama
+    pewność odczytu się nie zmienia.
     """
     skany: list[SkanZNiskaPewnoscia] = []
     for stan in checkpoint.zrodla.values():
@@ -3745,7 +3748,7 @@ def _skany_z_niska_pewnoscia(checkpoint: Checkpoint) -> tuple[SkanZNiskaPewnosci
         except ValueError:
             continue
         nieczytelny = stan.metadane.get("nieczytelne_dla_ocr") == "tak"
-        if pewnosc >= _PROG_NISKIEJ_PEWNOSCI_SKANU and not nieczytelny:
+        if pewnosc >= prog_ostrzezenia and not nieczytelny:
             continue
         skany.append(
             SkanZNiskaPewnoscia(

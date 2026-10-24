@@ -131,6 +131,10 @@ DOMYSLNA_OCR_LICZBA_PROCESOW = 0
 # uznany za nieczytelny dla OCR, oraz przygotowanie zdjęcia przed drugą próbą
 # odczytu. Wartości i ich pomiar opisuje docs/CONFIGURATION.md.
 DOMYSLNY_OCR_PROG_PEWNOSCI = 50.0
+# Próg, poniżej którego skan trafia do sekcji raportu „Skany z niską pewnością
+# odczytu”, choć jego tekst zostaje w pliku wynikowym. Nie może być niższy niż
+# próg nieczytelności, bo nieczytelny skan nie miałby wtedy ostrzeżenia.
+DOMYSLNY_OCR_PROG_OSTRZEZENIA = 75.0
 DOMYSLNE_OCR_PRZYGOTOWANIE_OBRAZU = True
 # Gdy prawda, grupy obrazów powstają jako pliki tekstowe z sekcją każdego skanu
 # zamiast tematycznego pliku PDF z obrazami. Dla akt skanowanych telefonem, które
@@ -327,6 +331,7 @@ _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
     PREFIKS_ZMIENNYCH + "OCR_ROZDZIELCZOSC_PDF_DPI": "ocr_rozdzielczosc_pdf_dpi",
     PREFIKS_ZMIENNYCH + "OCR_LICZBA_PROCESOW": "ocr_liczba_procesow",
     PREFIKS_ZMIENNYCH + "OCR_PROG_PEWNOSCI": "ocr_prog_pewnosci",
+    PREFIKS_ZMIENNYCH + "OCR_PROG_OSTRZEZENIA": "ocr_prog_ostrzezenia",
     PREFIKS_ZMIENNYCH + "OCR_PRZYGOTOWANIE_OBRAZU": "ocr_przygotowanie_obrazu",
     PREFIKS_ZMIENNYCH + "GRUPY_OBRAZOW_JAKO_SKANY": "grupy_obrazow_jako_skany",
     PREFIKS_ZMIENNYCH + "SCIEZKA_TESSERACT": "sciezka_tesseract",
@@ -470,6 +475,7 @@ class Konfiguracja:
     ocr_rozdzielczosc_pdf_dpi: int = DOMYSLNA_OCR_ROZDZIELCZOSC_PDF_DPI
     ocr_liczba_procesow: int = DOMYSLNA_OCR_LICZBA_PROCESOW
     ocr_prog_pewnosci: float = DOMYSLNY_OCR_PROG_PEWNOSCI
+    ocr_prog_ostrzezenia: float = DOMYSLNY_OCR_PROG_OSTRZEZENIA
     ocr_przygotowanie_obrazu: bool = DOMYSLNE_OCR_PRZYGOTOWANIE_OBRAZU
     grupy_obrazow_jako_skany: bool = DOMYSLNE_GRUPY_OBRAZOW_JAKO_SKANY
     sciezka_tesseract: str = DOMYSLNA_SCIEZKA_TESSERACT
@@ -663,6 +669,9 @@ def wczytaj_konfiguracje(
         ocr_prog_pewnosci=_jako_prog_pewnosci(
             scalone, "ocr_prog_pewnosci", domyslna.ocr_prog_pewnosci
         ),
+        ocr_prog_ostrzezenia=_jako_prog_pewnosci(
+            scalone, "ocr_prog_ostrzezenia", domyslna.ocr_prog_ostrzezenia
+        ),
         ocr_przygotowanie_obrazu=_jako_prawda_falsz(
             scalone, "ocr_przygotowanie_obrazu", domyslna.ocr_przygotowanie_obrazu
         ),
@@ -781,6 +790,13 @@ def wczytaj_konfiguracje(
             f"({konfiguracja.deduplikacja_prog_do_przegladu}) nie może być wyższe niż "
             f"„deduplikacja_prog_duplikatu” ({konfiguracja.deduplikacja_prog_duplikatu}). "
             "Niższy próg oznacza parę do ręcznego rozstrzygnięcia, wyższy — pewny duplikat."
+        )
+    if konfiguracja.ocr_prog_ostrzezenia < konfiguracja.ocr_prog_pewnosci:
+        raise BladTrwaly(
+            "Ustawienie „ocr_prog_ostrzezenia” "
+            f"({konfiguracja.ocr_prog_ostrzezenia:g}) nie może być niższe niż "
+            f"„ocr_prog_pewnosci” ({konfiguracja.ocr_prog_pewnosci:g}). Skan poniżej progu "
+            "nieczytelności musi mieć też ostrzeżenie w raporcie."
         )
     return konfiguracja
 

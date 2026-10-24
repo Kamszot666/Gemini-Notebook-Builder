@@ -34,11 +34,12 @@ from gnb.core.model import DokumentWyekstrahowany
 from gnb.core.stale import PoziomPewnosciStruktury, TypZrodla
 from gnb.core.wyjatki import BrakNarzedzia, FormatNieobslugiwany
 from gnb.extractors.bazowy import PostepEkstrakcji
-from gnb.images.ocena_ocr import OcenaOcr, ocen_ocr
+from gnb.images.ocena_ocr import DOMYSLNY_PROG_PEWNOSCI_OCR, OcenaOcr, ocen_ocr
+from gnb.images.odczyt_strony import odczytaj_strone
 from gnb.images.opis import BRAK_OPISU, MaterialDoOpisu, zbuduj_opis
 from gnb.images.tesseract import (
     UstawieniaOcr,
-    rozpoznaj_tekst,
+    WynikOcrZPewnoscia,
     wymagaj_ocr,
 )
 
@@ -52,6 +53,13 @@ FORMATY_OBRAZOW = frozenset(
 NAGLOWEK_SEKCJI_OCR = "Rozpoznany tekst (OCR):"
 KOMUNIKAT_OCR_PUSTY = "OCR nie rozpoznał żadnego tekstu na tym obrazie."
 KOMUNIKAT_OCR_NIEWYKONANY = "OCR nie został wykonany dla tego obrazu."
+# Zdanie, które zastępuje w pliku wynikowym tekst zdjęcia nieczytelnego dla OCR.
+# Aplikacja nie odróżni na pewno pisma odręcznego od rozmazanego wydruku, dlatego
+# zdanie obejmuje oba przypadki. Rozpoznany bełkot zostaje w wynikach pośrednich.
+ZDANIE_NIECZYTELNE_DLA_OCR = (
+    "Prawdopodobnie pismo odręczne albo zdjęcie nieczytelne dla OCR. Treść nie została odczytana."
+)
+SUFIKS_ODCZYTU_NIECZYTELNEGO = "ocr_nieczytelny.txt"
 
 KOMUNIKAT_USZKODZONY_OBRAZ = (
     "Pliku obrazu nie dało się odczytać: jest uszkodzony albo ma nieobsługiwaną postać wewnętrzną."
@@ -83,9 +91,21 @@ class EkstraktorObrazu:
         ustawienia_ocr: UstawieniaOcr | None = None,
         *,
         ocr_wlaczony: bool = False,
+        przygotowanie_wlaczone: bool = True,
+        prog_pewnosci: float = DOMYSLNY_PROG_PEWNOSCI_OCR,
+        tryb_skanu: bool = False,
     ) -> None:
+        """Przyjmuje ustawienia OCR oraz trzy ustawienia odczytu zdjęć stron.
+
+        Przy `tryb_skanu` wynikiem obrazu jest sam rozpoznany tekst, bez opisu
+        obrazu: zdjęcie kartki akt nie ma opisu merytorycznego, a opis o braku
+        opisu tylko zaśmiecałby plik.
+        """
         self._ustawienia_ocr = ustawienia_ocr or UstawieniaOcr()
         self._ocr_wlaczony = ocr_wlaczony
+        self._przygotowanie_wlaczone = przygotowanie_wlaczone
+        self._prog_pewnosci = prog_pewnosci
+        self._tryb_skanu = tryb_skanu
 
     def obsluguje(self, typ_zrodla: TypZrodla, format_zrodla: str) -> bool:
         return typ_zrodla is TypZrodla.PLIK_OBRAZ and format_zrodla in FORMATY_OBRAZOW
@@ -113,13 +133,23 @@ class EkstraktorObrazu:
         wymiary = (obraz.width, obraz.height)
         metadane_obrazu = _metadane_z_obrazu(obraz)
 
-        tekst_ocr, ocr_wykonany = self._rozpoznaj(identyfikator_zrodla, obraz)
-        if ocr_wykonany:
-            ocena = ocen_ocr(tekst_ocr)
+        odczyt = self._rozpoznaj(identyfikator_zrodla, obraz)
+        ocr_wykonany = odczyt is not None
+        tekst_ocr = odczyt.tekst.strip() if odczyt is not None else ""
+        plik_posredni: tuple[str, bytes] | None = None
+        if odczyt is not None:
+            ocena = ocen_ocr(tekst_ocr, odczyt.srednia_pewnosc, self._prog_pewnosci)
             if ocena.czy_wymaga_sprawdzenia:
                 ostrzezenia.extend(ocena.powody)
+            if ocena.czy_nieczytelne:
+                # Rozpoznany bełkot nie trafia do pliku wynikowego, ale nie ginie:
+                # zostaje w wynikach pośrednich do wglądu.
+                if tekst_ocr:
+                    plik_posredni = (SUFIKS_ODCZYTU_NIECZYTELNEGO, tekst_ocr.encode("utf-8"))
+                tekst_ocr = ""
         else:
             ocena = None
+        nieczytelne = ocena is not None and ocena.czy_nieczytelne
 
         opis = zbuduj_opis(
             MaterialDoOpisu(
@@ -131,7 +161,10 @@ class EkstraktorObrazu:
             )
         )
 
-        tekst = _zloz_tekst(opis, format_pliku, wymiary, tekst_ocr, ocr_wykonany)
+        if self._tryb_skanu and ocr_wykonany:
+            tekst = ZDANIE_NIECZYTELNE_DLA_OCR if nieczytelne else tekst_ocr
+        else:
+            tekst = _zloz_tekst(opis, format_pliku, wymiary, tekst_ocr, ocr_wykonany, nieczytelne)
         metadane = _metadane_dokumentu(format_pliku, wymiary, metadane_obrazu, ocr_wykonany, ocena)
 
         return DokumentWyekstrahowany(
@@ -142,6 +175,7 @@ class EkstraktorObrazu:
             tytul=metadane_obrazu.get("tytul"),
             metadane=metadane,
             ostrzezenia=ostrzezenia,
+            plik_posredni=plik_posredni,
         )
 
     def _otworz(self, identyfikator_zrodla: str, bajty: bytes) -> tuple[Image.Image, str]:
@@ -167,22 +201,24 @@ class EkstraktorObrazu:
             raise FormatNieobslugiwany(KOMUNIKAT_USZKODZONY_OBRAZ, identyfikator_zrodla) from blad
         return obraz, (obraz.format or "").lower()
 
-    def _rozpoznaj(self, identyfikator_zrodla: str, obraz: Image.Image) -> tuple[str, bool]:
-        """Zwraca rozpoznany tekst i informację, czy OCR faktycznie się wykonał.
+    def _rozpoznaj(
+        self, identyfikator_zrodla: str, obraz: Image.Image
+    ) -> WynikOcrZPewnoscia | None:
+        """Zwraca odczyt OCR ze średnią pewnością albo nic, gdy OCR się nie wykonał.
 
         Przy włączonym OCR brak Tesseracta albo jego danych językowych zgłasza
         `BrakNarzedzia`, co kończy się pominięciem źródła. Przy wyłączonym OCR
         obraz jest opisywany bez rozpoznanego tekstu i nic się nie zmienia.
         """
         if not self._ocr_wlaczony:
-            return "", False
+            return None
         wymagaj_ocr(self._ustawienia_ocr, identyfikator_zrodla)
-        tekst = rozpoznaj_tekst(
-            _do_png(obraz),
+        return odczytaj_strone(
+            obraz,
             self._ustawienia_ocr,
+            przygotowanie_wlaczone=self._przygotowanie_wlaczone,
             identyfikator_zrodla=identyfikator_zrodla,
         )
-        return tekst.strip(), True
 
 
 def _zloz_tekst(
@@ -191,6 +227,7 @@ def _zloz_tekst(
     wymiary: tuple[int, int],
     tekst_ocr: str,
     ocr_wykonany: bool,
+    nieczytelne: bool = False,
 ) -> str:
     """Składa opis obrazu z sekcją rozpoznanego tekstu w jeden dokument.
 
@@ -208,7 +245,9 @@ def _zloz_tekst(
     else:
         naglowek = opis
 
-    if tekst_ocr:
+    if nieczytelne:
+        sekcja = ZDANIE_NIECZYTELNE_DLA_OCR
+    elif tekst_ocr:
         sekcja = tekst_ocr
     elif ocr_wykonany:
         sekcja = KOMUNIKAT_OCR_PUSTY
@@ -279,14 +318,10 @@ def _metadane_dokumentu(
         metadane["autor"] = metadane_obrazu["autor"]
     if ocena is not None:
         metadane["ocena_ocr"] = ocena.ocena
+        metadane["nieczytelne_dla_ocr"] = "tak" if ocena.czy_nieczytelne else "nie"
+        if ocena.srednia_pewnosc is not None:
+            metadane["srednia_pewnosc_ocr"] = f"{ocena.srednia_pewnosc:.1f}"
     return metadane
-
-
-def _do_png(obraz: Image.Image) -> bytes:
-    """Zapisuje obraz jako PNG w pamięci, sprowadzając go do trybu RGB."""
-    bufor = io.BytesIO()
-    obraz.convert("RGB").save(bufor, format="PNG")
-    return bufor.getvalue()
 
 
 def _zarejestruj_heif_jesli_dostepne() -> bool:

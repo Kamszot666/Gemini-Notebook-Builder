@@ -39,6 +39,7 @@ from gnb.core.postep import FazaPotoku, WywolanieZwrotnePostepu, ZdarzeniePostep
 from gnb.core.skrot import rozbierz_kombinacje
 from gnb.core.wyjatki import BladGnb
 from gnb.ingestion.adresy_z_plikow import dolacz_adresy_znalezione, przyjmij_plik_z_adresami
+from gnb.ingestion.dopiski import czy_plik_dopiskow, pliki_z_folderu
 from gnb.ingestion.lista_url import (
     AdresWejsciowy,
     PodsumowanieListyUrl,
@@ -48,6 +49,7 @@ from gnb.ingestion.lista_url import (
 )
 from gnb.ingestion.wejscie import (
     PozycjaWejsciowa,
+    przyjmij_plik,
     przyjmij_tekst,
     przyjmij_url,
 )
@@ -498,8 +500,14 @@ def uruchom_przetwarzanie(
     grupa: str | None = None,
     wymus_transkrypcje: bool = False,
     nuty: bool = False,
+    foldery: list[str] | None = None,
 ) -> int:
     """Buduje pozycje wejściowe, uruchamia potok i wypisuje raport dla użytkownika.
+
+    Argument `foldery` dodaje do wejść wszystkie obsługiwane pliki każdego
+    wskazanego folderu, bez podfolderów, w kolejności naturalnej nazw. Służy do
+    zdjęć kartek akt: pliki dopisków odręcznych leżące obok zdjęć dołączają się
+    do swoich skanów. Folder, którego nie ma, kończy polecenie kodem błędu.
 
     Zwraca kod zero, gdy potok się wykona, oraz kod dwa, gdy nie podano żadnego
     źródła. Pojedyncze błędne źródło nie zmienia kodu wyjścia — jest opisane
@@ -546,7 +554,26 @@ def uruchom_przetwarzanie(
 
     pozycje: list[PozycjaWejsciowa] = []
     znalezione: list[AdresWejsciowy] = []
+    pliki = list(pliki)
+    for folder in foldery or []:
+        try:
+            z_folderu, nieobslugiwane = pliki_z_folderu(Path(folder))
+        except OSError as blad:
+            print(f"Nie udało się odczytać folderu {folder}: {blad}")
+            return KOD_BLAD
+        pliki.extend(str(plik) for plik in z_folderu)
+        print(f"Folder {folder}: plików do przetworzenia {len(z_folderu)}.")
+        if nieobslugiwane:
+            print(
+                f"Pominięto w folderze {folder} pliki o formacie, którego aplikacja nie obsługuje, "
+                f"liczba {len(nieobslugiwane)}: " + ", ".join(nieobslugiwane)
+            )
     for sciezka in pliki:
+        if konfiguracja.grupy_obrazow_jako_skany and czy_plik_dopiskow(Path(sciezka)):
+            # Dopiski odręczne są częścią sekcji skanu, a nie źródłem, więc adresy
+            # z ich treści nie są wyszukiwane.
+            pozycje.append(przyjmij_plik(Path(sciezka), moment, grupa=grupa))
+            continue
         przyjecie = przyjmij_plik_z_adresami(
             Path(sciezka), moment, konfiguracja, grupa=grupa, nuty=nuty
         )
@@ -713,6 +740,18 @@ def main(argumenty: list[str] | None = None) -> int:
         ),
     )
     parser_przetworz.add_argument(
+        "--folder",
+        action="append",
+        default=[],
+        metavar="SCIEZKA",
+        help=(
+            "Folder z plikami do przetworzenia: wszystkie obsługiwane pliki folderu, bez "
+            "podfolderów, w kolejności naturalnej nazw. Opcję można podać wielokrotnie. "
+            "Przy ustawieniu „grupy_obrazow_jako_skany” pliki NAZWA_dopiski.txt i "
+            "NAZWA_dopiski.md leżące obok zdjęć dołączają się do swoich skanów."
+        ),
+    )
+    parser_przetworz.add_argument(
         "--tekst",
         action="append",
         default=[],
@@ -809,6 +848,7 @@ def main(argumenty: list[str] | None = None) -> int:
             ustalone.grupa,
             bool(ustalone.wymus_transkrypcje),
             bool(ustalone.nuty),
+            list(ustalone.folder),
         )
 
     parser.error(f"Nieznane polecenie: {ustalone.polecenie}")

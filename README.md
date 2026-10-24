@@ -237,9 +237,10 @@ python -m gnb.cli przetworz --projekt "Podatki 2026" --tekst "Krótka notatka do
 python -m gnb.cli przetworz --lista-url C:\materialy\adresy.txt --sprawdz-liste
 python -m gnb.cli przetworz --projekt "Nuty" --plik C:\nuty\utwor.pdf --nuty
 python -m gnb.cli przetworz --projekt "Wywiady" --plik C:\nagrania\rozmowa.mp3 --wymus-transkrypcje
+python -m gnb.cli przetworz --projekt "akta" --grupa "akta" --folder C:\akta\zdjecia
 ```
 
-Koniec bloku poleceń. Opcje `--plik`, `--tekst`, `--tekst-md`, `--url` i `--lista-url` możesz podawać wiele razy. `--grupa` wrzuca wszystkie źródła z tego wywołania do jednej grupy tematycznej. `--sprawdz-liste` tylko pokazuje podsumowanie listy adresów (ile wykryto, ile poprawnych, ile powtórek, ile odrzuconych i dlaczego), bez pobierania. `--nuty` każe traktować PDF-y i obrazy jak nuty. `--wymus-transkrypcje` przepisuje nagranie, które program uznał za niemowne, na przykład z głośną muzyką w tle.
+Koniec bloku poleceń. Opcje `--plik`, `--folder`, `--tekst`, `--tekst-md`, `--url` i `--lista-url` możesz podawać wiele razy. `--folder` dodaje wszystkie obsługiwane pliki folderu, bez podfolderów, w kolejności naturalnej nazw (2 przed 10), a pliki o formacie, którego program nie obsługuje, wypisuje z nazwy. Przy ustawieniu „Grupy obrazów jako pliki tekstowe ze skanami” (zakładka „OCR i obrazy”) zdjęcia kartek z folderu dają plik Markdown z sekcją każdego skanu, a pliki `NAZWA_dopiski.txt` obok zdjęć dołączają się do swoich skanów jako przepisane dopiski odręczne; szczegóły w `docs/FORMATS.md`. `--grupa` wrzuca wszystkie źródła z tego wywołania do jednej grupy tematycznej. `--sprawdz-liste` tylko pokazuje podsumowanie listy adresów (ile wykryto, ile poprawnych, ile powtórek, ile odrzuconych i dlaczego), bez pobierania. `--nuty` każe traktować PDF-y i obrazy jak nuty. `--wymus-transkrypcje` przepisuje nagranie, które program uznał za niemowne, na przykład z głośną muzyką w tle.
 
 Pozostałe polecenia:
 

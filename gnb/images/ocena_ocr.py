@@ -26,6 +26,13 @@ from gnb.core.liczenie_slow import policz_slowa
 OCENA_OCR_POPRAWNA = "poprawna"
 OCENA_OCR_PUSTA = "pusta"
 OCENA_OCR_PODEJRZANA = "podejrzana"
+OCENA_OCR_NISKA_PEWNOSC = "niska pewność"
+
+# Domyślny próg średniej pewności słów (skala Tesseracta, od 0 do 100), poniżej
+# którego odczyt jest uznany za nieczytelny. Dobrany na obrazach syntetycznych:
+# czysty druk daje około 95, rozmazany około 25, a pismo odręczne odtworzone
+# bazgrołami około 35. Szczegóły pomiaru są w docs/CONFIGURATION.md.
+DOMYSLNY_PROG_PEWNOSCI_OCR = 50.0
 
 # Minimalna liczba słów zawierających literę, przy której w ogóle sprawdzany jest
 # udział słów bez samogłoski. Na krótszym tekście ten wskaźnik jest zbyt czuły:
@@ -53,6 +60,10 @@ POWOD_SLOWA_BEZ_SAMOGLOSEK = (
     "wśród rozpoznanych słów mało jest słów z samogłoską ({udzial} procent), "
     "co jest typowe dla błędnego odczytu kształtów zamiast liter"
 )
+POWOD_NISKA_PEWNOSC = (
+    "średnia pewność odczytu słów wynosi {pewnosc} na 100, poniżej progu {prog}, "
+    "co jest typowe dla pisma odręcznego albo rozmazanego zdjęcia"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,17 +72,38 @@ class OcenaOcr:
 
     ocena: str
     powody: tuple[str, ...] = ()
+    srednia_pewnosc: float | None = None
 
     @property
     def czy_wymaga_sprawdzenia(self) -> bool:
         """Prawda, gdy wynik OCR ma trafić do sekcji „Materiały do sprawdzenia”."""
-        return self.ocena in (OCENA_OCR_PUSTA, OCENA_OCR_PODEJRZANA)
+        return self.ocena != OCENA_OCR_POPRAWNA
+
+    @property
+    def czy_nieczytelne(self) -> bool:
+        """Prawda, gdy odczyt jest pusty, podejrzany albo ma pewność poniżej progu.
+
+        Taki odczyt nie trafia do pliku wynikowego, bo rozpoznany bełkot w bazie
+        wiedzy jest gorszy niż jawna informacja, że strony nie odczytano.
+        """
+        return self.ocena != OCENA_OCR_POPRAWNA
 
 
-def ocen_ocr(tekst: str) -> OcenaOcr:
-    """Ocenia jakość rozpoznanego tekstu i zwraca ocenę wraz z powodami."""
+def ocen_ocr(
+    tekst: str,
+    srednia_pewnosc: float | None = None,
+    prog_pewnosci: float = DOMYSLNY_PROG_PEWNOSCI_OCR,
+) -> OcenaOcr:
+    """Ocenia jakość rozpoznanego tekstu i zwraca ocenę wraz z powodami.
+
+    Gdy podano średnią pewność słów, odczyt o pewności poniżej progu dostaje
+    ocenę „niska pewność” nawet wtedy, gdy sam tekst wygląda poprawnie, bo
+    Tesseract rozpoznaje pismo odręczne jako zbitki zwyczajnie wyglądających słów.
+    """
     if policz_slowa(tekst) == 0:
-        return OcenaOcr(ocena=OCENA_OCR_PUSTA, powody=(POWOD_PUSTY,))
+        return OcenaOcr(
+            ocena=OCENA_OCR_PUSTA, powody=(POWOD_PUSTY,), srednia_pewnosc=srednia_pewnosc
+        )
 
     powody: list[str] = []
 
@@ -87,8 +119,20 @@ def ocen_ocr(tekst: str) -> OcenaOcr:
             powody.append(POWOD_SLOWA_BEZ_SAMOGLOSEK.format(udzial=round(udzial * 100)))
 
     if powody:
-        return OcenaOcr(ocena=OCENA_OCR_PODEJRZANA, powody=tuple(powody))
-    return OcenaOcr(ocena=OCENA_OCR_POPRAWNA)
+        return OcenaOcr(
+            ocena=OCENA_OCR_PODEJRZANA, powody=tuple(powody), srednia_pewnosc=srednia_pewnosc
+        )
+    if srednia_pewnosc is not None and srednia_pewnosc < prog_pewnosci:
+        return OcenaOcr(
+            ocena=OCENA_OCR_NISKA_PEWNOSC,
+            powody=(
+                POWOD_NISKA_PEWNOSC.format(
+                    pewnosc=round(srednia_pewnosc), prog=round(prog_pewnosci)
+                ),
+            ),
+            srednia_pewnosc=srednia_pewnosc,
+        )
+    return OcenaOcr(ocena=OCENA_OCR_POPRAWNA, srednia_pewnosc=srednia_pewnosc)
 
 
 def _udzial_znakow_nietekstowych(tekst: str) -> float:

@@ -1,4 +1,4 @@
-# Architektura — stan po etapie siedemnastym, część D
+# Architektura — stan po etapie siedemnastym, część E
 
 Ten dokument opisuje wyłącznie to, co faktycznie istnieje w repozytorium po
 zakończeniu etapu czternastego. Pełny docelowy podział na pakiety opisuje
@@ -528,13 +528,25 @@ starcie serwera.
 zewnętrzne. `przetworz` uruchamia potok dla tekstu wklejonego, plików
 tekstowych, dokumentowych, obrazów i nagrań mowy oraz adresów stron i filmów,
 z opcjami `--projekt`, `--plik`, `--tekst`, `--tekst-md`, `--url`,
-`--lista-url`, `--sprawdz-liste`, `--katalog`, `--grupa` oraz
+`--lista-url`, `--sprawdz-liste`, `--katalog`, `--grupa`, `--folder` oraz
 `--wymus-transkrypcje`. Opcja `--grupa` przypisuje wszystkie źródła jednego
 wywołania do wspólnej grupy tematycznej pakowania; kolejną grupę w tym samym
 projekcie dodaje się osobnym wywołaniem, bo checkpoint kumuluje źródła między
 uruchomieniami. Opcja `--wymus-transkrypcje` przełamuje odrzucenie nagrania
 rozpoznanego jako niemowne. `pamiec` pokazuje stan wspólnej pamięci podręcznej
 i pozwala ją wyczyścić.
+
+## Skany kartek w pakowaniu
+
+Przy ustawieniu `grupy_obrazow_jako_skany` faza pakowania kieruje grupy obrazów do
+`_spakuj_grupe(..., skany=True)` zamiast do tematycznego pliku PDF. Skany są
+sortowane naturalnie według nazwy pliku (`gnb.core.nazwy.klucz_porzadku_naturalnego`),
+planowane w tej kolejności przez `rozplanuj_skany` (bez porządkowania po
+identyfikatorze, jak robi to `rozplanuj_grupe`), z limitem treści 28 megabajtów, i
+składane przez `gnb.output.skany`. Przepisane dopiski odręczne czyta
+`gnb.ingestion.dopiski` w chwili przetwarzania zdjęcia i zapisuje w wynikach
+pośrednich; pakowanie dokleja je do tekstu skanu, a składanie pliku rozdziela. Skany
+nieczytelne dla OCR są wyłączone z deduplikacji (`_czy_skan_nieczytelny`).
 
 ## Pakiet gnb.images
 
@@ -547,11 +559,20 @@ przez ekstraktory i przez fazę pakowania.
   wyjściem. `rozpoznaj_wiele` uruchamia procesy Tesseracta równolegle, zachowując
   kolejność wejścia i zgłaszając postęp po każdym gotowym obrazie. Każdy OCR to
   osobny proces systemowy, zgodnie z sekcją piętnastą `CLAUDE.md`.
+  `rozpoznaj_z_pewnoscia` pyta Tesseracta o format TSV i zwraca tekst odtworzony ze
+  słów razem ze średnią pewnością słów.
 - `gnb/images/rasteryzacja.py` — renderowanie stron pliku PDF do obrazów PNG
   przez `pypdfium2`, w rozdzielczości z konfiguracji. Strony renderowane po
   kolei, bo PDFium nie jest bezpieczny wątkowo.
-- `gnb/images/ocena_ocr.py` — ocena jakości tekstu z OCR: „poprawna”, „pusta”
-  albo „podejrzana”, z listą powodów.
+- `gnb/images/ocena_ocr.py` — ocena jakości tekstu z OCR: „poprawna”, „pusta”,
+  „podejrzana” albo „niska pewność” (średnia pewność słów poniżej progu), z listą
+  powodów. Odczyt inny niż „poprawna” jest „nieczytelny dla OCR”.
+- `gnb/images/odczyt_strony.py` — odczyt jednej strony: pierwszy odczyt z surowego
+  obrazu, a przy słabej pewności druga próba na obrazie przygotowanym; zostaje
+  odczyt z większą sumą pewności słów.
+- `gnb/images/przygotowanie.py` — odcienie szarości, filtr medianowy, wyrównanie
+  kontrastu, wyprostowanie strony metodą profilu rzutu i powiększenie małego obrazu,
+  wyłącznie Pillow i NumPy.
 - `gnb/images/opis.py` — składanie opisu merytorycznego obrazu wyłącznie z
   dostępnego materiału tekstowego, nigdy przez zewnętrzną usługę. Brak materiału
   daje jawny komunikat, a nie pusty ciąg.

@@ -297,6 +297,10 @@ class Checkpoint:
     # ponownym pobraniem. Nowo utworzony stan takiego źródła dostaje od razu
     # znacznik weryfikacji. Pole addytywne z pustą wartością domyślną.
     zweryfikowane_wstepnie: list[str] = field(default_factory=list)
+    # Pełne ścieżki plików dopisków odręcznych, obok których nie było zdjęcia
+    # o pasującej nazwie. Pole addytywne z pustą wartością domyślną: starszy plik
+    # wczytuje się bez zmiany numeru schematu, a raport pokazuje same nazwy.
+    dopiski_bez_skanu: list[str] = field(default_factory=list)
 
 
 def zapisz(sciezka: Path, checkpoint: Checkpoint) -> None:
@@ -494,6 +498,7 @@ def _checkpoint_do_slownika(checkpoint: Checkpoint) -> dict[str, Any]:
         "wejscia": [_wejscie_do_slownika(wejscie) for wejscie in checkpoint.wejscia],
         "archiwa": [_archiwum_do_slownika(archiwum) for archiwum in checkpoint.archiwa],
         "zweryfikowane_wstepnie": list(checkpoint.zweryfikowane_wstepnie),
+        "dopiski_bez_skanu": list(checkpoint.dopiski_bez_skanu),
         "zastapione_pliki_grup": [
             {"stara_nazwa": wpis.stara_nazwa, "nowa_nazwa": wpis.nowa_nazwa, "grupa": wpis.grupa}
             for wpis in checkpoint.zastapione_pliki_grup
@@ -641,6 +646,9 @@ def _checkpoint_ze_slownika(dane: dict[str, Any]) -> Checkpoint:
         archiwa=_archiwa_ze_slownika(dane.get("archiwa")),
         zweryfikowane_wstepnie=[
             wpis for wpis in (dane.get("zweryfikowane_wstepnie") or []) if isinstance(wpis, str)
+        ],
+        dopiski_bez_skanu=[
+            wpis for wpis in (dane.get("dopiski_bez_skanu") or []) if isinstance(wpis, str)
         ],
     )
 

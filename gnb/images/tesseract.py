@@ -250,8 +250,12 @@ def rozpoznaj_tekst(
     ustawienia: UstawieniaOcr,
     *,
     identyfikator_zrodla: str | None = None,
+    format_wyjscia: str = "",
 ) -> str:
     """Rozpoznaje tekst z jednego obrazu PNG i zwraca go jako czysty tekst.
+
+    Argument `format_wyjscia` pozwala poprosić Tesseracta o inny format wyniku,
+    na przykład ``tsv``; pusty daje zwykły tekst.
 
     Obraz jest przekazywany przez standardowe wejście, a wynik odbierany ze
     standardowego wyjścia. Ostrzeżenia Tesseracta na standardowym wyjściu błędu
@@ -271,6 +275,8 @@ def rozpoznaj_tekst(
     ]
     if ustawienia.sciezka_tessdata:
         polecenie.extend(["--tessdata-dir", ustawienia.sciezka_tessdata])
+    if format_wyjscia:
+        polecenie.append(format_wyjscia)
 
     try:
         wynik = subprocess.run(
@@ -342,3 +348,79 @@ def rozpoznaj_wiele(
             if przy_postepie is not None:
                 przy_postepie(gotowych, wszystkich)
     return wyniki
+
+
+@dataclass(frozen=True, slots=True)
+class WynikOcrZPewnoscia:
+    """Tekst rozpoznany przez Tesseracta wraz ze średnią pewnością słów.
+
+    Pewność jest liczbą od 0 do 100, średnią z pewności wszystkich rozpoznanych
+    słów obrazu. Gdy Tesseract nie rozpoznał żadnego słowa, `srednia_pewnosc`
+    wynosi zero, a `liczba_slow` zero.
+    """
+
+    tekst: str
+    srednia_pewnosc: float
+    liczba_slow: int
+
+
+def rozpoznaj_z_pewnoscia(
+    obraz_png: bytes,
+    ustawienia: UstawieniaOcr,
+    *,
+    identyfikator_zrodla: str | None = None,
+) -> WynikOcrZPewnoscia:
+    """Rozpoznaje tekst obrazu i zwraca go razem ze średnią pewnością słów.
+
+    Wywołanie jest takie samo jak w `rozpoznaj_tekst`, ale z formatem wyjścia
+    TSV, w którym każde słowo ma własną pewność. Tekst jest odtwarzany z tych
+    samych słów, z zachowaniem podziału na wiersze i akapity, więc dla
+    zwykłego druku jest równoważny zwykłemu wyjściu tekstowemu.
+    """
+    surowe = rozpoznaj_tekst(
+        obraz_png,
+        ustawienia,
+        identyfikator_zrodla=identyfikator_zrodla,
+        format_wyjscia="tsv",
+    )
+    return _odczytaj_tsv(surowe)
+
+
+def _odczytaj_tsv(tsv: str) -> WynikOcrZPewnoscia:
+    """Zamienia wyjście TSV Tesseracta na tekst i średnią pewność słów."""
+    wiersze_tekstu: list[tuple[tuple[int, int], str]] = []
+    slowa_wiersza: list[str] = []
+    klucz_wiersza: tuple[int, int, int] | None = None
+    pewnosci: list[float] = []
+    for wiersz in tsv.split("\n")[1:]:
+        kolumny = wiersz.split("\t")
+        if len(kolumny) < 12 or kolumny[0] != "5":
+            continue
+        slowo = kolumny[11].strip()
+        try:
+            pewnosc = float(kolumny[10])
+        except ValueError:
+            continue
+        if not slowo or pewnosc < 0:
+            continue
+        klucz = (int(kolumny[2]), int(kolumny[3]), int(kolumny[4]))
+        if klucz_wiersza is not None and klucz != klucz_wiersza:
+            wiersze_tekstu.append(((klucz_wiersza[0], klucz_wiersza[1]), " ".join(slowa_wiersza)))
+            slowa_wiersza = []
+        klucz_wiersza = klucz
+        slowa_wiersza.append(slowo)
+        pewnosci.append(pewnosc)
+    if klucz_wiersza is not None and slowa_wiersza:
+        wiersze_tekstu.append(((klucz_wiersza[0], klucz_wiersza[1]), " ".join(slowa_wiersza)))
+
+    czesci: list[str] = []
+    poprzedni_akapit: tuple[int, int] | None = None
+    for akapit, tekst in wiersze_tekstu:
+        if poprzedni_akapit is not None:
+            czesci.append("\n\n" if akapit != poprzedni_akapit else "\n")
+        czesci.append(tekst)
+        poprzedni_akapit = akapit
+    srednia = sum(pewnosci) / len(pewnosci) if pewnosci else 0.0
+    return WynikOcrZPewnoscia(
+        tekst="".join(czesci), srednia_pewnosc=srednia, liczba_slow=len(pewnosci)
+    )

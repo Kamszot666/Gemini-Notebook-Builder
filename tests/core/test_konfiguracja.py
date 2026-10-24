@@ -414,3 +414,32 @@ def test_zmienna_srodowiskowa_formatow_przyjmuje_liste_po_przecinku(tmp_path: Pa
     )
 
     assert konfiguracja.formaty_wynikowe == ("txt", "md")
+
+
+def test_ustawienia_odczytu_skanow_maja_wartosci_domyslne_i_dadza_sie_zmienic(
+    tmp_path: Path,
+) -> None:
+    domyslna = wczytaj_konfiguracje(tmp_path / "nie_ma.toml", srodowisko={})
+    assert domyslna.ocr_prog_pewnosci == 50.0
+    assert domyslna.ocr_przygotowanie_obrazu is True
+    assert domyslna.grupy_obrazow_jako_skany is False
+
+    plik = tmp_path / "konfiguracja.toml"
+    plik.write_text(
+        "ocr_prog_pewnosci = 62.5\n"
+        "ocr_przygotowanie_obrazu = false\n"
+        "grupy_obrazow_jako_skany = true\n",
+        encoding="utf-8",
+    )
+    zmieniona = wczytaj_konfiguracje(plik, srodowisko={})
+    assert zmieniona.ocr_prog_pewnosci == 62.5
+    assert zmieniona.ocr_przygotowanie_obrazu is False
+    assert zmieniona.grupy_obrazow_jako_skany is True
+
+    z_srodowiska = wczytaj_konfiguracje(plik, srodowisko={"GNB_OCR_PROG_PEWNOSCI": "0"})
+    assert z_srodowiska.ocr_prog_pewnosci == 0.0
+
+
+def test_prog_pewnosci_ocr_powyzej_stu_konczy_sie_bledem(tmp_path: Path) -> None:
+    with pytest.raises(BladTrwaly, match="od 0 do 100"):
+        wczytaj_konfiguracje(tmp_path / "nie_ma.toml", srodowisko={"GNB_OCR_PROG_PEWNOSCI": "101"})

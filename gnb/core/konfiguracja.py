@@ -127,6 +127,15 @@ DOMYSLNY_OCR_JEZYK = "pol"
 DOMYSLNY_OCR_PSM = 3
 DOMYSLNA_OCR_ROZDZIELCZOSC_PDF_DPI = 300
 DOMYSLNA_OCR_LICZBA_PROCESOW = 0
+# Próg średniej pewności słów (od 0 do 100), poniżej którego odczyt zdjęcia jest
+# uznany za nieczytelny dla OCR, oraz przygotowanie zdjęcia przed drugą próbą
+# odczytu. Wartości i ich pomiar opisuje docs/CONFIGURATION.md.
+DOMYSLNY_OCR_PROG_PEWNOSCI = 50.0
+DOMYSLNE_OCR_PRZYGOTOWANIE_OBRAZU = True
+# Gdy prawda, grupy obrazów powstają jako pliki tekstowe z sekcją każdego skanu
+# zamiast tematycznego pliku PDF z obrazami. Dla akt skanowanych telefonem, które
+# trafiają do asystenta pracującego na tekście.
+DOMYSLNE_GRUPY_OBRAZOW_JAKO_SKANY = False
 DOMYSLNA_SCIEZKA_TESSERACT = ""
 DOMYSLNA_SCIEZKA_TESSDATA = ""
 
@@ -317,6 +326,9 @@ _ZMIENNE_SRODOWISKOWE: Mapping[str, str] = {
     PREFIKS_ZMIENNYCH + "OCR_PSM": "ocr_psm",
     PREFIKS_ZMIENNYCH + "OCR_ROZDZIELCZOSC_PDF_DPI": "ocr_rozdzielczosc_pdf_dpi",
     PREFIKS_ZMIENNYCH + "OCR_LICZBA_PROCESOW": "ocr_liczba_procesow",
+    PREFIKS_ZMIENNYCH + "OCR_PROG_PEWNOSCI": "ocr_prog_pewnosci",
+    PREFIKS_ZMIENNYCH + "OCR_PRZYGOTOWANIE_OBRAZU": "ocr_przygotowanie_obrazu",
+    PREFIKS_ZMIENNYCH + "GRUPY_OBRAZOW_JAKO_SKANY": "grupy_obrazow_jako_skany",
     PREFIKS_ZMIENNYCH + "SCIEZKA_TESSERACT": "sciezka_tesseract",
     PREFIKS_ZMIENNYCH + "SCIEZKA_TESSDATA": "sciezka_tessdata",
     PREFIKS_ZMIENNYCH + "SCIEZKA_MUSESCORE": "sciezka_musescore",
@@ -457,6 +469,9 @@ class Konfiguracja:
     ocr_psm: int = DOMYSLNY_OCR_PSM
     ocr_rozdzielczosc_pdf_dpi: int = DOMYSLNA_OCR_ROZDZIELCZOSC_PDF_DPI
     ocr_liczba_procesow: int = DOMYSLNA_OCR_LICZBA_PROCESOW
+    ocr_prog_pewnosci: float = DOMYSLNY_OCR_PROG_PEWNOSCI
+    ocr_przygotowanie_obrazu: bool = DOMYSLNE_OCR_PRZYGOTOWANIE_OBRAZU
+    grupy_obrazow_jako_skany: bool = DOMYSLNE_GRUPY_OBRAZOW_JAKO_SKANY
     sciezka_tesseract: str = DOMYSLNA_SCIEZKA_TESSERACT
     sciezka_tessdata: str = DOMYSLNA_SCIEZKA_TESSDATA
     sciezka_musescore: str = DOMYSLNA_SCIEZKA_MUSESCORE
@@ -644,6 +659,15 @@ def wczytaj_konfiguracje(
         ),
         ocr_liczba_procesow=_jako_liczba_nieujemna(
             scalone, "ocr_liczba_procesow", domyslna.ocr_liczba_procesow
+        ),
+        ocr_prog_pewnosci=_jako_prog_pewnosci(
+            scalone, "ocr_prog_pewnosci", domyslna.ocr_prog_pewnosci
+        ),
+        ocr_przygotowanie_obrazu=_jako_prawda_falsz(
+            scalone, "ocr_przygotowanie_obrazu", domyslna.ocr_przygotowanie_obrazu
+        ),
+        grupy_obrazow_jako_skany=_jako_prawda_falsz(
+            scalone, "grupy_obrazow_jako_skany", domyslna.grupy_obrazow_jako_skany
         ),
         sciezka_tesseract=_jako_sciezka_pliku(
             scalone, "sciezka_tesseract", domyslna.sciezka_tesseract
@@ -968,6 +992,17 @@ def _jako_liczba_rzeczywista(
         raise BladTrwaly(f"Ustawienie „{pole}” musi być liczbą, a jest „{surowa}”.") from blad
     if liczba < 0 or (liczba == 0 and not dopusc_zero):
         raise BladTrwaly(f"Ustawienie „{pole}” musi być liczbą dodatnią, a jest {liczba}.")
+    return liczba
+
+
+def _jako_prog_pewnosci(scalone: Mapping[str, object], pole: str, domyslna: float) -> float:
+    """Zwraca wartość pola jako próg pewności OCR z przedziału od zera do stu.
+
+    Zero wyłącza ocenę po pewności, bo żaden odczyt nie ma pewności poniżej zera.
+    """
+    liczba = _jako_liczba_rzeczywista(scalone, pole, domyslna, dopusc_zero=True)
+    if liczba > 100:
+        raise BladTrwaly(f"Ustawienie „{pole}” musi mieścić się w przedziale od 0 do 100.")
     return liczba
 
 

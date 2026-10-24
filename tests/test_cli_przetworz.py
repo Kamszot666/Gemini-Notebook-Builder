@@ -315,3 +315,56 @@ def test_plik_ponad_limit_adresow_daje_komunikat_i_tylko_plik(
 
     assert [pozycja.format_zrodla for pozycja in pozycje] == ["md"]
     assert "limit wynosi 2" in capsys.readouterr().out
+
+
+def test_folder_daje_pliki_w_kolejnosci_naturalnej_i_wypisuje_pominiete_formaty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = tmp_path / "zdjecia"
+    folder.mkdir()
+    for nazwa in ("IMG_10.jpg", "IMG_2.jpg", "IMG_1.jpg", "Thumbs.db", ".ukryty.jpg"):
+        (folder / nazwa).write_bytes(b"x")
+    (folder / "podfolder").mkdir()
+    (folder / "podfolder" / "IMG_0.jpg").write_bytes(b"x")
+
+    pozycje = _uruchom_z_przechwyceniem_pozycji(
+        monkeypatch, tmp_path, ["--folder", str(folder), "--grupa", "akta"]
+    )
+
+    assert [Path(pozycja.wejscie.wartosc).name for pozycja in pozycje] == [
+        "IMG_1.jpg",
+        "IMG_2.jpg",
+        "IMG_10.jpg",
+    ]
+    assert all(pozycja.grupa == "akta" for pozycja in pozycje)
+    wyjscie = capsys.readouterr().out
+    assert "plików do przetworzenia 3" in wyjscie
+    assert "Thumbs.db" in wyjscie
+    assert ".ukryty.jpg" not in wyjscie
+
+
+def test_brakujacy_folder_konczy_sie_kodem_bledu(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("GNB_KATALOG_WYNIKOW", str(tmp_path))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+
+    kod = main(["przetworz", "--folder", str(tmp_path / "nie_ma")])
+
+    assert kod == 1
+    assert "Nie udało się odczytać folderu" in capsys.readouterr().out
+
+
+def test_przy_skanach_plik_dopiskow_nie_jest_przeszukiwany_pod_katem_adresow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GNB_GRUPY_OBRAZOW_JAKO_SKANY", "tak")
+    folder = tmp_path / "zdjecia"
+    folder.mkdir()
+    (folder / "1.jpg").write_bytes(b"x")
+    (folder / "1_dopiski.txt").write_text("Zobacz https://a.example/x", encoding="utf-8")
+
+    pozycje = _uruchom_z_przechwyceniem_pozycji(monkeypatch, tmp_path, ["--folder", str(folder)])
+
+    assert [pozycja.format_zrodla for pozycja in pozycje] == ["jpg", "txt"]
+    assert all(pozycja.adres_kanoniczny is None for pozycja in pozycje)

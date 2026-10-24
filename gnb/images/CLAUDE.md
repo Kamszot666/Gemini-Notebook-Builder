@@ -10,7 +10,7 @@ Ustawienie `grupy_obrazow_jako_skany` (domyślnie fałsz) zmienia pakowanie grup
 
 Reguły, które łatwo zepsuć:
 
-1. Odczyt OCR zwraca średnią pewność słów (`rozpoznaj_z_pewnoscia`, format TSV). Odczyt pusty, podejrzany albo poniżej progu `ocr_prog_pewnosci` jest „nieczytelny dla OCR”: bełkot idzie do wyników pośrednich, a do pliku wynikowego tylko zdanie o braku odczytu.
+1. Odczyt OCR zwraca średnią pewność słów (`rozpoznaj_z_pewnoscia`, format TSV żądany ustawieniem `-c tessedit_create_tsv=1`, nigdy słowem `tsv`: to słowo Tesseract czyta jako plik `configs/tsv`, którego nie ma w katalogu z samymi plikami `*.traineddata`, i oddaje wtedy zwykły tekst z kodem zero; wynik niebędący TSV jest błędem trwałym, nie zerem słów). Odczyt pusty, podejrzany albo poniżej progu `ocr_prog_pewnosci` jest „nieczytelny dla OCR”: bełkot idzie do wyników pośrednich, a do pliku wynikowego tylko zdanie o braku odczytu.
 2. Przygotowanie zdjęcia (`przygotowanie.py`) jest drugą próbą przy słabym pierwszym odczycie, nie krokiem stałym. Pomiar pokazał, że pogarsza odczyt drobnego, ostrego druku. Nie włączaj go przed każdym odczytem bez nowego pomiaru.
 3. Skan nieczytelny nie bierze udziału w deduplikacji, bo jego tekst jest wspólnym zdaniem i wszystkie takie skany byłyby uznane za duplikaty.
 4. Zdjęcia z prawdziwych akt nie mogą trafić do repozytorium ani do testów. Testy używają wyłącznie obrazów syntetycznych.

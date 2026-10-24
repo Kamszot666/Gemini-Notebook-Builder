@@ -82,6 +82,15 @@ KOMUNIKAT_POMINIECIE_BRAK_TESSERACTA = (
     "To źródło wymaga OCR, więc zostało pominięte."
 )
 
+# Pierwsza kolumna wiersza nagłówka TSV Tesseracta.
+_POCZATEK_NAGLOWKA_TSV = "level"
+
+KOMUNIKAT_BRAK_DANYCH_O_PEWNOSCI = (
+    "Tesseract nie zwrócił danych o pewności odczytu, tylko zwykły tekst, więc nie da się "
+    "ocenić czytelności strony. Sprawdź katalog danych Tesseracta w ustawieniu "
+    "„sciezka_tessdata” oraz zmienną TESSDATA_PREFIX. Strona nie została uznana za nieczytelną."
+)
+
 
 @dataclass(frozen=True, slots=True)
 class UstawieniaOcr:
@@ -250,12 +259,13 @@ def rozpoznaj_tekst(
     ustawienia: UstawieniaOcr,
     *,
     identyfikator_zrodla: str | None = None,
-    format_wyjscia: str = "",
+    dodatkowe_argumenty: Sequence[str] = (),
 ) -> str:
     """Rozpoznaje tekst z jednego obrazu PNG i zwraca go jako czysty tekst.
 
-    Argument `format_wyjscia` pozwala poprosić Tesseracta o inny format wyniku,
-    na przykład ``tsv``; pusty daje zwykły tekst.
+    Argument `dodatkowe_argumenty` jest doklejany na koniec polecenia i pozwala
+    poprosić Tesseracta o inny format wyniku, na przykład parą ``-c`` oraz
+    ``tessedit_create_tsv=1``; pusty daje zwykły tekst.
 
     Obraz jest przekazywany przez standardowe wejście, a wynik odbierany ze
     standardowego wyjścia. Ostrzeżenia Tesseracta na standardowym wyjściu błędu
@@ -275,8 +285,7 @@ def rozpoznaj_tekst(
     ]
     if ustawienia.sciezka_tessdata:
         polecenie.extend(["--tessdata-dir", ustawienia.sciezka_tessdata])
-    if format_wyjscia:
-        polecenie.append(format_wyjscia)
+    polecenie.extend(dodatkowe_argumenty)
 
     try:
         wynik = subprocess.run(
@@ -372,17 +381,28 @@ def rozpoznaj_z_pewnoscia(
 ) -> WynikOcrZPewnoscia:
     """Rozpoznaje tekst obrazu i zwraca go razem ze średnią pewnością słów.
 
-    Wywołanie jest takie samo jak w `rozpoznaj_tekst`, ale z formatem wyjścia
+    Wywołanie jest takie samo jak w `rozpoznaj_tekst`, ale z wyjściem w postaci
     TSV, w którym każde słowo ma własną pewność. Tekst jest odtwarzany z tych
     samych słów, z zachowaniem podziału na wiersze i akapity, więc dla
     zwykłego druku jest równoważny zwykłemu wyjściu tekstowemu.
+
+    TSV jest żądane bezpośrednim ustawieniem ``-c tessedit_create_tsv=1``, a nie
+    słowem ``tsv``. To słowo Tesseract traktuje jako nazwę pliku ustawień i szuka
+    ``configs/tsv`` w katalogu danych językowych; gdy go tam nie ma (katalog z samymi
+    plikami ``*.traineddata``), kończy się kodem zero i oddaje zwykły tekst.
+
+    Niepusty wynik, który nie zaczyna się od nagłówka TSV, jest błędem trwałym:
+    odczytany jako TSV dałby zero słów, a strona zostałaby po cichu uznana za
+    nieczytelną, czyli treść zniknęłaby bez śladu.
     """
     surowe = rozpoznaj_tekst(
         obraz_png,
         ustawienia,
         identyfikator_zrodla=identyfikator_zrodla,
-        format_wyjscia="tsv",
+        dodatkowe_argumenty=("-c", "tessedit_create_tsv=1"),
     )
+    if surowe.strip() and not surowe.lstrip().startswith(_POCZATEK_NAGLOWKA_TSV):
+        raise BladTrwaly(KOMUNIKAT_BRAK_DANYCH_O_PEWNOSCI, identyfikator_zrodla)
     return _odczytaj_tsv(surowe)
 
 

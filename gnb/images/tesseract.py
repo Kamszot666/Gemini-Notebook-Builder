@@ -371,6 +371,11 @@ class WynikOcrZPewnoscia:
     tekst: str
     srednia_pewnosc: float
     liczba_slow: int
+    # Kąt obrotu strony zgodnie z zegarem zastosowany przed tym odczytem (0, 90, 180
+    # albo 270) oraz ostrzeżenia do przekazania dalej. Pola wypełnia odczyt strony;
+    # samo rozpoznanie zostawia wartości domyślne.
+    obrot_stopnie: int = 0
+    ostrzezenia: tuple[str, ...] = ()
 
 
 def rozpoznaj_z_pewnoscia(

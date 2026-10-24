@@ -2260,6 +2260,7 @@ class _Wykonanie:
             ma_dopiski=bool(dopiski),
             tresc_ocr=tresc_ocr,
             dopiski=dopiski,
+            obrot_stopni=stan.metadane.get("obrot_strony_stopnie", ""),
         )
 
     def _zapisz_pakiet_w_formatach(

@@ -74,8 +74,8 @@ def test_niska_pewnosc_czytelnego_tekstu_daje_ocene_nieczytelna() -> None:
     assert ocen_ocr(tekst, srednia_pewnosc=1.0, prog_pewnosci=0.0).ocena == OCENA_OCR_POPRAWNA
 
 
-def _strona_druku(rozmiar_czcionki: int = 34, wierszy: int = 24) -> Image.Image:
-    losowy = random.Random(7)
+def _strona_druku(rozmiar_czcionki: int = 34, wierszy: int = 24, ziarno: int = 7) -> Image.Image:
+    losowy = random.Random(ziarno)
     slowa = "sąd wyrok wniosek pozwany powód świadek rozprawa termin odpis dowód".split()
     obraz = Image.new("L", (1700, 1500), 255)
     rysunek = ImageDraw.Draw(obraz)
@@ -104,9 +104,16 @@ def test_przygotowanie_powiększa_maly_obraz_i_zwraca_odcienie_szarosci() -> Non
     assert powieksz_jesli_maly(duzy) is duzy
 
 
+def _strona_prosta_wedlug_osd(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Podstawia wykrywanie orientacji tak, żeby wskazywało stronę prostą."""
+    monkeypatch.setattr(odczyt_strony, "dane_orientacji_dostepne", lambda *_a: True)
+    monkeypatch.setattr(odczyt_strony, "wykryj_obrot_osd", lambda *_a, **_n: 0)
+
+
 def test_drugi_odczyt_z_przygotowanego_obrazu_tylko_gdy_pierwszy_jest_slaby(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _strona_prosta_wedlug_osd(monkeypatch)
     wywolania: list[int] = []
     wyniki = iter(
         [
@@ -141,6 +148,7 @@ def test_drugi_odczyt_z_przygotowanego_obrazu_tylko_gdy_pierwszy_jest_slaby(
 
 
 def test_gorszy_drugi_odczyt_nie_zastepuje_pierwszego(monkeypatch: pytest.MonkeyPatch) -> None:
+    _strona_prosta_wedlug_osd(monkeypatch)
     wyniki = iter([WynikOcrZPewnoscia("pierwszy", 60.0, 100), WynikOcrZPewnoscia("drugi", 70.0, 5)])
     monkeypatch.setattr(odczyt_strony, "rozpoznaj_z_pewnoscia", lambda *_a, **_n: next(wyniki))
     wynik = odczytaj_strone(

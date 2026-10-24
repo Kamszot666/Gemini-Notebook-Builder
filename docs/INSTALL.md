@@ -1,4 +1,4 @@
-# Instalacja — stan po etapie czternastym i naprawach po nim
+# Instalacja — stan po etapie czternastym i naprawach po nim, z danymi orientacji
 
 Ten dokument opisuje przygotowanie środowiska do pracy z aplikacją: Pythona,
 środowiska wirtualnego, zależności oraz narzędzi zewnętrznych. Narzędzia
@@ -265,6 +265,11 @@ w gałęzi „Additional language data”. Jeżeli instalowałeś Tesseract prze
    najlepszą jakość rozpoznania:
    `https://github.com/tesseract-ocr/tessdata_best/raw/main/pol.traineddata`.
 3. Umieść pobrany plik w katalogu `tessdata`.
+4. Pobierz też plik `osd.traineddata` z tego samego repozytorium i umieść go obok
+   `pol.traineddata`. To dane orientacji strony: dzięki nim aplikacja wykrywa kartki
+   obrócone o 90, 180 albo 270 stopni (zdjęcia akt z telefonu na statywie). Instalator
+   UB Mannheim zwykle dokłada je sam. Bez nich odczyt działa, ale obrócone strony są
+   sprawdzane wolniej, metodą prób, a `diagnostyka` ostrzega o braku danych.
 
 Zamiast wkładać plik do katalogu instalacji możesz trzymać go we własnym
 katalogu i wskazać go aplikacji:

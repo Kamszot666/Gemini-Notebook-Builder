@@ -138,6 +138,7 @@ class EkstraktorObrazu:
         tekst_ocr = odczyt.tekst.strip() if odczyt is not None else ""
         plik_posredni: tuple[str, bytes] | None = None
         if odczyt is not None:
+            ostrzezenia.extend(odczyt.ostrzezenia)
             ocena = ocen_ocr(tekst_ocr, odczyt.srednia_pewnosc, self._prog_pewnosci)
             if ocena.czy_wymaga_sprawdzenia:
                 ostrzezenia.extend(ocena.powody)
@@ -165,7 +166,9 @@ class EkstraktorObrazu:
             tekst = ZDANIE_NIECZYTELNE_DLA_OCR if nieczytelne else tekst_ocr
         else:
             tekst = _zloz_tekst(opis, format_pliku, wymiary, tekst_ocr, ocr_wykonany, nieczytelne)
-        metadane = _metadane_dokumentu(format_pliku, wymiary, metadane_obrazu, ocr_wykonany, ocena)
+        metadane = _metadane_dokumentu(
+            format_pliku, wymiary, metadane_obrazu, ocr_wykonany, ocena, odczyt
+        )
 
         return DokumentWyekstrahowany(
             identyfikator_zrodla=identyfikator_zrodla,
@@ -218,6 +221,7 @@ class EkstraktorObrazu:
             self._ustawienia_ocr,
             przygotowanie_wlaczone=self._przygotowanie_wlaczone,
             identyfikator_zrodla=identyfikator_zrodla,
+            prog_nieczytelnosci=self._prog_pewnosci,
         )
 
 
@@ -307,6 +311,7 @@ def _metadane_dokumentu(
     metadane_obrazu: dict[str, str],
     ocr_wykonany: bool,
     ocena: OcenaOcr | None,
+    odczyt: WynikOcrZPewnoscia | None = None,
 ) -> dict[str, str]:
     """Buduje słownik metadanych źródła zapisywany później w manifeście."""
     metadane = {
@@ -321,6 +326,8 @@ def _metadane_dokumentu(
         metadane["nieczytelne_dla_ocr"] = "tak" if ocena.czy_nieczytelne else "nie"
         if ocena.srednia_pewnosc is not None:
             metadane["srednia_pewnosc_ocr"] = f"{ocena.srednia_pewnosc:.1f}"
+    if odczyt is not None:
+        metadane["obrot_strony_stopnie"] = str(odczyt.obrot_stopnie)
     return metadane
 
 

@@ -135,6 +135,8 @@ def test_bledna_podpowiedz_orientacji_nie_pogarsza_wyniku(
         [
             WynikOcrZPewnoscia("dobry", 80.0, 50),
             WynikOcrZPewnoscia("belkot", 30.0, 50),
+            WynikOcrZPewnoscia("belkot", 30.0, 50),
+            WynikOcrZPewnoscia("belkot", 30.0, 50),
         ]
     )
     monkeypatch.setattr(odczyt_strony, "rozpoznaj_z_pewnoscia", lambda *_a, **_n: next(odczyty))
@@ -145,6 +147,63 @@ def test_bledna_podpowiedz_orientacji_nie_pogarsza_wyniku(
 
     assert wynik.tekst == "dobry"
     assert wynik.obrot_stopnie == 0
+
+
+def test_zly_kat_z_osd_nie_blokuje_sprawdzenia_pozostalych_katow(
+    wymaga_ocr_pol: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Strona obrócona zgodnie z zegarem o 270 stopni wraca obrotem o 90; podpowiedź 270
+    # jest błędna. (Strona obrócona o 90 stopni jest czytana przez Tesseract 5.4 bez
+    # obrotu, więc nie nadaje się do sprawdzenia tej luki.)
+    monkeypatch.setattr(odczyt_strony, "dane_orientacji_dostepne", lambda *_a: True)
+    monkeypatch.setattr(odczyt_strony, "wykryj_obrot_osd", lambda *_a, **_n: 270)
+
+    wynik = odczytaj_strone(
+        _obrocona_zgodnie_z_zegarem(270),
+        UstawieniaOcr(jezyk="pol"),
+        przygotowanie_wlaczone=True,
+    )
+
+    assert wynik.obrot_stopnie == 90
+    assert wynik.srednia_pewnosc > 85
+
+
+def test_osd_wskazujace_zero_dla_strony_do_gory_nogami_nie_blokuje_obrotu(
+    wymaga_ocr_pol: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(odczyt_strony, "dane_orientacji_dostepne", lambda *_a: True)
+    monkeypatch.setattr(odczyt_strony, "wykryj_obrot_osd", lambda *_a, **_n: 0)
+
+    wynik = odczytaj_strone(
+        _obrocona_zgodnie_z_zegarem(180),
+        UstawieniaOcr(jezyk="pol"),
+        przygotowanie_wlaczone=True,
+    )
+
+    assert wynik.obrot_stopnie == 180
+    assert wynik.srednia_pewnosc > 85
+
+
+def test_strona_poprawiona_obrotem_wedlug_osd_nie_dostaje_dodatkowych_odczytow(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(odczyt_strony, "dane_orientacji_dostepne", lambda *_a: True)
+    monkeypatch.setattr(odczyt_strony, "wykryj_obrot_osd", lambda *_a, **_n: 180)
+    odczyty = iter([WynikOcrZPewnoscia("slaby", 40.0, 50), WynikOcrZPewnoscia("dobry", 92.0, 50)])
+    wywolania: list[int] = []
+
+    def odczyt(*_a: object, **_n: object) -> WynikOcrZPewnoscia:
+        wywolania.append(1)
+        return next(odczyty)
+
+    monkeypatch.setattr(odczyt_strony, "rozpoznaj_z_pewnoscia", odczyt)
+
+    wynik = odczytaj_strone(
+        Image.new("L", (300, 300), 255), UstawieniaOcr(), przygotowanie_wlaczone=False
+    )
+
+    assert wynik.obrot_stopnie == 180
+    assert len(wywolania) == 2
 
 
 def test_brak_danych_orientacji_sprawdza_obroty_po_kolei_i_zglasza_ostrzezenie(
@@ -166,7 +225,6 @@ def test_brak_danych_orientacji_sprawdza_obroty_po_kolei_i_zglasza_ostrzezenie(
         _obrocona_zgodnie_z_zegarem(180),
         ustawienia,
         przygotowanie_wlaczone=True,
-        prog_nieczytelnosci=60.0,
     )
 
     assert wynik.srednia_pewnosc > 85

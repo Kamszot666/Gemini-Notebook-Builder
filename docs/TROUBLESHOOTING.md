@@ -1,4 +1,4 @@
-# Rozwiązywanie problemów — stan po etapie siedemnastym, część E, z obrotem strony
+# Rozwiązywanie problemów — stan po etapie siedemnastym, część E, z obrotem strony i sprawdzaniem pozostałych kątów
 
 Ten dokument opisuje problemy, które wystąpiły w rzeczywistej pracy z aplikacją,
 oraz te, które wynikają wprost z jej budowy. Każdy przypadek ma tę samą budowę:
@@ -879,5 +879,12 @@ wiersz „Obrót strony przed odczytem”. Zdjęcia przetworzone w starej wersji
 zdanie o braku odczytu; przetwórz je od nowa w nowym projekcie. Sprawdź też
 `python -m gnb.cli diagnostyka`: jeśli wiersz danych językowych mówi o braku danych
 orientacji „osd”, dograj plik `osd.traineddata` obok `pol.traineddata` (docs/INSTALL.md,
-sekcja 7). Bez niego aplikacja sprawdza obroty po kolei, tylko dla stron o pewności poniżej
-progu nieczytelności, więc jest wolniejsza, a przy źródle pojawia się ostrzeżenie.
+sekcja 7). Bez niego aplikacja sprawdza obroty po kolei, dla stron o pewności poniżej 85,
+więc jest wolniejsza, a przy źródle pojawia się ostrzeżenie.
+
+Dalsza naprawa, `naprawa-obrot-pozostale-katy`. W pełnym przebiegu dziewięćdziesięciu
+czterech kartek część stron nadal wyszła nieczytelna, bo podpowiedź orientacji bywa
+błędna (zły kąt albo 0 dla strony obróconej), a wcześniej sprawdzany był wtedy tylko ten
+jeden kąt. Teraz, gdy po podpowiedzi odczyt nadal ma pewność poniżej 85, aplikacja czyta
+także pozostałe obroty. Zdjęcia przetworzone przed tą naprawą mają utrwalone wyniki:
+przetwórz je od nowa w nowym projekcie.

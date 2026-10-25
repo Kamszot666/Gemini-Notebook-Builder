@@ -117,6 +117,10 @@ def test_drugi_odczyt_z_przygotowanego_obrazu_tylko_gdy_pierwszy_jest_slaby(
     wywolania: list[int] = []
     wyniki = iter(
         [
+            # Pierwszy odczyt, trzy pozostałe obroty (OSD wskazało 0) i odczyt przygotowany.
+            WynikOcrZPewnoscia("slaby", 30.0, 10),
+            WynikOcrZPewnoscia("slaby", 30.0, 10),
+            WynikOcrZPewnoscia("slaby", 30.0, 10),
             WynikOcrZPewnoscia("slaby", 30.0, 10),
             WynikOcrZPewnoscia("lepszy", 80.0, 40),
         ]
@@ -132,13 +136,13 @@ def test_drugi_odczyt_z_przygotowanego_obrazu_tylko_gdy_pierwszy_jest_slaby(
 
     wynik = odczytaj_strone(obraz, ustawienia, przygotowanie_wlaczone=True)
     assert wynik.tekst == "lepszy"
-    assert len(wywolania) == 2
+    assert len(wywolania) == 5
 
-    # Wyłączone przygotowanie: jeden odczyt, nawet gdy jest słaby.
+    # Wyłączone przygotowanie: pierwszy odczyt i trzy obroty, bez odczytu przygotowanego.
     wywolania.clear()
-    wyniki = iter([WynikOcrZPewnoscia("slaby", 30.0, 10)])
+    wyniki = iter([WynikOcrZPewnoscia("slaby", 30.0, 10)] * 4)
     assert odczytaj_strone(obraz, ustawienia, przygotowanie_wlaczone=False).tekst == "slaby"
-    assert len(wywolania) == 1
+    assert len(wywolania) == 4
 
     # Dobry pierwszy odczyt nie wywołuje drugiego.
     wywolania.clear()
@@ -149,7 +153,13 @@ def test_drugi_odczyt_z_przygotowanego_obrazu_tylko_gdy_pierwszy_jest_slaby(
 
 def test_gorszy_drugi_odczyt_nie_zastepuje_pierwszego(monkeypatch: pytest.MonkeyPatch) -> None:
     _strona_prosta_wedlug_osd(monkeypatch)
-    wyniki = iter([WynikOcrZPewnoscia("pierwszy", 60.0, 100), WynikOcrZPewnoscia("drugi", 70.0, 5)])
+    wyniki = iter(
+        [
+            WynikOcrZPewnoscia("pierwszy", 60.0, 100),
+            *[WynikOcrZPewnoscia("obrot", 50.0, 5)] * 3,
+            WynikOcrZPewnoscia("drugi", 70.0, 5),
+        ]
+    )
     monkeypatch.setattr(odczyt_strony, "rozpoznaj_z_pewnoscia", lambda *_a, **_n: next(wyniki))
     wynik = odczytaj_strone(
         Image.new("L", (300, 300), 255), UstawieniaOcr(), przygotowanie_wlaczone=True

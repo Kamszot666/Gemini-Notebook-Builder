@@ -221,7 +221,6 @@ class EkstraktorObrazu:
             self._ustawienia_ocr,
             przygotowanie_wlaczone=self._przygotowanie_wlaczone,
             identyfikator_zrodla=identyfikator_zrodla,
-            prog_nieczytelnosci=self._prog_pewnosci,
         )
 
 

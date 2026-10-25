@@ -16,9 +16,10 @@ Próby przy słabym pierwszym odczycie, w tej kolejności:
    Tesseracta. Kartka położona pod statywem bywa obrócona, a znacznik EXIF telefonu
    tego nie pokazuje. Podpowiedzi orientacji się nie ufa: obrócony odczyt jest tylko
    kandydatem i musi wygrać pewnością, więc błędna podpowiedź nie pogorszy wyniku.
-2. Gdy orientacji nie da się wykryć (za mało tekstu, błąd albo brak pliku
-   ``osd.traineddata``), a pierwszy odczyt jest poniżej progu nieczytelności,
-   sprawdzane są po kolei obroty o 90, 180 i 270 stopni.
+2. Gdy po tym najlepszy odczyt nadal jest pusty albo ma pewność poniżej progu bez
+   ponowienia (podpowiedź błędna, wskazała 0, nie dała wyniku albo nie ma pliku
+   ``osd.traineddata``), sprawdzane są po kolei pozostałe obroty o 90, 180 i 270
+   stopni, których jeszcze nie odczytano.
 3. Odczyt z obrazu przygotowanego (już obróconego), jeśli przygotowanie jest włączone.
 
 Moduł nie ocenia, czy odczyt jest czytelny dla człowieka: to robi
@@ -39,7 +40,6 @@ from gnb.images.obrot_strony import (
     obroc_zgodnie_z_zegarem,
     wykryj_obrot_osd,
 )
-from gnb.images.ocena_ocr import DOMYSLNY_PROG_PEWNOSCI_OCR
 from gnb.images.przygotowanie import przygotuj_do_ocr
 from gnb.images.tesseract import UstawieniaOcr, WynikOcrZPewnoscia, rozpoznaj_z_pewnoscia
 
@@ -55,7 +55,6 @@ def odczytaj_strone(
     *,
     przygotowanie_wlaczone: bool,
     identyfikator_zrodla: str | None = None,
-    prog_nieczytelnosci: float = DOMYSLNY_PROG_PEWNOSCI_OCR,
 ) -> WynikOcrZPewnoscia:
     """Rozpoznaje tekst obrazu, w razie słabego wyniku próbując obrotu i przygotowania.
 
@@ -73,7 +72,7 @@ def odczytaj_strone(
         return dataclasses.replace(wynik, obrot_stopnie=kat)
 
     pierwszy = odczytaj(obraz, 0)
-    if pierwszy.liczba_slow > 0 and pierwszy.srednia_pewnosc >= PROG_PEWNOSCI_BEZ_PONOWIENIA:
+    if not _jest_slaby(pierwszy):
         return pierwszy
 
     ostrzezenia: list[str] = []
@@ -85,14 +84,21 @@ def odczytaj_strone(
     else:
         ostrzezenia.append(OSTRZEZENIE_BRAK_DANYCH_ORIENTACJI)
 
+    sprawdzone_katy = {0}
     if kat_osd in KATY_OBROTU_STOPNIE:
         assert kat_osd is not None
         obrocony = obroc_zgodnie_z_zegarem(obraz, kat_osd)
         kandydaci.append((odczytaj(obrocony, kat_osd), obrocony))
-    elif kat_osd is None and (
-        pierwszy.liczba_slow == 0 or pierwszy.srednia_pewnosc < prog_nieczytelnosci
-    ):
+        sprawdzone_katy.add(kat_osd)
+
+    # Podpowiedź orientacji na słabych stronach bywa błędna (zły kąt albo 0 dla
+    # strony obróconej), więc gdy najlepszy dotąd odczyt nadal jest słaby, sprawdzane
+    # są wszystkie pozostałe obroty. Strona poprawiona obrotem według OSD do progu
+    # i wyżej nie płaci za dodatkowe odczyty.
+    if _jest_slaby(_najlepszy(kandydaci)[0]):
         for kat in KATY_OBROTU_STOPNIE:
+            if kat in sprawdzone_katy:
+                continue
             obrocony = obroc_zgodnie_z_zegarem(obraz, kat)
             kandydaci.append((odczytaj(obrocony, kat), obrocony))
 
@@ -104,6 +110,11 @@ def odczytaj_strone(
 
     wynik, _ = _najlepszy(kandydaci)
     return dataclasses.replace(wynik, ostrzezenia=tuple(ostrzezenia))
+
+
+def _jest_slaby(wynik: WynikOcrZPewnoscia) -> bool:
+    """Mówi, czy odczyt jest pusty albo ma średnią pewność poniżej progu bez ponowienia."""
+    return wynik.liczba_slow == 0 or wynik.srednia_pewnosc < PROG_PEWNOSCI_BEZ_PONOWIENIA
 
 
 def zapisz_png(obraz: Image.Image) -> bytes:

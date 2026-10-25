@@ -1,4 +1,4 @@
-# Obsługiwane formaty — stan po etapie siedemnastym, część E, z obrotem strony
+# Obsługiwane formaty — stan po etapie siedemnastym, część E, z obrotem strony i sprawdzaniem pozostałych kątów
 
 Ten dokument opisuje formaty wejściowe i wynikowe obsługiwane w tej chwili.
 Etap czternasty dodał formaty biurowe ODT, ODS, ODP, PPTX, XLSX, XLS, RTF, DOC
@@ -679,10 +679,13 @@ Gdy pierwszy odczyt ma średnią pewność poniżej 85 albo żadnego słowa, apl
 1. Pyta Tesseracta o orientację strony (tryb wykrywania orientacji, dane
    `osd.traineddata`) i dodaje odczyt obróconego obrazu do kandydatów. Obrót jest
    zgodny z ruchem wskazówek zegara o kąt, który wskazuje Tesseract.
-2. Gdy orientacji nie da się wykryć (za mało tekstu, błąd albo brak pliku
-   `osd.traineddata`), a pierwszy odczyt jest poniżej progu nieczytelności
-   (`ocr_prog_pewnosci`), sprawdza po kolei obroty o 90, 180 i 270 stopni. Brak
-   `osd.traineddata` jest zapisywany jako ostrzeżenie ekstrakcji przy źródle (trafia
+2. Gdy po tym najlepszy dotąd odczyt nadal ma średnią pewność poniżej 85 albo zero słów
+   (podpowiedź była błędna, wskazała 0 dla strony obróconej, nie dała wyniku albo nie
+   ma pliku `osd.traineddata`), sprawdza po kolei te obroty o 90, 180 i 270 stopni,
+   których jeszcze nie odczytano. Strona poprawiona obrotem według podpowiedzi do 85 lub
+   wyżej nie dostaje dodatkowych odczytów. Ten sam warunek 85 obowiązuje bez
+   `osd.traineddata`; próg nieczytelności (`ocr_prog_pewnosci`) nie steruje już
+   obrotami, tylko oceną odczytu. Brak `osd.traineddata` jest zapisywany jako ostrzeżenie ekstrakcji przy źródle (trafia
    do logu szczegółowego, manifestu i raportu) i wyświetlany przez `diagnostyka`.
 3. Do obrazu już obróconego stosuje przygotowanie, jeśli jest włączone.
 
@@ -693,6 +696,11 @@ sekundy, najniższa pewność 52,3 i średnia 81,4; po zmianie 55,4 sekundy, naj
 pewność 92,7 i średnia 93,9. Tesseract 5.4 sam odczytuje stronę obróconą zgodnie z
 zegarem o 90 stopni, dlatego przy tym kierunku obrót bywa niepotrzebny, a zastosowany
 obrót wynosi wtedy 0.
+
+Pomiar sprawdzania pozostałych kątów na dziesięciu syntetycznych stronach (cztery proste,
+trzy obrócone z poprawną podpowiedzią, trzy z błędną): przed zmianą 38,5 sekundy, trzy
+strony z błędną podpowiedzią zostawały na pewności 55,5; po zmianie 47,5 sekundy, wszystkie
+strony od 96,4 w górę.
 
 Zastosowany obrót jest w metadanych źródła (`obrot_strony_stopnie`: 0, 90, 180 albo
 270, stopnie zgodnie z zegarem zastosowane przed odczytem) i w liście metadanych skanu
